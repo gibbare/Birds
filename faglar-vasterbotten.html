@@ -1,0 +1,1893 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fågelobservationer – Västerbotten</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #eef2f7;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a4a7a, #2b6cb0);
+      color: white;
+      padding: 1.1rem 1.5rem .8rem;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header p  { font-size: .78rem; opacity: .75; margin-top: .2rem; }
+
+    /* ── Source bar ── */
+    .source-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .6rem;
+      padding: .45rem 1rem;
+      font-size: .78rem;
+      font-weight: 600;
+    }
+    .source-bar.live   { background: #276749; color: white; }
+    .source-bar.gbif   { background: #744210; color: #fefcbf; }
+    .source-bar.offline{ background: #4a5568; color: #e2e8f0; }
+
+    .source-bar .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: .9;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+
+    .source-bar button {
+      margin-left: auto;
+      background: rgba(255,255,255,.2);
+      border: 1px solid rgba(255,255,255,.4);
+      border-radius: 5px;
+      color: inherit;
+      padding: .2rem .6rem;
+      font-size: .72rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .source-bar button:hover { background: rgba(255,255,255,.35); }
+
+    /* ── Login modal ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 14px;
+      padding: 2rem;
+      width: min(420px, 90vw);
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+    }
+    .modal h2 { font-size: 1.1rem; margin-bottom: .25rem; }
+    .modal p.sub { font-size: .8rem; color: #718096; margin-bottom: 1.25rem; }
+
+    .form-group { margin-bottom: .9rem; }
+    .form-group label {
+      display: block;
+      font-size: .78rem;
+      font-weight: 600;
+      color: #4a5568;
+      margin-bottom: .3rem;
+    }
+    .form-group input {
+      width: 100%;
+      border: 1.5px solid #cbd5e0;
+      border-radius: 7px;
+      padding: .5rem .7rem;
+      font-size: .9rem;
+      outline: none;
+    }
+    .form-group input:focus { border-color: #2b6cb0; }
+
+    .form-group .hint {
+      font-size: .71rem;
+      color: #a0aec0;
+      margin-top: .25rem;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: .6rem;
+      margin-top: 1.25rem;
+    }
+    .btn-primary {
+      flex: 1;
+      background: #2b6cb0;
+      color: white;
+      border: none;
+      border-radius: 7px;
+      padding: .6rem;
+      font-size: .9rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background: #2558a0; }
+    .btn-primary:disabled { opacity: .6; cursor: default; }
+    .btn-cancel {
+      background: #edf2f7;
+      color: #4a5568;
+      border: none;
+      border-radius: 7px;
+      padding: .6rem 1rem;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-cancel:hover { background: #e2e8f0; }
+
+    .login-error {
+      background: #fff5f5;
+      border: 1px solid #feb2b2;
+      border-radius: 6px;
+      padding: .5rem .8rem;
+      font-size: .8rem;
+      color: #c53030;
+      margin-top: .75rem;
+    }
+
+    /* ── Kombinerad nav-bar (datum + region) ── */
+    .nav-bar {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: .55rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07);
+    }
+
+    /* Pilknappar */
+    .nav-arrow {
+      background: #f0f4fa;
+      color: #2b6cb0;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      padding: .42rem .75rem;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      line-height: 1;
+    }
+    .nav-arrow:hover  { background: #dbeafe; }
+    .nav-arrow:active { transform: scale(.93); }
+
+    /* Datum-chip */
+    .nav-date-chip {
+      display: flex;
+      align-items: center;
+      gap: .55rem;
+      background: #f7faff;
+      border: 1.5px solid #bee3f8;
+      border-radius: 10px;
+      padding: .38rem .85rem;
+    }
+    .nav-date-label {
+      font-size: .92rem;
+      font-weight: 700;
+      color: #1a202c;
+      white-space: nowrap;
+    }
+    .nav-date-label .tag {
+      margin-left: .35rem;
+      font-size: .65rem;
+      background: #276749;
+      color: white;
+      border-radius: 99px;
+      padding: .1rem .42rem;
+      vertical-align: middle;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+    .nav-date-chip input[type="date"] {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      outline: none;
+      padding: 0;
+      width: 1.4rem;           /* visa bara kalenderikonen */
+    }
+    /* Göm datumtexten (2026-03-10), behåll kalenderknappen */
+    .nav-date-chip input[type="date"]::-webkit-datetime-edit { display: none; }
+    .nav-date-chip input[type="date"]::-webkit-calendar-picker-indicator {
+      cursor: pointer;
+      opacity: .55;
+      margin: 0;
+    }
+
+    /* Idag-knapp */
+    .nav-today {
+      background: #276749;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: .8rem;
+      font-weight: 700;
+      padding: .42rem .85rem;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      letter-spacing: .02em;
+    }
+    .nav-today:hover  { background: #1f5237; }
+    .nav-today:active { transform: scale(.93); }
+
+    /* Vertikal separator */
+    .nav-sep {
+      width: 1px;
+      height: 22px;
+      background: #e2e8f0;
+      margin: 0 .2rem;
+      flex-shrink: 0;
+    }
+
+    /* Region-selects */
+    .nav-select {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: .38rem .65rem;
+      font-size: .82rem;
+      background: white;
+      color: #2d3748;
+      cursor: pointer;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .nav-select:focus { border-color: #2b6cb0; }
+    .nav-select:hover { border-color: #bee3f8; }
+
+    /* ── Main ── */
+    .container { max-width: 1300px; margin: 1.5rem auto; padding: 0 1rem 3rem; }
+
+    .summary-bar {
+      background: white; border-radius: 10px;
+      padding: .8rem 1.25rem; margin-bottom: 1rem;
+      display: flex; gap: 1.5rem; align-items: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07); flex-wrap: wrap;
+    }
+    .summary-item { text-align: center; }
+    .summary-item .val { font-size: 1.6rem; font-weight: 800; color: #2b6cb0; line-height: 1; }
+    .summary-item .lbl { font-size: .72rem; color: #718096; margin-top: .15rem; text-transform: uppercase; letter-spacing: .04em; }
+    .summary-bar .note { margin-left: auto; font-size: .75rem; color: #a0aec0; }
+
+    .toolbar {
+      display: flex; gap: .5rem; margin-bottom: .75rem;
+      flex-wrap: wrap; align-items: center;
+    }
+    .toolbar label { font-size: .8rem; color: #4a5568; font-weight: 600; }
+    .toolbar select {
+      border: 1.5px solid #cbd5e0; border-radius: 6px;
+      padding: .35rem .6rem; font-size: .8rem; background: white; cursor: pointer;
+    }
+    .toolbar input[type="search"] {
+      border: 1.5px solid #cbd5e0; border-radius: 6px;
+      padding: .35rem .6rem; font-size: .8rem; outline: none;
+      flex: 1; min-width: 160px;
+    }
+    .toolbar input[type="search"]:focus { border-color: #2b6cb0; }
+
+    /* ── Observationstabell (proxy/live) ── */
+    .obs-wrap {
+      overflow-x: auto;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    }
+    .obs-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      font-size: .82rem;
+      table-layout: fixed;
+    }
+    .obs-table thead th {
+      background: #2b6cb0;
+      color: white;
+      font-weight: 700;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      padding: .65rem .8rem;
+      text-align: left;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+    }
+    .obs-table thead th:hover { background: #2558a0; }
+    .obs-table thead th.sorted-asc::after  { content: ' ↑'; opacity: .9; }
+    .obs-table thead th.sorted-desc::after { content: ' ↓'; opacity: .9; }
+    .obs-table thead th.col-rar    { width: 5%;  text-align: center; padding: .65rem .3rem; cursor: default; }
+    .obs-table thead th.col-antal  { width: 8%;  text-align: right; }
+    .obs-table thead th.col-art    { width: 17%; }
+    .obs-table thead th.col-akt    { width: 11%; }
+    .obs-table thead th.col-huvud  { width: 22%; }
+    .obs-table thead th.col-rap    { width: 20%; }
+    .obs-table thead th.col-tid    { width: 17%; }
+
+    .obs-table td.col-rar { text-align: center; padding: .55rem .3rem; }
+
+    /* Rödlistebadgar */
+    .rl-badge {
+      display: inline-block;
+      font-size: .64rem; font-weight: 800;
+      border-radius: 4px; padding: .15rem .32rem;
+      letter-spacing: .03em; white-space: nowrap;
+      cursor: default;
+    }
+    .rl-cr { background: #c53030; color: #fff; }
+    .rl-en { background: #dd6b20; color: #fff; }
+    .rl-vu { background: #d69e2e; color: #1a202c; }
+    .rl-nt { background: #2b6cb0; color: #fff; }
+    .rl-dd { background: #718096; color: #fff; }
+    .rl-re { background: #1a202c; color: #fff; }
+    .rl-sens { font-size: .8rem; opacity: .7; cursor: default; }
+
+    /* Artfakta-länk i artnamnet */
+    .t-art-sv a { color: inherit; text-decoration: none; }
+    .t-art-sv a:hover { text-decoration: underline; color: #2b6cb0; }
+
+    .obs-table tbody tr { border-bottom: 1px solid #f0f4f8; }
+    .obs-table tbody tr:hover { background: #f7faff; }
+    .obs-table tbody tr:nth-child(even) { background: #fafcff; }
+    .obs-table tbody tr:nth-child(even):hover { background: #f0f6ff; }
+
+    .obs-table td {
+      padding: .55rem .8rem;
+      vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .obs-table td.col-antal {
+      text-align: right;
+      font-weight: 700;
+      color: #2b6cb0;
+      font-variant-numeric: tabular-nums;
+    }
+    .t-art-sv  { font-weight: 600; color: #1a202c; display: block; }
+    .t-art-sci { font-style: italic; color: #718096; font-size: .75rem; display: block; margin-top: .05rem; }
+    .t-unit    { font-size: .72rem; font-weight: 400; color: #4a90d9; margin-left: .15rem; }
+    .t-empty   { color: #cbd5e0; }
+
+    /* ── GBIF-kort (fallback) ── */
+    .bird-list { display: flex; flex-direction: column; gap: .45rem; }
+    .bird-card {
+      background: white; border-radius: 10px;
+      padding: .85rem 1.1rem; box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      display: grid; grid-template-columns: 1fr auto;
+      gap: .3rem .8rem; align-items: center; transition: box-shadow .15s;
+    }
+    .bird-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+    .bird-name { font-weight: 700; font-size: .95rem; }
+    .bird-sci  { font-style: italic; color: #718096; font-size: .8rem; margin-top: .1rem; }
+    .bird-meta { font-size: .73rem; color: #a0aec0; margin-top: .25rem; }
+    .bird-meta span { margin-right: .8rem; }
+    .bird-badge {
+      grid-row: 1 / 3; background: #ebf8ff; color: #2b6cb0;
+      border-radius: 8px; padding: .35rem .7rem;
+      font-weight: 800; font-size: .9rem; text-align: center;
+      align-self: center; white-space: nowrap;
+    }
+    .bird-badge small { display: block; font-size: .65rem; font-weight: 500; color: #4a90d9; }
+
+    .status {
+      text-align: center; padding: 3.5rem 1rem;
+      color: #718096; font-size: .95rem;
+    }
+    .spinner {
+      width: 38px; height: 38px;
+      border: 4px solid #e2e8f0; border-top-color: #2b6cb0;
+      border-radius: 50%; animation: spin .7s linear infinite;
+      margin: 1rem auto 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-box {
+      background: #fff5f5; border: 1.5px solid #feb2b2;
+      border-radius: 10px; padding: 1.5rem;
+      text-align: center; color: #c53030;
+    }
+
+    .delay-notice {
+      background: #fffbeb; border: 1.5px solid #f6d860;
+      border-radius: 10px; padding: .7rem 1.1rem;
+      margin-bottom: 1rem; font-size: .82rem; color: #7b5a00;
+      display: flex; align-items: center; gap: .5rem;
+    }
+    .delay-notice strong { font-weight: 700; }
+
+    footer {
+      text-align: center; padding: 1.5rem;
+      font-size: .75rem; color: #a0aec0;
+    }
+    footer a { color: #2b6cb0; text-decoration: none; }
+
+    /* ── Karta ── */
+    #mapContainer {
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 6px rgba(0,0,0,.1);
+      margin-bottom: 1rem;
+      display: none;
+    }
+    #mapContainer.visible { display: block; }
+    #observationMap { height: 400px; width: 100%; }
+
+    /* Kartknapp i toolbar */
+    .btn-map-toggle {
+      display: inline-flex; align-items: center; gap: .3rem;
+      background: #f0f4fa; color: #2b6cb0;
+      border: 1.5px solid #bee3f8; border-radius: 8px;
+      font-size: .8rem; font-weight: 700;
+      padding: .38rem .75rem; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-map-toggle:hover  { background: #dbeafe; }
+    .btn-map-toggle.active { background: #ebf8ff; border-color: #2b6cb0; }
+
+    /* AP-direktlänk i artkolumnen */
+    .ap-link {
+      font-size: .68rem; color: #a0aec0;
+      text-decoration: none; margin-left: .25rem;
+      transition: color .12s; vertical-align: middle;
+    }
+    .ap-link:hover { color: #2b6cb0; }
+
+    /* ════════════════════════════════════════════════════════════════
+       Responsiv mobilanpassning  ≤ 640 px
+       ════════════════════════════════════════════════════════════════ */
+    @media (max-width: 640px) {
+
+      /* Header */
+      header     { padding: .7rem .9rem .5rem; }
+      header h1  { font-size: 1.1rem; }
+      header p   { font-size: .72rem; }
+
+      /* Source-bar */
+      .source-bar { font-size: .72rem; padding: .35rem .8rem; }
+
+      /* Nav-bar */
+      .nav-bar        { padding: .4rem .6rem; gap: .3rem; }
+      .nav-arrow      { padding: .28rem .55rem; font-size: .95rem; }
+      .nav-date-chip  { padding: .25rem .6rem; gap: .35rem; }
+      .nav-date-label { font-size: .8rem; }
+      .nav-today      { padding: .28rem .65rem; font-size: .74rem; }
+      .nav-select     { font-size: .75rem; padding: .28rem .45rem; max-width: 44vw; }
+      .nav-sep        { display: none; }
+
+      /* Behållare */
+      .container { padding: 0 .45rem 2rem; margin-top: .6rem; }
+
+      /* Sammanfattningsrad */
+      .summary-bar         { padding: .5rem .8rem; gap: .75rem; }
+      .summary-item .val   { font-size: 1.2rem; }
+      .summary-item .lbl   { font-size: .62rem; }
+
+      /* Verktygsfält */
+      .toolbar { gap: .4rem; }
+      .toolbar input[type="search"] { width: 100%; min-width: 0; }
+
+      /* Karta: lägre höjd på mobil */
+      #observationMap { height: 220px; }
+
+      /* ── Tabell → kortlayout ── */
+      .obs-wrap {
+        overflow-x: visible;
+        border-radius: 0;
+        box-shadow: none;
+        background: transparent;
+      }
+      .obs-table {
+        table-layout: auto;
+        background: transparent;
+      }
+      /* Kolumnrubriker döljs – syns ej på mobil */
+      .obs-table thead { display: none; }
+
+      /* Varje rad blir ett eget kort */
+      .obs-table tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        padding: .45rem .7rem;
+        margin-bottom: .28rem;
+        border-radius: 7px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        background: white;
+        border-bottom: none;
+        gap: 0;
+      }
+      .obs-table tbody tr:nth-child(even)       { background: white; }
+      .obs-table tbody tr:nth-child(even):hover { background: #f7faff; }
+
+      /* Nollställ alla celler */
+      .obs-table td {
+        display: block;
+        padding: 0;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        border: none;
+        line-height: 1.45;
+      }
+
+      /* ── Kortlayout: rad 1 [badge · artnamn · antal(abs)]
+                        rad 2 [sci · lokal · rapportör · tid]  ── */
+
+      /* tr är ankarpoint för absolutpositionerat antal */
+      .obs-table tbody tr { position: relative; }
+
+      /* Badge/ikon – vänster, centrerat mot artnamnet */
+      .obs-table td.col-rar {
+        order: 1;
+        flex: 0 0 auto;
+        align-self: flex-start;
+        padding-top: .12rem;
+        padding-right: .28rem;
+        white-space: nowrap;
+      }
+
+      /* Artnamn – tar hela bredden, padding-right ger plats åt antal */
+      .obs-table td.col-art {
+        order: 2;
+        flex: 1;
+        min-width: 0;
+        padding-right: 3.6rem;
+      }
+      .obs-table td.col-art .t-art-sv {
+        display: block;
+        font-size: .87rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .obs-table td.col-art .t-art-sci {
+        display: block;
+        font-size: .69rem;
+        font-style: normal;
+        color: #a0aec0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Radbrytare: noll-hög pseudo-item med flex-basis 100 % vid order 2
+         → tvingar sekundärfälten (order 3) till en ny rad utan HTML-ändringar */
+      .obs-table tbody tr::after {
+        content: '';
+        display: block;
+        order: 2;
+        flex: 0 0 100%;
+        height: 0;
+      }
+
+      /* Antal – absolut uppe till höger */
+      .obs-table td.col-antal {
+        position: absolute;
+        top: .45rem;
+        right: .65rem;
+        white-space: nowrap;
+        font-size: .81rem;
+        font-weight: 600;
+        text-align: right;
+      }
+      .t-unit { font-size: .67rem; font-weight: 400; }
+
+      /* ── Sekundärfält (rad 2): flödar inline, alla lika stil ── */
+      .obs-table td.col-akt,
+      .obs-table td.col-huvud,
+      .obs-table td.col-rap,
+      .obs-table td.col-tid {
+        order: 3;
+        flex: 0 0 auto;
+        width: auto;
+        max-width: 100%;
+        font-size: .69rem;
+        color: #a0aec0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding-right: .45rem;
+        margin-top: .1rem;
+        line-height: 1.35;
+      }
+
+      /* Göm celler vars enda innehåll är ett dolt t-empty-bindestreck */
+      .obs-table td.col-akt:has(.t-empty),
+      .obs-table td.col-huvud:has(.t-empty),
+      .obs-table td.col-rap:has(.t-empty),
+      .obs-table td.col-tid:has(.t-empty) { display: none; }
+
+    } /* end @media 640px */
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <h1>🦅 Fågelobservationer</h1>
+  <p id="headerSub">Kontrollerar datakälla…</p>
+</header>
+
+<!-- ── Source/login bar ── -->
+<div class="source-bar offline" id="sourceBar">
+  <span class="dot"></span>
+  <span id="sourceText">Ansluter…</span>
+  <button id="loginBtn" onclick="openLogin()">Logga in</button>
+</div>
+
+<!-- ── Login modal ── -->
+<div class="modal-backdrop" id="loginModal">
+  <div class="modal">
+    <h2>🔐 Anslut till Artportalen</h2>
+    <p class="sub">Fyll i prenumerationsnyckel, SLU-konto, eller båda.</p>
+
+    <div class="form-group">
+      <label>Prenumerationsnyckel <em style="font-weight:400;color:#276749">(rekommenderas)</em></label>
+      <input type="text" id="loginSubKey" placeholder="Klistra in din nyckel här" />
+      <div class="hint">Från <a href="https://api-portal.artdatabanken.se" target="_blank">api-portal.artdatabanken.se</a> → Products → Species Observation System → Subscribe</div>
+    </div>
+
+    <div style="text-align:center;font-size:.78rem;color:#a0aec0;margin:.5rem 0">— eller —</div>
+
+    <div class="form-group">
+      <label>E-postadress <em style="font-weight:400;color:#a0aec0">(SLU-konto)</em></label>
+      <input type="email" id="loginEmail" placeholder="din@epost.se" autocomplete="email" />
+    </div>
+    <div class="form-group">
+      <label>Lösenord</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" />
+    </div>
+
+    <div id="loginError" class="login-error" style="display:none"></div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeLogin()">Avbryt</button>
+      <button class="btn-primary" id="loginSubmit" onclick="doLogin()">Anslut</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Nav-bar: datum + region ── -->
+<div class="nav-bar">
+  <button class="nav-arrow" onclick="changeDay(-1)" title="Föregående dag">&#8592;</button>
+
+  <div class="nav-date-chip">
+    <span id="dateLabel" class="nav-date-label">–</span>
+    <input type="date" id="datePicker" onchange="onDatePicked()" />
+  </div>
+
+  <button class="nav-arrow" onclick="changeDay(1)" title="Nästa dag">&#8594;</button>
+  <button class="nav-today" onclick="goToday()">Idag</button>
+
+  <div class="nav-sep"></div>
+
+  <select id="lanSelect" class="nav-select" onchange="onLanChange(this.value)"></select>
+  <select id="kommunSelect" class="nav-select" onchange="onKommunChange(this.value)">
+    <option value="">– Hela länet –</option>
+  </select>
+</div>
+
+<div class="container">
+  <!-- Kartvyn – utanför #content så Leaflet-instansen överlever re-renders -->
+  <div id="mapContainer">
+    <div id="observationMap"></div>
+  </div>
+  <div id="content">
+    <div class="status">Kontrollerar proxyanslutning…<div class="spinner"></div></div>
+  </div>
+</div>
+
+<footer>
+  Live-data: <a href="https://www.artportalen.se" target="_blank">Artportalen (SLU)</a> via lokal proxy ·
+  Fallback: <a href="https://www.gbif.org" target="_blank">GBIF</a>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   Konfiguration
+═══════════════════════════════════════════════════════════════════ */
+const PROXY   = 'http://localhost:5050';
+const GBIF    = 'https://api.gbif.org/v1';
+const CLASS_AVES = 212;
+const PAGE_SIZE  = 300;
+
+/* ═══════════════════════════════════════════════════════════════════
+   State
+═══════════════════════════════════════════════════════════════════ */
+let currentDate     = today();
+let allResults      = [];
+let sortBy          = 'name';
+let filterText      = '';
+let autoJumpedTo    = null;
+let dataSource      = 'unknown'; // 'proxy' | 'gbif'
+let proxyLoggedIn   = false;
+let tableSortCol    = 'art';    // proxy-tabell: aktiv sorteringskolumn
+let tableSortDir    = 'asc';    // 'asc' | 'desc'
+let selectedLanId   = '24';     // Default: Västerbottens län
+let selectedKommunId = '2482';  // Default: Skellefteå
+
+// Kart-state
+let leafletMap       = null;   // Leaflet-instansen
+let mapMarkerLayer   = null;   // LayerGroup för observationsmarkörer
+let mapVisible       = false;  // Är kartan synlig?
+
+// Rödliste-state
+let redlistMap = {};           // taxonId (sträng) → {redListCategory, source}
+const RL_LS_KEY = 'ap_rl_v1'; // localStorage-nyckel
+const RL_TTL    = 7 * 86400000; // 7 dagars cache-TTL
+
+/* ── Alla svenska landskap (län) med kommuner ── */
+const COUNTIES = [
+  { id:'1',  name:'Stockholms län', kommuner:[
+    {id:'0114',name:'Upplands Väsby'},{id:'0115',name:'Vallentuna'},{id:'0117',name:'Österåker'},
+    {id:'0120',name:'Värmdö'},{id:'0123',name:'Järfälla'},{id:'0125',name:'Ekerö'},
+    {id:'0126',name:'Huddinge'},{id:'0127',name:'Botkyrka'},{id:'0128',name:'Salem'},
+    {id:'0136',name:'Haninge'},{id:'0138',name:'Tyresö'},{id:'0139',name:'Upplands-Bro'},
+    {id:'0140',name:'Nykvarn'},{id:'0160',name:'Täby'},{id:'0162',name:'Danderyd'},
+    {id:'0163',name:'Sollentuna'},{id:'0180',name:'Stockholm'},{id:'0181',name:'Södertälje'},
+    {id:'0182',name:'Nacka'},{id:'0183',name:'Sundbyberg'},{id:'0184',name:'Solna'},
+    {id:'0186',name:'Lidingö'},{id:'0187',name:'Vaxholm'},{id:'0188',name:'Norrtälje'},
+    {id:'0191',name:'Sigtuna'},{id:'0192',name:'Nynäshamn'},
+  ]},
+  { id:'3',  name:'Uppsala län', kommuner:[
+    {id:'0305',name:'Håbo'},{id:'0319',name:'Älvkarleby'},{id:'0330',name:'Knivsta'},
+    {id:'0331',name:'Heby'},{id:'0360',name:'Tierp'},{id:'0380',name:'Uppsala'},
+    {id:'0381',name:'Enköping'},{id:'0382',name:'Östhammar'},
+  ]},
+  { id:'4',  name:'Södermanlands län', kommuner:[
+    {id:'0428',name:'Vingåker'},{id:'0461',name:'Gnesta'},{id:'0480',name:'Nyköping'},
+    {id:'0481',name:'Oxelösund'},{id:'0482',name:'Flen'},{id:'0483',name:'Katrineholm'},
+    {id:'0484',name:'Eskilstuna'},{id:'0486',name:'Strängnäs'},{id:'0488',name:'Trosa'},
+  ]},
+  { id:'5',  name:'Östergötlands län', kommuner:[
+    {id:'0509',name:'Ödeshög'},{id:'0512',name:'Ydre'},{id:'0513',name:'Kinda'},
+    {id:'0560',name:'Boxholm'},{id:'0561',name:'Åtvidaberg'},{id:'0562',name:'Finspång'},
+    {id:'0563',name:'Valdemarsvik'},{id:'0580',name:'Linköping'},{id:'0581',name:'Norrköping'},
+    {id:'0582',name:'Söderköping'},{id:'0583',name:'Motala'},{id:'0584',name:'Vadstena'},
+    {id:'0586',name:'Mjölby'},
+  ]},
+  { id:'6',  name:'Jönköpings län', kommuner:[
+    {id:'0604',name:'Aneby'},{id:'0617',name:'Gnosjö'},{id:'0642',name:'Mullsjö'},
+    {id:'0643',name:'Habo'},{id:'0662',name:'Gislaved'},{id:'0665',name:'Vaggeryd'},
+    {id:'0680',name:'Jönköping'},{id:'0682',name:'Nässjö'},{id:'0683',name:'Värnamo'},
+    {id:'0684',name:'Sävsjö'},{id:'0685',name:'Vetlanda'},{id:'0686',name:'Eksjö'},
+    {id:'0687',name:'Tranås'},
+  ]},
+  { id:'7',  name:'Kronobergs län', kommuner:[
+    {id:'0760',name:'Uppvidinge'},{id:'0761',name:'Lessebo'},{id:'0763',name:'Tingsryd'},
+    {id:'0764',name:'Alvesta'},{id:'0765',name:'Älmhult'},{id:'0767',name:'Markaryd'},
+    {id:'0780',name:'Växjö'},{id:'0781',name:'Ljungby'},
+  ]},
+  { id:'8',  name:'Kalmar län', kommuner:[
+    {id:'0821',name:'Högsby'},{id:'0834',name:'Torsås'},{id:'0840',name:'Mörbylånga'},
+    {id:'0860',name:'Hultsfred'},{id:'0861',name:'Mönsterås'},{id:'0862',name:'Emmaboda'},
+    {id:'0880',name:'Kalmar'},{id:'0881',name:'Nybro'},{id:'0882',name:'Oskarshamn'},
+    {id:'0883',name:'Västervik'},{id:'0884',name:'Vimmerby'},{id:'0885',name:'Borgholm'},
+  ]},
+  { id:'9',  name:'Gotlands län', kommuner:[
+    {id:'0980',name:'Gotland'},
+  ]},
+  { id:'10', name:'Blekinge län', kommuner:[
+    {id:'1060',name:'Olofström'},{id:'1080',name:'Karlskrona'},{id:'1081',name:'Ronneby'},
+    {id:'1082',name:'Karlshamn'},{id:'1083',name:'Sölvesborg'},
+  ]},
+  { id:'12', name:'Skåne län', kommuner:[
+    {id:'1214',name:'Svalöv'},{id:'1230',name:'Staffanstorp'},{id:'1231',name:'Burlöv'},
+    {id:'1233',name:'Vellinge'},{id:'1256',name:'Östra Göinge'},{id:'1257',name:'Örkelljunga'},
+    {id:'1260',name:'Bjuv'},{id:'1261',name:'Kävlinge'},{id:'1262',name:'Lomma'},
+    {id:'1263',name:'Svedala'},{id:'1264',name:'Skurup'},{id:'1265',name:'Sjöbo'},
+    {id:'1266',name:'Hörby'},{id:'1267',name:'Höör'},{id:'1270',name:'Tomelilla'},
+    {id:'1272',name:'Bromölla'},{id:'1273',name:'Osby'},{id:'1275',name:'Perstorp'},
+    {id:'1276',name:'Klippan'},{id:'1277',name:'Åstorp'},{id:'1278',name:'Båstad'},
+    {id:'1280',name:'Malmö'},{id:'1281',name:'Lund'},{id:'1282',name:'Landskrona'},
+    {id:'1283',name:'Helsingborg'},{id:'1284',name:'Höganäs'},{id:'1285',name:'Eslöv'},
+    {id:'1286',name:'Ystad'},{id:'1287',name:'Trelleborg'},{id:'1290',name:'Kristianstad'},
+    {id:'1291',name:'Simrishamn'},{id:'1292',name:'Ängelholm'},{id:'1293',name:'Hässleholm'},
+  ]},
+  { id:'13', name:'Hallands län', kommuner:[
+    {id:'1315',name:'Hylte'},{id:'1380',name:'Halmstad'},{id:'1381',name:'Laholm'},
+    {id:'1382',name:'Falkenberg'},{id:'1383',name:'Varberg'},{id:'1384',name:'Kungsbacka'},
+  ]},
+  { id:'14', name:'Västra Götalands län', kommuner:[
+    {id:'1401',name:'Härryda'},{id:'1402',name:'Partille'},{id:'1407',name:'Öckerö'},
+    {id:'1415',name:'Stenungsund'},{id:'1419',name:'Tjörn'},{id:'1421',name:'Orust'},
+    {id:'1427',name:'Sotenäs'},{id:'1430',name:'Munkedal'},{id:'1435',name:'Tanum'},
+    {id:'1438',name:'Dals-Ed'},{id:'1439',name:'Färgelanda'},{id:'1440',name:'Ale'},
+    {id:'1441',name:'Lerum'},{id:'1442',name:'Vårgårda'},{id:'1443',name:'Bollebygd'},
+    {id:'1444',name:'Grästorp'},{id:'1445',name:'Essunga'},{id:'1446',name:'Karlsborg'},
+    {id:'1447',name:'Gullspång'},{id:'1452',name:'Tranemo'},{id:'1460',name:'Bengtsfors'},
+    {id:'1461',name:'Mellerud'},{id:'1462',name:'Lilla Edet'},{id:'1463',name:'Mark'},
+    {id:'1465',name:'Svenljunga'},{id:'1466',name:'Herrljunga'},{id:'1470',name:'Vara'},
+    {id:'1471',name:'Götene'},{id:'1472',name:'Tibro'},{id:'1473',name:'Töreboda'},
+    {id:'1480',name:'Göteborg'},{id:'1481',name:'Mölndal'},{id:'1482',name:'Kungälv'},
+    {id:'1484',name:'Lysekil'},{id:'1485',name:'Uddevalla'},{id:'1486',name:'Strömstad'},
+    {id:'1487',name:'Vänersborg'},{id:'1488',name:'Trollhättan'},{id:'1489',name:'Alingsås'},
+    {id:'1490',name:'Borås'},{id:'1491',name:'Ulricehamn'},{id:'1492',name:'Åmål'},
+    {id:'1493',name:'Mariestad'},{id:'1494',name:'Lidköping'},{id:'1495',name:'Skara'},
+    {id:'1496',name:'Skövde'},{id:'1497',name:'Hjo'},{id:'1498',name:'Tidaholm'},
+    {id:'1499',name:'Falköping'},
+  ]},
+  { id:'17', name:'Värmlands län', kommuner:[
+    {id:'1715',name:'Kil'},{id:'1730',name:'Eda'},{id:'1737',name:'Torsby'},
+    {id:'1760',name:'Storfors'},{id:'1761',name:'Hammarö'},{id:'1762',name:'Munkfors'},
+    {id:'1763',name:'Forshaga'},{id:'1764',name:'Grums'},{id:'1765',name:'Årjäng'},
+    {id:'1766',name:'Sunne'},{id:'1780',name:'Karlstad'},{id:'1781',name:'Kristinehamn'},
+    {id:'1782',name:'Filipstad'},{id:'1783',name:'Hagfors'},{id:'1784',name:'Arvika'},
+    {id:'1785',name:'Säffle'},
+  ]},
+  { id:'18', name:'Örebro län', kommuner:[
+    {id:'1814',name:'Lekeberg'},{id:'1860',name:'Laxå'},{id:'1861',name:'Hallsberg'},
+    {id:'1862',name:'Degerfors'},{id:'1863',name:'Hällefors'},{id:'1864',name:'Ljusnarsberg'},
+    {id:'1880',name:'Örebro'},{id:'1881',name:'Kumla'},{id:'1882',name:'Askersund'},
+    {id:'1883',name:'Karlskoga'},{id:'1884',name:'Nora'},{id:'1885',name:'Lindesberg'},
+  ]},
+  { id:'19', name:'Västmanlands län', kommuner:[
+    {id:'1904',name:'Skinnskatteberg'},{id:'1907',name:'Surahammar'},
+    {id:'1960',name:'Hallstahammar'},{id:'1961',name:'Norberg'},{id:'1962',name:'Västerås'},
+    {id:'1980',name:'Sala'},{id:'1981',name:'Fagersta'},{id:'1982',name:'Köping'},
+    {id:'1983',name:'Arboga'},
+  ]},
+  { id:'20', name:'Dalarnas län', kommuner:[
+    {id:'2021',name:'Vansbro'},{id:'2023',name:'Malung-Sälen'},{id:'2026',name:'Gagnef'},
+    {id:'2029',name:'Leksand'},{id:'2031',name:'Rättvik'},{id:'2034',name:'Orsa'},
+    {id:'2039',name:'Älvdalen'},{id:'2061',name:'Smedjebacken'},{id:'2062',name:'Mora'},
+    {id:'2080',name:'Falun'},{id:'2081',name:'Borlänge'},{id:'2082',name:'Säter'},
+    {id:'2083',name:'Hedemora'},{id:'2084',name:'Avesta'},{id:'2085',name:'Ludvika'},
+  ]},
+  { id:'21', name:'Gävleborgs län', kommuner:[
+    {id:'2101',name:'Ockelbo'},{id:'2104',name:'Hofors'},{id:'2121',name:'Ovanåker'},
+    {id:'2132',name:'Nordanstig'},{id:'2161',name:'Ljusdal'},{id:'2180',name:'Gävle'},
+    {id:'2181',name:'Sandviken'},{id:'2182',name:'Söderhamn'},{id:'2183',name:'Bollnäs'},
+    {id:'2184',name:'Hudiksvall'},
+  ]},
+  { id:'22', name:'Västernorrlands län', kommuner:[
+    {id:'2260',name:'Ånge'},{id:'2262',name:'Timrå'},{id:'2280',name:'Härnösand'},
+    {id:'2281',name:'Sundsvall'},{id:'2282',name:'Kramfors'},{id:'2283',name:'Sollefteå'},
+    {id:'2284',name:'Örnsköldsvik'},
+  ]},
+  { id:'23', name:'Jämtlands län', kommuner:[
+    {id:'2303',name:'Ragunda'},{id:'2305',name:'Bräcke'},{id:'2309',name:'Krokom'},
+    {id:'2313',name:'Strömsund'},{id:'2321',name:'Åre'},{id:'2326',name:'Berg'},
+    {id:'2361',name:'Härjedalen'},{id:'2380',name:'Östersund'},
+  ]},
+  { id:'24', name:'Västerbottens län', kommuner:[
+    {id:'2401',name:'Nordmaling'},{id:'2403',name:'Bjurholm'},{id:'2404',name:'Vindeln'},
+    {id:'2405',name:'Robertsfors'},{id:'2406',name:'Norsjö'},{id:'2407',name:'Malå'},
+    {id:'2409',name:'Storuman'},{id:'2410',name:'Sorsele'},{id:'2411',name:'Dorotea'},
+    {id:'2418',name:'Vännäs'},{id:'2421',name:'Vilhelmina'},{id:'2422',name:'Åsele'},
+    {id:'2480',name:'Umeå'},{id:'2481',name:'Lycksele'},{id:'2482',name:'Skellefteå'},
+  ]},
+  { id:'25', name:'Norrbottens län', kommuner:[
+    {id:'2505',name:'Arvidsjaur'},{id:'2506',name:'Arjeplog'},{id:'2507',name:'Jokkmokk'},
+    {id:'2510',name:'Överkalix'},{id:'2513',name:'Kalix'},{id:'2514',name:'Övertorneå'},
+    {id:'2518',name:'Pajala'},{id:'2521',name:'Gällivare'},{id:'2523',name:'Älvsbyn'},
+    {id:'2560',name:'Luleå'},{id:'2580',name:'Luleå'},{id:'2581',name:'Piteå'},
+    {id:'2582',name:'Boden'},{id:'2583',name:'Haparanda'},{id:'2584',name:'Kiruna'},
+  ]},
+];
+
+/* ═══════════════════════════════════════════════════════════════════
+   Region-funktioner
+═══════════════════════════════════════════════════════════════════ */
+function initRegionBar() {
+  const lanSel = document.getElementById('lanSelect');
+  lanSel.innerHTML = COUNTIES.map(c =>
+    `<option value="${c.id}" ${c.id === selectedLanId ? 'selected' : ''}>${c.name}</option>`
+  ).join('');
+  populateKommuner(selectedLanId);
+}
+
+function populateKommuner(lanId) {
+  const county = COUNTIES.find(c => c.id === lanId);
+  const sel    = document.getElementById('kommunSelect');
+  sel.innerHTML = '<option value="">– Hela länet –</option>';
+  if (county) {
+    county.kommuner.forEach(k => {
+      const opt = document.createElement('option');
+      opt.value = k.id;
+      opt.textContent = k.name;
+      if (k.id === selectedKommunId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+}
+
+function getRegionLabel() {
+  const county = COUNTIES.find(c => c.id === selectedLanId);
+  if (!county) return 'Sverige';
+  if (!selectedKommunId) return county.name;
+  const kom = county.kommuner.find(k => k.id === selectedKommunId);
+  return kom ? `${kom.name} (${county.name})` : county.name;
+}
+
+function updateRegionTitle() {
+  document.title = `Fågelobservationer – ${getRegionLabel()}`;
+}
+
+function onLanChange(lanId) {
+  selectedLanId    = lanId;
+  selectedKommunId = '';
+  populateKommuner(lanId);
+  updateRegionTitle();
+  fetchAll();
+}
+
+function onKommunChange(kommunId) {
+  selectedKommunId = kommunId;
+  updateRegionTitle();
+  fetchAll();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Datum-hjälpfunktioner
+═══════════════════════════════════════════════════════════════════ */
+function today() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function fmtIso(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtSwedish(d) {
+  return d.toLocaleDateString('sv-SE', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Datum-UI
+═══════════════════════════════════════════════════════════════════ */
+function syncDateUI() {
+  document.getElementById('datePicker').value = fmtIso(currentDate);
+  const isToday = currentDate.getTime() === today().getTime();
+  let label = fmtSwedish(currentDate);
+  label = label.charAt(0).toUpperCase() + label.slice(1);
+  document.getElementById('dateLabel').innerHTML =
+    label + (isToday ? ' <span class="tag">Idag</span>' : '');
+  // Markera chip grönt om det är dagens datum
+  document.querySelector('.nav-date-chip').style.borderColor = isToday ? '#68d391' : '#bee3f8';
+}
+function changeDay(delta) {
+  currentDate = new Date(currentDate);
+  currentDate.setDate(currentDate.getDate() + delta);
+  syncDateUI(); fetchAll();
+}
+function goToday() {
+  currentDate = today(); syncDateUI(); fetchAll();
+}
+function onDatePicked() {
+  const val = document.getElementById('datePicker').value;
+  if (!val) return;
+  currentDate = new Date(val + 'T00:00:00');
+  syncDateUI(); fetchAll();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Proxy – statuskoll & inloggning
+═══════════════════════════════════════════════════════════════════ */
+async function checkProxy() {
+  try {
+    const resp = await fetch(`${PROXY}/api/status`, { signal: AbortSignal.timeout(2000) });
+    if (!resp.ok) return false;
+    const s = await resp.json();
+    proxyLoggedIn = s.logged_in;
+    updateSourceBar(s.logged_in ? 'proxy' : 'gbif', s.username);
+    return true;
+  } catch {
+    proxyLoggedIn = false;
+    updateSourceBar('gbif');
+    return false;
+  }
+}
+
+function updateSourceBar(source, username) {
+  const bar  = document.getElementById('sourceBar');
+  const txt  = document.getElementById('sourceText');
+  const btn  = document.getElementById('loginBtn');
+  const sub  = document.getElementById('headerSub');
+
+  bar.className = 'source-bar ' + (source === 'proxy' ? 'live' : source === 'gbif' ? 'gbif' : 'offline');
+
+  if (source === 'proxy') {
+    txt.textContent = `✓ Inloggad som ${username} – live-data från Artportalen`;
+    btn.textContent = 'Logga ut';
+    btn.onclick = doLogout;
+    sub.textContent = 'Live-data direkt från artportalen.se';
+  } else if (source === 'gbif') {
+    txt.textContent = 'Proxy ej aktiv – använder GBIF (ca 2 mån fördröjning)';
+    btn.textContent = 'Logga in';
+    btn.onclick = openLogin;
+    sub.textContent = 'Data via GBIF · inkl. observationer från artportalen.se';
+  } else {
+    txt.textContent = 'Ansluter till proxy…';
+    btn.textContent = 'Logga in';
+    btn.onclick = openLogin;
+    sub.textContent = 'Kontrollerar anslutning…';
+  }
+}
+
+/* ── Login-modal ── */
+function openLogin() {
+  loadSavedCredentials();
+  document.getElementById('loginModal').classList.add('open');
+}
+function closeLogin() { document.getElementById('loginModal').classList.remove('open'); clearLoginError(); }
+
+function loadSavedCredentials() {
+  document.getElementById('loginSubKey').value   = localStorage.getItem('ap_subkey')   || '';
+  document.getElementById('loginEmail').value    = localStorage.getItem('ap_email')    || '';
+  document.getElementById('loginPassword').value = localStorage.getItem('ap_password') || '';
+}
+
+function saveCredentials(subKey, email, pass) {
+  localStorage.setItem('ap_subkey',   subKey);
+  localStorage.setItem('ap_email',    email);
+  localStorage.setItem('ap_password', pass);
+}
+
+function clearLoginError() {
+  const el = document.getElementById('loginError');
+  el.style.display = 'none'; el.textContent = '';
+}
+
+async function doLogin() {
+  const email  = document.getElementById('loginEmail').value.trim();
+  const pass   = document.getElementById('loginPassword').value;
+  const subKey = document.getElementById('loginSubKey').value.trim();
+  const btn    = document.getElementById('loginSubmit');
+  clearLoginError();
+
+  // Tillåt: bara nyckel, bara e-post+lösenord, eller båda
+  if (!subKey && (!email || !pass)) {
+    showLoginError('Fyll i antingen prenumerationsnyckel, eller e-post + lösenord.'); return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Loggar in…';
+
+  try {
+    const resp = await fetch(`${PROXY}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: email, password: pass, subscriptionKey: subKey }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      showLoginError(data.error || 'Inloggning misslyckades.'); return;
+    }
+
+    saveCredentials(subKey, email, pass);
+    proxyLoggedIn = true;
+    updateSourceBar('proxy', data.username);
+    closeLogin();
+    fetchAll();
+  } catch (err) {
+    showLoginError('Kunde inte nå proxyn. Är proxy.py igång?');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Logga in';
+  }
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+async function doLogout() {
+  try { await fetch(`${PROXY}/api/logout`, { method: 'POST' }); } catch {}
+  proxyLoggedIn = false;
+  updateSourceBar('gbif');
+  fetchAll();
+}
+
+/* ── Automatisk inloggning med sparade uppgifter ── */
+async function tryAutoLogin() {
+  const subKey = localStorage.getItem('ap_subkey')   || '';
+  const email  = localStorage.getItem('ap_email')    || '';
+  const pass   = localStorage.getItem('ap_password') || '';
+  if (!subKey && (!email || !pass)) return false;
+  try {
+    const resp = await fetch(`${PROXY}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: email, password: pass, subscriptionKey: subKey }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      proxyLoggedIn = true;
+      updateSourceBar('proxy', data.username);
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Datahämtning – proxy (artportalen live)
+═══════════════════════════════════════════════════════════════════ */
+async function fetchFromProxy(dateStr) {
+  const areaType  = selectedKommunId ? 'Municipality' : 'County';
+  const featureId = selectedKommunId || selectedLanId;
+  const url = `${PROXY}/api/observations?date=${dateStr}&featureId=${encodeURIComponent(featureId)}&areaType=${areaType}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(35000) });
+
+  if (resp.status === 401) {
+    proxyLoggedIn = false;
+    updateSourceBar('gbif');
+    throw new Error('SESSION_EXPIRED');
+  }
+  if (!resp.ok) {
+    const d = await resp.json().catch(() => ({}));
+    throw new Error(d.error || `Proxyfel HTTP ${resp.status}`);
+  }
+  return resp.json();
+}
+
+/* ── Hjälp: extrahera sträng ur SOS-fält som kan vara objekt eller sträng ── */
+function sosStr(val) {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') return val.name || val.value || '';
+  return String(val);
+}
+
+/* ── Normalisera SOS-svar till internt format ── */
+function normalizeSosResults(sosData) {
+  const items = sosData.records || sosData.observations || sosData.results || [];
+  return items.map(obs => {
+    const taxon = obs.taxon          || {};
+    const loc   = obs.location       || {};
+    const occ   = obs.occurrence     || {};
+    const ev    = obs.event          || {};
+    const ident = obs.identification || {};
+
+    // Svenska namn: sv-array → direkt fält → en-array → vetenskapligt
+    const vernNames = taxon.vernacularNames || [];
+    const svName = vernNames.find(v => v.language === 'sv')?.name
+                || sosStr(taxon.vernacularName)
+                || sosStr(taxon.swedishName)
+                || null;
+    const enName = vernNames.find(v => v.language === 'en')?.name;
+
+    // Platsnamn (lokalnamn) – specifik lokal
+    const locality = sosStr(loc.locality) || sosStr(loc.name) || '';
+
+    // Huvudlokal – överordnad lokal/site
+    const site = sosStr(loc.site) || sosStr(loc.parish) ||
+                 sosStr(loc.municipality) || '';
+
+    // Individantal – individualCount kan vara tom sträng; prova organismQuantity som fallback
+    const rawQty   = sosStr(occ.organismQuantity) || '';
+    const indCount = parseInt(occ.individualCount, 10)
+                  || parseInt(rawQty, 10)
+                  || 1;
+
+    // Enhet
+    const unit = sosStr(occ.unit) || sosStr(occ.organismQuantityUnit) || 'ex.';
+
+    // Aktivitet
+    const activity = sosStr(occ.activity) || sosStr(occ.behavior) || '';
+
+    // Rapportör
+    const reporter = sosStr(occ.reportedBy) || sosStr(occ.recordedBy) || '';
+
+    // Datum & tid – "2026-03-09T08:30:00" → "2026-03-09 08:30"
+    function fmtDT(s) {
+      if (!s) return '';
+      const str  = String(s);
+      const date = str.slice(0, 10);
+      const time = str.slice(11, 16);
+      return time && time !== '00:00' ? `${date} ${time}` : date;
+    }
+    const startDT   = fmtDT(ev.startDate);
+    const endDT     = fmtDT(ev.endDate);
+    const eventTime = startDT ? startDT.slice(11, 16) : '';
+
+    // Valideringsstatus (det SOS API faktiskt returnerar)
+    // – verified: true  = manuellt godkänd av expert
+    // – uncertainIdentification: true = rapportören är osäker på bestämningen
+    const verified    = ident.verified               === true;
+    const uncertainId = ident.uncertainIdentification === true;
+
+    // Koordinater för karta
+    const lat              = typeof loc.decimalLatitude  === 'number' ? loc.decimalLatitude  : null;
+    const lng              = typeof loc.decimalLongitude === 'number' ? loc.decimalLongitude : null;
+    const coordUncertainty = typeof loc.coordinateUncertaintyInMeters === 'number'
+                           ? loc.coordinateUncertaintyInMeters : null;
+
+    // Direktlänk till Artportalen-observationen via occurrenceId
+    // Format: "urn:lsid:artportalen.se:sighting:131551987" → id "131551987"
+    const rawOccId      = sosStr(occ.occurrenceId) || '';
+    const apMatch       = rawOccId.match(/sighting:(\d+)$/);
+    const artportalenId = apMatch ? apMatch[1] : null;
+
+    return {
+      speciesKey:      taxon.id,
+      scientificName:  taxon.scientificName || 'Okänd art',
+      vernacularName:  svName || enName || null,
+      individualCount: indCount,
+      unit,
+      activity,
+      locality,
+      site,
+      reporter,
+      startDT,
+      endDT,
+      eventTime,
+      verified,
+      uncertainId,
+      lat,
+      lng,
+      coordUncertainty,
+      artportalenId,
+      _source: 'proxy',
+    };
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Datahämtning – GBIF (fallback)
+═══════════════════════════════════════════════════════════════════ */
+async function fetchGbifPage(dateStr, offset) {
+  const params = new URLSearchParams({
+    classKey: CLASS_AVES, country: 'SE',
+    stateProvince: 'Västerbotten', eventDate: dateStr,
+    limit: PAGE_SIZE, offset,
+  });
+  const resp = await fetch(`${GBIF}/occurrence/search?${params}`);
+  if (!resp.ok) throw new Error(`GBIF HTTP ${resp.status}`);
+  return resp.json();
+}
+
+async function findLatestGbifDate() {
+  const params = new URLSearchParams({
+    classKey: CLASS_AVES, country: 'SE',
+    stateProvince: 'Västerbotten', limit: 20, offset: 0,
+  });
+  const resp = await fetch(`${GBIF}/occurrence/search?${params}`);
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  if (!data.results?.length) return null;
+  let latest = null;
+  for (const rec of data.results) {
+    if (!rec.eventDate) continue;
+    const d = new Date(rec.eventDate.slice(0,10) + 'T00:00:00');
+    if (!latest || d > latest) latest = d;
+  }
+  return latest;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Huvud-hämtningsfunktion
+═══════════════════════════════════════════════════════════════════ */
+async function fetchAll() {
+  const content = document.getElementById('content');
+  content.innerHTML = '<div class="status">Hämtar observationer…<div class="spinner"></div></div>';
+  allResults   = [];
+  autoJumpedTo = null;
+
+  const dateStr = fmtIso(currentDate);
+
+  // ── Försök med proxy (live-data) ──
+  if (proxyLoggedIn) {
+    try {
+      const sosData = await fetchFromProxy(dateStr);
+      allResults = normalizeSosResults(sosData);
+      dataSource = 'proxy';
+      render(allResults.length);
+      return;
+    } catch (err) {
+      if (err.message === 'SESSION_EXPIRED') {
+        // Token gick ut, faller tillbaka till GBIF
+        content.innerHTML = '<div class="status">Sessionen gick ut – byter till GBIF…<div class="spinner"></div></div>';
+      } else {
+        // Visa felet men försök inte GBIF – proxyn är igång men något gick fel
+        content.innerHTML = `<div class="error-box">
+          <strong>Proxyfel</strong><br>${escHtml(err.message)}<br><br>
+          <small>Kontrollera att proxy.py körs. Faller tillbaka till GBIF…</small>
+        </div>`;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+
+  // ── GBIF-fallback ──
+  dataSource = 'gbif';
+  try {
+    let first = await fetchGbifPage(dateStr, 0);
+
+    if (first.count === 0) {
+      content.innerHTML = '<div class="status">Inga data – söker senaste tillgängliga datum i GBIF…<div class="spinner"></div></div>';
+      const latestDate = await findLatestGbifDate();
+      if (!latestDate) {
+        content.innerHTML = '<div class="status">Inga observationer hittades i Västerbotten.</div>';
+        return;
+      }
+      autoJumpedTo = currentDate;
+      currentDate  = latestDate;
+      syncDateUI();
+      first = await fetchGbifPage(fmtIso(currentDate), 0);
+    }
+
+    allResults = first.results;
+    const total = first.count;
+
+    if (total > PAGE_SIZE) {
+      const pages = Math.min(Math.ceil(total / PAGE_SIZE), 10);
+      const extras = await Promise.all(
+        Array.from({length: pages - 1}, (_, i) =>
+          fetchGbifPage(fmtIso(currentDate), (i+1) * PAGE_SIZE))
+      );
+      for (const e of extras) allResults = allResults.concat(e.results);
+    }
+
+    render(total);
+  } catch (err) {
+    content.innerHTML = `<div class="error-box"><strong>Fel</strong><br>${escHtml(err.message)}</div>`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Rendera resultatlistan
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── GBIF: gruppera per art ── */
+function buildSpeciesMap(results) {
+  const map = {};
+  for (const obs of results) {
+    const key = obs.speciesKey || obs.taxonKey || obs.acceptedTaxonKey;
+    if (!key) continue;
+    if (!map[key]) {
+      map[key] = {
+        vernacular:      obs.vernacularName || null,
+        scientific:      obs.scientificName || 'Okänd art',
+        individualCount: 0, observations: 0,
+        localities: new Set(), times: [],
+      };
+    }
+    const sp = map[key];
+    sp.observations++;
+    sp.individualCount += (parseInt(obs.individualCount, 10) || 1);
+    if (obs.locality)         sp.localities.add(obs.locality);
+    if (obs.verbatimLocality) sp.localities.add(obs.verbatimLocality);
+    if (obs.eventTime)        sp.times.push(obs.eventTime.slice(0,5));
+  }
+  return map;
+}
+
+function sortedSpecies(map) {
+  const arr = Object.values(map);
+  if (sortBy === 'count') return arr.sort((a,b) => b.individualCount - a.individualCount);
+  if (sortBy === 'obs')   return arr.sort((a,b) => b.observations   - a.observations);
+  return arr.sort((a,b) =>
+    (a.vernacular||a.scientific).toLowerCase()
+      .localeCompare((b.vernacular||b.scientific).toLowerCase(), 'sv'));
+}
+
+function filteredSpecies(arr) {
+  if (!filterText) return arr;
+  const q = filterText.toLowerCase();
+  return arr.filter(sp =>
+    (sp.vernacular||'').toLowerCase().includes(q) ||
+    sp.scientific.toLowerCase().includes(q));
+}
+
+/* ── Proxy: sortera och filtrera rader ── */
+function sortedRows(rows) {
+  const dir = tableSortDir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    let av, bv;
+    switch (tableSortCol) {
+      case 'antal': return dir * (a.individualCount - b.individualCount);
+      case 'akt':   av = a.activity;  bv = b.activity;  break;
+      case 'lokal': av = a.locality;  bv = b.locality;  break;
+      case 'huvud': av = a.site;      bv = b.site;      break;
+      case 'rap':   av = a.reporter;  bv = b.reporter;  break;
+      case 'tid':   av = a.startDT;   bv = b.startDT;   break;
+      default:      av = a.vernacularName || a.scientificName;
+                    bv = b.vernacularName || b.scientificName;
+    }
+    return dir * (av||'').localeCompare(bv||'', 'sv');
+  });
+}
+
+function filteredRows(rows) {
+  if (!filterText) return rows;
+  const q = filterText.toLowerCase();
+  return rows.filter(r =>
+    (r.vernacularName||'').toLowerCase().includes(q) ||
+    r.scientificName.toLowerCase().includes(q) ||
+    (r.activity||'').toLowerCase().includes(q) ||
+    (r.locality||'').toLowerCase().includes(q) ||
+    (r.site||'').toLowerCase().includes(q) ||
+    (r.reporter||'').toLowerCase().includes(q));
+}
+
+/* ── Sortera tabell på kolumnklick ── */
+function sortTable(col) {
+  if (tableSortCol === col) {
+    tableSortDir = tableSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    tableSortCol = col;
+    tableSortDir = col === 'antal' ? 'desc' : 'asc';
+  }
+  render(allResults.length);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Karta (Leaflet + OpenStreetMap)
+═══════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   Svenska Rödlistan 2020 – inbyggd uppslagstabell (vetenskapliga namn)
+   Källa: SLU Artdatabanken, Rödlistan 2020
+   Täcker de vanligast observerade rödlistade fågelarterna.
+   Proxyn kompletterar med ytterligare data via Artfakta.
+═══════════════════════════════════════════════════════════════════ */
+const REDLIST_2020 = {
+  // CR – Akut hotad
+  'Clangula hyemalis':           'CR',  // Alfågel
+  // VU – Sårbar
+  'Somateria mollissima':        'VU',  // Ejder
+  'Picus canus':                 'VU',  // Gråspett
+  'Calidris canutus':            'VU',  // Kustsnäppa
+  'Calidris schinzii':           'VU',  // Sydlig kärrsnäppa
+  'Chlidonias niger':            'VU',  // Svarttärna
+  'Pluvialis apricaria':         'VU',  // Ljungpipare
+  // NT – Nära hotad
+  'Nucifraga caryocatactes':     'NT',  // Nötkråka
+  'Tringa totanus':              'NT',  // Rödbena
+  'Gallinago gallinago':         'NT',  // Enkelbeckasin
+  'Numenius arquata':            'NT',  // Storspov
+  'Aythya marila':               'NT',  // Bergand
+  'Lagopus lagopus':             'NT',  // Dalripa
+  'Gavia arctica':               'NT',  // Storlom
+  'Gavia stellata':              'NT',  // Smålom
+  'Calidris alpina':             'NT',  // Kärrsnäppa
+  'Lullula arborea':             'NT',  // Trädlärka
+  'Lanius collurio':             'NT',  // Törnskata
+  'Calidris pugnax':             'NT',  // Brushane
+  'Philomachus pugnax':          'NT',  // Brushane (äldre namn)
+  'Tringa glareola':             'NT',  // Grönbena
+  'Linaria cannabina':           'NT',  // Hämpling
+  'Carduelis cannabina':         'NT',  // Hämpling (äldre namn)
+  'Circus aeruginosus':          'NT',  // Brun kärrhök
+  'Mergus serrator':             'NT',  // Småskrake
+  'Melanitta nigra':             'NT',  // Sjöorre
+  'Ficedula parva':              'NT',  // Mindre flugsnappare
+  'Emberiza hortulana':          'NT',  // Ortolansparv
+  'Anthus pratensis':            'NT',  // Ängspiplärka
+  'Alauda arvensis':             'NT',  // Sånglärka
+  'Vanellus vanellus':           'NT',  // Tofsvipa
+  'Limosa limosa':               'NT',  // Rödspov
+  'Perdix perdix':               'NT',  // Rapphöna
+  'Coturnix coturnix':           'NT',  // Vaktel
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   Rödlisteberikning (async, bakgrund)
+═══════════════════════════════════════════════════════════════════ */
+
+/* Returnerar HTML för ett rödlistebadge, eller '' om inte listad / LC */
+function rlBadge(cat) {
+  if (!cat || cat === 'LC') return '';
+  const MAP = {
+    CR: { cls: 'rl-cr', title: 'Akut hotad (CR)'      },
+    EN: { cls: 'rl-en', title: 'Starkt hotad (EN)'    },
+    VU: { cls: 'rl-vu', title: 'Sårbar (VU)'          },
+    NT: { cls: 'rl-nt', title: 'Nära hotad (NT)'      },
+    DD: { cls: 'rl-dd', title: 'Kunskapsbrist (DD)'   },
+    RE: { cls: 'rl-re', title: 'Nationellt utdöd (RE)'},
+  };
+  const m = MAP[cat];
+  return m ? `<span class="rl-badge ${m.cls}" title="${m.title}">${cat}</span>` : '';
+}
+
+/* Uppdaterar de redan renderade col-rar-cellerna med rödlistebadges */
+function updateRedlistCells() {
+  for (const [taxonId, info] of Object.entries(redlistMap)) {
+    document.querySelectorAll(`.col-rar[data-taxon="${taxonId}"]`).forEach(cell => {
+      // Ta alltid bort befintlig badge först (undviker dubbletter vid steg 1 + steg 2)
+      cell.querySelectorAll('.rl-badge').forEach(b => b.remove());
+      const badge = rlBadge(info.redListCategory);
+      if (!badge) return;
+      const cur = cell.innerHTML.trim();
+      // Badge visas överst; bevara eventuell ✓/❓ nedanför
+      cell.innerHTML = badge + (cur ? '<br>' + cur : '');
+    });
+  }
+}
+
+/* Hämtar rödlistestatus – omedelbart från inbyggd tabell, sedan via proxyn */
+async function enrichRedlist() {
+  if (dataSource !== 'proxy' || !allResults.length) return;
+
+  // Samla unika (id, name, scientificName)-par
+  const seen = new Map();  // taxonId → scientificName
+  for (const r of allResults) {
+    if (r.speciesKey && !seen.has(r.speciesKey))
+      seen.set(r.speciesKey, r.scientificName || '');
+  }
+  if (!seen.size) return;
+
+  // ── STEG 1: Slå upp i inbyggd tabell direkt (inga API-anrop) ──
+  const now = Date.now();
+  for (const [id, sciName] of seen) {
+    // Normalisera till "Genus species" (tar bort auktorscitat som "(Linnaeus, 1758)")
+    const sciNorm = (sciName || '').split(/\s+/).slice(0, 2).join(' ');
+    const cat = REDLIST_2020[sciNorm] || REDLIST_2020[sciName] || null;
+    if (cat) {
+      redlistMap[String(id)] = { redListCategory: cat, source: 'builtin', ts: now };
+    }
+  }
+  // Visa direkt för kända arter – resten kompletteras efter proxyanrop
+  updateRedlistCells();
+
+  // ── STEG 2: Ladda localStorage-cache ──
+  if (!proxyLoggedIn) return;   // Proxyn behövs för Artfakta-scraping
+  let lsCache = {};
+  try {
+    const raw = localStorage.getItem(RL_LS_KEY);
+    if (raw) {
+      for (const [k, v] of Object.entries(JSON.parse(raw)))
+        if (v.ts && now - v.ts < RL_TTL) lsCache[k] = v;
+    }
+  } catch {}
+
+  // Ta med inbyggda i cache-underlaget
+  // Inbyggd svensk rödlista 2020 vinner alltid över global IUCN-data (gbif_iucn)
+  for (const [k, v] of Object.entries(redlistMap))
+    if (!lsCache[k] || (!lsCache[k].redListCategory && v.redListCategory) || lsCache[k].source === 'gbif_iucn')
+      lsCache[k] = v;
+
+  // ── STEG 3: Proxyn fyller på med Artfakta-data för okända arter ──
+  const uncached = [];
+  for (const [id, name] of seen) {
+    const k = String(id);
+    // Skicka till proxy om: ej i cache, bara från inbyggd tabell, eller cachad null
+    if (!lsCache[k] || lsCache[k].source === 'builtin' || !lsCache[k].redListCategory)
+      uncached.push({ id, name });
+  }
+
+  if (uncached.length) {
+    try {
+      const resp = await fetch(`${PROXY}/api/taxon/redlist`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(uncached),
+        signal:  AbortSignal.timeout(40000),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const ts   = Date.now();
+        for (const [k, v] of Object.entries(data)) {
+          // Global IUCN-data (gbif_iucn) skriver aldrig över inbyggd svensk rödlista 2020
+          if (v.source === 'gbif_iucn' && lsCache[k]?.source === 'builtin') continue;
+          if (v.redListCategory || !lsCache[k])
+            lsCache[k] = { ...v, ts };
+        }
+        localStorage.setItem(RL_LS_KEY, JSON.stringify(lsCache));
+      }
+    } catch {}
+  }
+
+  redlistMap = lsCache;
+  updateRedlistCells();
+}
+
+/* Togglar kartpanelen och initialiserar Leaflet vid behov */
+function toggleMap() {
+  mapVisible = !mapVisible;
+  const container = document.getElementById('mapContainer');
+  const btn       = document.getElementById('mapToggleBtn');
+  if (mapVisible) {
+    container.classList.add('visible');
+    if (btn) { btn.classList.add('active'); btn.textContent = 'Dölj karta'; }
+    renderMapMarkers();
+  } else {
+    container.classList.remove('visible');
+    if (btn) { btn.classList.remove('active'); btn.textContent = 'Visa karta'; }
+  }
+}
+
+/* Ritar/uppdaterar observationspunkterna på kartan */
+function renderMapMarkers() {
+  const withCoords = allResults.filter(r => r.lat !== null && r.lng !== null);
+  if (!withCoords.length) return;
+
+  // Initialisera Leaflet-kartan om den saknas
+  if (!leafletMap) {
+    leafletMap = L.map('observationMap', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(leafletMap);
+    mapMarkerLayer = L.layerGroup().addTo(leafletMap);
+  } else {
+    mapMarkerLayer.clearLayers();
+  }
+
+  // Dubbel rAF: ge webbläsaren tid att måla container innan Leaflet mäter storlek
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    leafletMap.invalidateSize();
+
+    const bounds = [];
+    for (const row of withCoords) {
+      const name  = row.vernacularName || row.scientificName;
+      // Färg: verifierad=grön, osäker=orange, normal=blå
+      const color = row.verified ? '#276749' : row.uncertainId ? '#e07b39' : '#2b6cb0';
+
+      const marker = L.circleMarker([row.lat, row.lng], {
+        radius: 7, fillColor: color, color: '#fff',
+        weight: 1.5, opacity: 1, fillOpacity: 0.85,
+      });
+
+      const apLink = row.artportalenId
+        ? `<br><a href="https://www.artportalen.se/sighting/${row.artportalenId}"
+               target="_blank" style="color:#2b6cb0">Visa i Artportalen ↗</a>`
+        : '';
+      const uncertainty = row.coordUncertainty
+        ? `<br><span style="color:#718096;font-size:.75em">±${row.coordUncertainty} m</span>`
+        : '';
+
+      marker.bindPopup(`
+        <b>${escHtml(name)}</b><br>
+        ${row.individualCount} ${escHtml(row.unit)}
+        ${row.activity  ? `<br>${escHtml(row.activity)}`  : ''}
+        ${row.reporter  ? `<br>${escHtml(row.reporter)}`  : ''}
+        ${row.startDT   ? `<br>${escHtml(row.startDT)}`   : ''}
+        ${uncertainty}${apLink}
+      `);
+      mapMarkerLayer.addLayer(marker);
+      bounds.push([row.lat, row.lng]);
+    }
+
+    if (bounds.length) {
+      leafletMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 13 });
+    }
+  }));
+}
+
+/* ── Huvud render-funktion ── */
+function render(gbifTotal) {
+  const content = document.getElementById('content');
+  if (!allResults.length) {
+    content.innerHTML = '<div class="status">Inga fågelobservationer hittades för detta datum i Västerbotten.</div>';
+    return;
+  }
+  const jumpNotice = autoJumpedTo
+    ? `<div class="delay-notice">⚠️ <span>Inga data för <strong>${fmtIso(autoJumpedTo)}</strong>
+       – visar senaste tillgängliga datum i GBIF (~2 mån fördröjning).</span></div>`
+    : '';
+
+  if (dataSource === 'proxy') {
+    renderTable(content, jumpNotice);
+    // Uppdatera karta om den är synlig (kartan lever utanför #content)
+    if (mapVisible) renderMapMarkers();
+    // Berika tabellen med rödlistestatus i bakgrunden (async)
+    enrichRedlist();
+  } else {
+    renderCards(content, jumpNotice, gbifTotal);
+  }
+}
+
+/* ── Formattera tid-cell: visa start + slut ── */
+function fmtTidCell(startDT, endDT) {
+  if (!startDT) return '<span class="t-empty">–</span>';
+  // Extrahera datum och klockslag
+  const sDate = startDT.slice(0, 10);
+  const sTime = startDT.slice(11) || '';
+  if (!endDT || endDT === startDT) {
+    return escHtml(sTime || sDate);
+  }
+  const eDate = endDT.slice(0, 10);
+  const eTime = endDT.slice(11) || '';
+  if (sDate === eDate) {
+    // Samma dag – visa bara tider
+    return `<span style="white-space:nowrap">${escHtml(sTime)} – ${escHtml(eTime)}</span>`;
+  }
+  // Olika dagar – visa datum + tid på två rader
+  return `<span style="display:block;white-space:nowrap">${escHtml(startDT)}</span>`
+       + `<span style="display:block;white-space:nowrap;color:#718096">${escHtml(endDT)}</span>`;
+}
+
+/* ── Valideringsstatusindikator ── */
+function rarityCell(verified, uncertainId) {
+  if (uncertainId) {
+    // Rapportören är själv osäker på bestämningen
+    return `<span class="rl-sens" title="Osäker bestämning">❓</span>`;
+  }
+  if (verified) {
+    // Observationen är manuellt granskad och godkänd av expert
+    return `<span style="color:#276749;font-size:.9rem;font-weight:700" title="Verifierad av expert">✓</span>`;
+  }
+  // Ej verifierad ännu (normalläge för nya observationer)
+  return '';
+}
+
+/* ── Proxy-tabell ── */
+function renderTable(content, jumpNotice) {
+  const total    = allResults.length;
+  const totalInd = allResults.reduce((s,o) => s + o.individualCount, 0);
+  const artSet   = new Set(allResults.map(r => r.speciesKey || r.scientificName));
+  const rows     = filteredRows(sortedRows(allResults));
+
+  function th(col, label, cls) {
+    const active = tableSortCol === col
+      ? (tableSortDir === 'asc' ? ' sorted-asc' : ' sorted-desc')
+      : '';
+    return `<th class="${cls}${active}" onclick="sortTable('${col}')">${label}</th>`;
+  }
+
+  let html = `
+    ${jumpNotice}
+    <div class="summary-bar">
+      <div class="summary-item"><div class="val">${artSet.size}</div><div class="lbl">arter</div></div>
+      <div class="summary-item"><div class="val">${total}</div><div class="lbl">observationer</div></div>
+      <div class="summary-item"><div class="val">${totalInd}</div><div class="lbl">individer</div></div>
+    </div>
+    <div class="toolbar">
+      <button id="mapToggleBtn" class="btn-map-toggle${mapVisible ? ' active' : ''}"
+        onclick="toggleMap()">${mapVisible ? 'Dölj karta' : 'Visa karta'}</button>
+      <input type="search" placeholder="Filtrera art, lokal, rapportör…" value="${escHtml(filterText)}"
+        oninput="filterText=this.value; render(${total})" />
+    </div>
+    <div class="obs-wrap">
+      <table class="obs-table">
+        <thead>
+          <tr>
+            <th class="col-rar" title="Valideringsstatus">✓</th>
+            ${th('art',   'Artnamn',       'col-art')}
+            ${th('antal', 'Antal & enhet', 'col-antal')}
+            ${th('akt',   'Aktivitet',     'col-akt')}
+            ${th('huvud', 'Huvudlokal',    'col-huvud')}
+            ${th('rap',   'Rapportör',     'col-rap')}
+            ${th('tid',   'Start–Slut',    'col-tid')}
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  if (!rows.length) {
+    html += `<tr><td colspan="7" style="text-align:center;padding:2rem;color:#718096">
+      Inga träffar för "${escHtml(filterText)}"</td></tr>`;
+  } else {
+    for (const row of rows) {
+      const name = row.vernacularName || row.scientificName;
+      const sci  = row.vernacularName ? row.scientificName : '';
+      const artfaktaUrl = row.speciesKey
+        ? `https://artfakta.artdatabanken.se/taxon/${row.speciesKey}`
+        : null;
+      const nameHtml = artfaktaUrl
+        ? `<a href="${artfaktaUrl}" target="_blank" title="Öppna i Artfakta">${escHtml(name)}</a>`
+        : escHtml(name);
+      const apHtml = row.artportalenId
+        ? `<a href="https://www.artportalen.se/sighting/${row.artportalenId}"
+              target="_blank" class="ap-link" title="Visa observationen i Artportalen">↗AP</a>`
+        : '';
+      html += `
+        <tr>
+          <td class="col-rar" data-taxon="${row.speciesKey || ''}">${rarityCell(row.verified, row.uncertainId)}</td>
+          <td class="col-art">
+            <span class="t-art-sv">${nameHtml}${apHtml}</span>
+            ${sci ? `<span class="t-art-sci">${escHtml(sci)}</span>` : ''}
+          </td>
+          <td class="col-antal">${row.individualCount}<span class="t-unit">${escHtml(row.unit)}</span></td>
+          <td class="col-akt">${row.activity  ? escHtml(row.activity)  : '<span class="t-empty">–</span>'}</td>
+          <td class="col-huvud">${row.site    ? escHtml(row.site)      : '<span class="t-empty">–</span>'}</td>
+          <td class="col-rap">${row.reporter  ? escHtml(row.reporter)  : '<span class="t-empty">–</span>'}</td>
+          <td class="col-tid">${fmtTidCell(row.startDT, row.endDT)}</td>
+        </tr>`;
+    }
+  }
+
+  html += `</tbody></table></div>`;
+  content.innerHTML = html;
+}
+
+/* ── GBIF-kort ── */
+function renderCards(content, jumpNotice, gbifTotal) {
+  const speciesMap = buildSpeciesMap(allResults);
+  const allSpecies = sortedSpecies(speciesMap);
+  const shown      = filteredSpecies(allSpecies);
+  const totalObs   = allResults.length;
+  const totalInd   = allResults.reduce((s,o) => s + (parseInt(o.individualCount, 10)||1), 0);
+  const truncated  = gbifTotal > allResults.length;
+
+  let html = `
+    ${jumpNotice}
+    <div class="summary-bar">
+      <div class="summary-item"><div class="val">${shown.length}</div><div class="lbl">arter</div></div>
+      <div class="summary-item"><div class="val">${totalObs}</div><div class="lbl">observationer</div></div>
+      <div class="summary-item"><div class="val">${totalInd}</div><div class="lbl">individer</div></div>
+      ${truncated ? `<div class="note">Visar ${allResults.length} av ${gbifTotal}</div>` : ''}
+    </div>
+    <div class="toolbar">
+      <label>Sortera:</label>
+      <select onchange="sortBy=this.value; render(${gbifTotal})">
+        <option value="name"  ${sortBy==='name'  ?'selected':''}>Namn</option>
+        <option value="count" ${sortBy==='count' ?'selected':''}>Antal individer</option>
+        <option value="obs"   ${sortBy==='obs'   ?'selected':''}>Antal obs.</option>
+      </select>
+      <input type="search" placeholder="Filtrera art…" value="${escHtml(filterText)}"
+        oninput="filterText=this.value; render(${gbifTotal})" />
+    </div>
+    <div class="bird-list">
+  `;
+
+  for (const sp of shown) {
+    const name     = sp.vernacular || sp.scientific;
+    const sciLabel = sp.vernacular ? sp.scientific : '';
+    const locs     = [...sp.localities].slice(0,3).join(', ');
+    const time     = sp.times.length ? sp.times.sort()[0] : '';
+    const sciNorm  = (sp.scientific || '').split(/\s+/).slice(0, 2).join(' ');
+    const rlCat    = REDLIST_2020[sciNorm] || REDLIST_2020[sp.scientific] || null;
+    const badge    = rlBadge(rlCat);
+    html += `
+      <div class="bird-card">
+        <div>
+          <div class="bird-name">${badge ? badge + ' ' : ''}${escHtml(name)}</div>
+          ${sciLabel ? `<div class="bird-sci">${escHtml(sciLabel)}</div>` : ''}
+          <div class="bird-meta">
+            ${locs ? `<span>📍 ${escHtml(locs)}</span>` : ''}
+            ${time ? `<span>🕐 ${escHtml(time)}</span>` : ''}
+            <span>🔭 ${sp.observations} obs.</span>
+          </div>
+        </div>
+        <div class="bird-badge">${sp.individualCount}<small>ind.</small></div>
+      </div>`;
+  }
+  html += '</div>';
+  content.innerHTML = html;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Init
+═══════════════════════════════════════════════════════════════════ */
+initRegionBar();
+updateRegionTitle();
+syncDateUI();
+checkProxy().then(async (proxyUp) => {
+  // Om proxyn körs men sessionen inte är aktiv → försök auto-logga in med sparade uppgifter
+  if (proxyUp && !proxyLoggedIn) {
+    await tryAutoLogin();
+  }
+  fetchAll();
+});
+</script>
+</body>
+</html>
