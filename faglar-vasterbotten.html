@@ -1672,21 +1672,19 @@ function renderTable(content, jumpNotice) {
     for (const row of rows) {
       const name = row.vernacularName || row.scientificName;
       const sci  = row.vernacularName ? row.scientificName : '';
-      const artfaktaUrl = row.speciesKey
-        ? `https://artfakta.artdatabanken.se/taxon/${row.speciesKey}`
-        : null;
-      const nameHtml = artfaktaUrl
-        ? `<a href="${artfaktaUrl}" target="_blank" title="Öppna i Artfakta">${escHtml(name)}</a>`
+      const nameUrl = row.artportalenId
+        ? `https://www.artportalen.se/sighting/${row.artportalenId}`
+        : row.speciesKey
+          ? `https://artfakta.artdatabanken.se/taxon/${row.speciesKey}`
+          : null;
+      const nameHtml = nameUrl
+        ? `<a href="${nameUrl}" target="_blank" title="Visa i Artportalen">${escHtml(name)}</a>`
         : escHtml(name);
-      const apHtml = row.artportalenId
-        ? `<a href="https://www.artportalen.se/sighting/${row.artportalenId}"
-              target="_blank" class="ap-link" title="Visa observationen i Artportalen">↗AP</a>`
-        : '';
       html += `
         <tr>
           <td class="col-rar" data-taxon="${row.speciesKey || ''}">${rarityCell(row.verified, row.uncertainId)}</td>
           <td class="col-art">
-            <span class="t-art-sv">${nameHtml}${apHtml}</span>
+            <span class="t-art-sv">${nameHtml}</span>
             ${sci ? `<span class="t-art-sci">${escHtml(sci)}</span>` : ''}
           </td>
           <td class="col-antal">${row.individualCount}<span class="t-unit">${escHtml(row.unit)}</span></td>
