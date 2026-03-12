@@ -153,6 +153,7 @@
       padding: .55rem 1.25rem;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: .5rem;
       flex-wrap: wrap;
       position: sticky;
@@ -1021,6 +1022,16 @@ function updateFetchTime() {
 
 /* Login hanteras automatiskt av proxyn via miljövariabler */
 
+function doFilter(inp, total) {
+  filterText = inp.value;
+  const s = inp.selectionStart, e = inp.selectionEnd;
+  render(total);
+  requestAnimationFrame(() => {
+    const f = document.getElementById('filterInput');
+    if (f) { f.focus(); f.setSelectionRange(s, e); }
+  });
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Datahämtning – proxy (artportalen live)
 ═══════════════════════════════════════════════════════════════════ */
@@ -1649,8 +1660,8 @@ function renderTable(content, jumpNotice) {
     <div class="toolbar">
       <button id="mapToggleBtn" class="btn-map-toggle${mapVisible ? ' active' : ''}"
         onclick="toggleMap()">${mapVisible ? 'Dölj karta' : 'Visa karta'}</button>
-      <input type="search" placeholder="Filtrera art, lokal, rapportör…" value="${escHtml(filterText)}"
-        oninput="filterText=this.value; render(${total})" />
+      <input type="search" id="filterInput" placeholder="Filtrera art, lokal, rapportör…" value="${escHtml(filterText)}"
+        oninput="doFilter(this, ${total})" />
     </div>
     <div class="obs-wrap">
       <table class="obs-table">
@@ -1727,8 +1738,8 @@ function renderCards(content, jumpNotice, gbifTotal) {
         <option value="count" ${sortBy==='count' ?'selected':''}>Antal individer</option>
         <option value="obs"   ${sortBy==='obs'   ?'selected':''}>Antal obs.</option>
       </select>
-      <input type="search" placeholder="Filtrera art…" value="${escHtml(filterText)}"
-        oninput="filterText=this.value; render(${gbifTotal})" />
+      <input type="search" id="filterInput" placeholder="Filtrera art…" value="${escHtml(filterText)}"
+        oninput="doFilter(this, ${gbifTotal})" />
     </div>
     <div class="bird-list">
   `;
