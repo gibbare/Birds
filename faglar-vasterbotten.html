@@ -1555,7 +1555,7 @@ function toggleMap() {
 
 /* Ritar/uppdaterar observationspunkterna på kartan */
 function renderMapMarkers() {
-  const withCoords = allResults.filter(r => r.lat !== null && r.lng !== null);
+  const withCoords = filteredRows(allResults).filter(r => r.lat !== null && r.lng !== null);
   if (!withCoords.length) return;
 
   // Initialisera Leaflet-kartan om den saknas
