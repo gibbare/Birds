@@ -591,27 +591,27 @@ def debug_observation():
         return jsonify({"error": str(e)}), 500
 
 
-# ── Startup ─────────────────────────────────────────────────────────────────
+# ── Auto-inloggning vid uppstart (körs oavsett om Flask eller Gunicorn används) ──
+_auto_key = _os.environ.get("SOS_SUBSCRIPTION_KEY", "").strip()
+if _auto_key:
+    print("  Testar prenumerationsnyckel från miljövariabel…")
+    if _test_sub_key(_auto_key):
+        _session.update({
+            "access_token":     None,
+            "subscription_key": _auto_key,
+            "username":         "API-nyckel (auto)",
+            "auth_mode":        "sub_key_only",
+        })
+        print("  ✓ Automatisk inloggning lyckades")
+    else:
+        print("  ✗ Prenumerationsnyckel från miljövariabel fungerade ej")
+
+
+# ── Startup (endast vid direktkörning lokalt) ────────────────────────────────
 if __name__ == "__main__":
     import sys, io
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-
-    # Auto-inloggning med prenumerationsnyckel från miljövariabel
-    _auto_key = _os.environ.get("SOS_SUBSCRIPTION_KEY", "").strip()
-    if _auto_key:
-        print("  Testar prenumerationsnyckel från miljövariabel…")
-        if _test_sub_key(_auto_key):
-            _session.update({
-                "access_token":     None,
-                "subscription_key": _auto_key,
-                "username":         "API-nyckel (auto)",
-                "auth_mode":        "sub_key_only",
-            })
-            print("  ✓ Automatisk inloggning lyckades")
-        else:
-            print("  ✗ Prenumerationsnyckel från miljövariabel fungerade ej")
-
     port = int(_os.environ.get("PORT", 5050))
     print(f"Startar på 0.0.0.0:{port}")
     app.run(host="0.0.0.0", port=port, debug=False)
