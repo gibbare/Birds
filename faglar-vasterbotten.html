@@ -714,7 +714,7 @@
 /* ═══════════════════════════════════════════════════════════════════
    Konfiguration
 ═══════════════════════════════════════════════════════════════════ */
-const PROXY   = 'http://localhost:5050';
+const PROXY = 'https://birds-mn0t.onrender.com';
 const GBIF    = 'https://api.gbif.org/v1';
 const CLASS_AVES = 212;
 const PAGE_SIZE  = 300;
@@ -994,7 +994,7 @@ function onDatePicked() {
 ═══════════════════════════════════════════════════════════════════ */
 async function checkProxy() {
   try {
-    const resp = await fetch(`${PROXY}/api/status`, { signal: AbortSignal.timeout(2000) });
+    const resp = await fetch(`${PROXY}/api/status`, { signal: AbortSignal.timeout(70000) });
     if (!resp.ok) return false;
     const s = await resp.json();
     proxyLoggedIn = s.logged_in;
@@ -1118,7 +1118,7 @@ async function tryAutoLogin() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: email, password: pass, subscriptionKey: subKey }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(70000),
     });
     const data = await resp.json();
     if (resp.ok) {
