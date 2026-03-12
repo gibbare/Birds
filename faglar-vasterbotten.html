@@ -646,15 +646,7 @@
 <div class="modal-backdrop" id="loginModal">
   <div class="modal">
     <h2>🔐 Anslut till Artportalen</h2>
-    <p class="sub">Fyll i prenumerationsnyckel, SLU-konto, eller båda.</p>
-
-    <div class="form-group">
-      <label>Prenumerationsnyckel <em style="font-weight:400;color:#276749">(rekommenderas)</em></label>
-      <input type="text" id="loginSubKey" placeholder="Klistra in din nyckel här" />
-      <div class="hint">Från <a href="https://api-portal.artdatabanken.se" target="_blank">api-portal.artdatabanken.se</a> → Products → Species Observation System → Subscribe</div>
-    </div>
-
-    <div style="text-align:center;font-size:.78rem;color:#a0aec0;margin:.5rem 0">— eller —</div>
+    <p class="sub">Logga in med ditt SLU-konto för att se skyddade arter.</p>
 
     <div class="form-group">
       <label>E-postadress <em style="font-weight:400;color:#a0aec0">(SLU-konto)</em></label>
@@ -1041,13 +1033,11 @@ function openLogin() {
 function closeLogin() { document.getElementById('loginModal').classList.remove('open'); clearLoginError(); }
 
 function loadSavedCredentials() {
-  document.getElementById('loginSubKey').value   = localStorage.getItem('ap_subkey')   || '';
   document.getElementById('loginEmail').value    = localStorage.getItem('ap_email')    || '';
   document.getElementById('loginPassword').value = localStorage.getItem('ap_password') || '';
 }
 
-function saveCredentials(subKey, email, pass) {
-  localStorage.setItem('ap_subkey',   subKey);
+function saveCredentials(email, pass) {
   localStorage.setItem('ap_email',    email);
   localStorage.setItem('ap_password', pass);
 }
@@ -1060,13 +1050,11 @@ function clearLoginError() {
 async function doLogin() {
   const email  = document.getElementById('loginEmail').value.trim();
   const pass   = document.getElementById('loginPassword').value;
-  const subKey = document.getElementById('loginSubKey').value.trim();
   const btn    = document.getElementById('loginSubmit');
   clearLoginError();
 
-  // Tillåt: bara nyckel, bara e-post+lösenord, eller båda
-  if (!subKey && (!email || !pass)) {
-    showLoginError('Fyll i antingen prenumerationsnyckel, eller e-post + lösenord.'); return;
+  if (!email || !pass) {
+    showLoginError('Fyll i e-post och lösenord.'); return;
   }
 
   btn.disabled = true; btn.textContent = 'Loggar in…';
@@ -1075,7 +1063,7 @@ async function doLogin() {
     const resp = await fetch(`${PROXY}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: email, password: pass, subscriptionKey: subKey }),
+      body: JSON.stringify({ username: email, password: pass, subscriptionKey: '' }),
     });
     const data = await resp.json();
 
@@ -1083,7 +1071,7 @@ async function doLogin() {
       showLoginError(data.error || 'Inloggning misslyckades.'); return;
     }
 
-    saveCredentials(subKey, email, pass);
+    saveCredentials(email, pass);
     proxyLoggedIn = true;
     updateSourceBar('proxy', data.username);
     closeLogin();
@@ -1109,15 +1097,14 @@ async function doLogout() {
 
 /* ── Automatisk inloggning med sparade uppgifter ── */
 async function tryAutoLogin() {
-  const subKey = localStorage.getItem('ap_subkey')   || '';
   const email  = localStorage.getItem('ap_email')    || '';
   const pass   = localStorage.getItem('ap_password') || '';
-  if (!subKey && (!email || !pass)) return false;
+  if (!email || !pass) return false;
   try {
     const resp = await fetch(`${PROXY}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: email, password: pass, subscriptionKey: subKey }),
+      body: JSON.stringify({ username: email, password: pass, subscriptionKey: '' }),
       signal: AbortSignal.timeout(70000),
     });
     const data = await resp.json();
