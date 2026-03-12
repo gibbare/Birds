@@ -594,14 +594,8 @@ def debug_observation():
 # ── Startup ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import sys, io
-    # Tvinga UTF-8 på Windows-terminaler (undviker CP1252-krasch med emoji/svenska tecken)
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    port = 5050
-    print()
-    print("*** Faagelobservationer Vaesterbotten – Lokal proxy ***")
-    print(f"    Lyssnar paa: http://localhost:{port}")
-    print("    Oeppna faglar-vasterbotten.html och logga in.")
-    print("    Ctrl+C foer att avsluta")
-    print()
-    app.run(host="127.0.0.1", port=port, debug=False)
+    port = int(_os.environ.get("PORT", 5050))
+    print(f"Startar på 0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
