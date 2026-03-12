@@ -632,13 +632,13 @@
 <!-- ── Header ── -->
 <header>
   <h1>🦅 Fågelobservationer</h1>
-  <p id="headerSub">Kontrollerar datakälla…</p>
 </header>
 
 <!-- ── Source bar ── -->
 <div class="source-bar offline" id="sourceBar">
   <span class="dot"></span>
   <span id="sourceText">Ansluter…</span>
+  <span id="fetchTime"></span>
 </div>
 
 <!-- ── Login modal ── -->
@@ -696,8 +696,7 @@
 </div>
 
 <footer>
-  Live-data: <a href="https://www.artportalen.se" target="_blank">Artportalen (SLU)</a> via lokal proxy ·
-  Fallback: <a href="https://www.gbif.org" target="_blank">GBIF</a>
+  Utvecklad av Jonas Karlsson 2026
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -1001,20 +1000,23 @@ async function checkProxy() {
 function updateSourceBar(source, username) {
   const bar = document.getElementById('sourceBar');
   const txt = document.getElementById('sourceText');
-  const sub = document.getElementById('headerSub');
 
   bar.className = 'source-bar ' + (source === 'proxy' ? 'live' : source === 'gbif' ? 'gbif' : 'offline');
 
   if (source === 'proxy') {
-    txt.textContent = `✓ Live-data från Artportalen`;
-    sub.textContent = 'Live-data direkt från artportalen.se';
+    txt.textContent = '✓ Live-data från Artportalen';
   } else if (source === 'gbif') {
     txt.textContent = 'Proxy ej aktiv – använder GBIF (ca 2 mån fördröjning)';
-    sub.textContent = 'Data via GBIF · inkl. observationer från artportalen.se';
   } else {
     txt.textContent = 'Ansluter till proxy…';
-    sub.textContent = 'Kontrollerar anslutning…';
   }
+}
+
+function updateFetchTime() {
+  const el = document.getElementById('fetchTime');
+  if (!el) return;
+  const now = new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  el.textContent = `· Hämtad ${now}`;
 }
 
 /* Login hanteras automatiskt av proxyn via miljövariabler */
@@ -1217,7 +1219,7 @@ async function fetchAll() {
       content.innerHTML = '<div class="status">Inga data – söker senaste tillgängliga datum i GBIF…<div class="spinner"></div></div>';
       const latestDate = await findLatestGbifDate();
       if (!latestDate) {
-        content.innerHTML = '<div class="status">Inga observationer hittades i Västerbotten.</div>';
+        content.innerHTML = '<div class="status">Inga observationer hittades för detta datum.</div>';
         return;
       }
       autoJumpedTo = currentDate;
@@ -1569,7 +1571,7 @@ function renderMapMarkers() {
 function render(gbifTotal) {
   const content = document.getElementById('content');
   if (!allResults.length) {
-    content.innerHTML = '<div class="status">Inga fågelobservationer hittades för detta datum i Västerbotten.</div>';
+    content.innerHTML = '<div class="status">Inga fågelobservationer hittades för detta datum.</div>';
     return;
   }
   const jumpNotice = autoJumpedTo
@@ -1578,6 +1580,7 @@ function render(gbifTotal) {
     : '';
 
   if (dataSource === 'proxy') {
+    updateFetchTime();
     renderTable(content, jumpNotice);
     // Uppdatera karta om den är synlig (kartan lever utanför #content)
     if (mapVisible) renderMapMarkers();
