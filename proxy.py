@@ -592,7 +592,10 @@ def debug_observation():
 
 
 # ── Auto-inloggning vid uppstart (körs oavsett om Flask eller Gunicorn används) ──
-_auto_key = _os.environ.get("SOS_SUBSCRIPTION_KEY", "").strip()
+_auto_key   = _os.environ.get("SOS_SUBSCRIPTION_KEY", "").strip()
+_auto_email = _os.environ.get("SLU_EMAIL", "").strip()
+_auto_pass  = _os.environ.get("SLU_PASSWORD", "").strip()
+
 if _auto_key:
     print("  Testar prenumerationsnyckel från miljövariabel…")
     if _test_sub_key(_auto_key):
@@ -602,9 +605,23 @@ if _auto_key:
             "username":         "API-nyckel (auto)",
             "auth_mode":        "sub_key_only",
         })
-        print("  ✓ Automatisk inloggning lyckades")
+        print("  ✓ API-nyckel godkänd")
     else:
-        print("  ✗ Prenumerationsnyckel från miljövariabel fungerade ej")
+        print("  ✗ API-nyckel fungerade ej")
+
+if _auto_email and _auto_pass:
+    print(f"  Loggar in med SLU-konto: {_auto_email}…")
+    try:
+        token = _slu_login_flow(_auto_email, _auto_pass)
+        _session.update({
+            "access_token":     token,
+            "subscription_key": _session["subscription_key"],
+            "username":         _auto_email,
+            "auth_mode":        "bearer+sub_key" if _session["subscription_key"] else "bearer",
+        })
+        print(f"  ✓ SLU-inloggning lyckades: {_auto_email}")
+    except Exception as e:
+        print(f"  ✗ SLU-inloggning misslyckades: {e}")
 
 
 # ── Startup (endast vid direktkörning lokalt) ────────────────────────────────

@@ -635,11 +635,10 @@
   <p id="headerSub">Kontrollerar datakälla…</p>
 </header>
 
-<!-- ── Source/login bar ── -->
+<!-- ── Source bar ── -->
 <div class="source-bar offline" id="sourceBar">
   <span class="dot"></span>
   <span id="sourceText">Ansluter…</span>
-  <button id="loginBtn" onclick="openLogin()">Logga in</button>
 </div>
 
 <!-- ── Login modal ── -->
@@ -1000,122 +999,25 @@ async function checkProxy() {
 }
 
 function updateSourceBar(source, username) {
-  const bar  = document.getElementById('sourceBar');
-  const txt  = document.getElementById('sourceText');
-  const btn  = document.getElementById('loginBtn');
-  const sub  = document.getElementById('headerSub');
+  const bar = document.getElementById('sourceBar');
+  const txt = document.getElementById('sourceText');
+  const sub = document.getElementById('headerSub');
 
   bar.className = 'source-bar ' + (source === 'proxy' ? 'live' : source === 'gbif' ? 'gbif' : 'offline');
 
   if (source === 'proxy') {
-    txt.textContent = `✓ Inloggad som ${username} – live-data från Artportalen`;
-    btn.textContent = 'Logga ut';
-    btn.onclick = doLogout;
+    txt.textContent = `✓ Live-data från Artportalen`;
     sub.textContent = 'Live-data direkt från artportalen.se';
   } else if (source === 'gbif') {
     txt.textContent = 'Proxy ej aktiv – använder GBIF (ca 2 mån fördröjning)';
-    btn.textContent = 'Logga in';
-    btn.onclick = openLogin;
     sub.textContent = 'Data via GBIF · inkl. observationer från artportalen.se';
   } else {
     txt.textContent = 'Ansluter till proxy…';
-    btn.textContent = 'Logga in';
-    btn.onclick = openLogin;
     sub.textContent = 'Kontrollerar anslutning…';
   }
 }
 
-/* ── Login-modal ── */
-function openLogin() {
-  loadSavedCredentials();
-  document.getElementById('loginModal').classList.add('open');
-}
-function closeLogin() { document.getElementById('loginModal').classList.remove('open'); clearLoginError(); }
-
-function loadSavedCredentials() {
-  document.getElementById('loginEmail').value    = localStorage.getItem('ap_email')    || '';
-  document.getElementById('loginPassword').value = localStorage.getItem('ap_password') || '';
-}
-
-function saveCredentials(email, pass) {
-  localStorage.setItem('ap_email',    email);
-  localStorage.setItem('ap_password', pass);
-}
-
-function clearLoginError() {
-  const el = document.getElementById('loginError');
-  el.style.display = 'none'; el.textContent = '';
-}
-
-async function doLogin() {
-  const email  = document.getElementById('loginEmail').value.trim();
-  const pass   = document.getElementById('loginPassword').value;
-  const btn    = document.getElementById('loginSubmit');
-  clearLoginError();
-
-  if (!email || !pass) {
-    showLoginError('Fyll i e-post och lösenord.'); return;
-  }
-
-  btn.disabled = true; btn.textContent = 'Loggar in…';
-
-  try {
-    const resp = await fetch(`${PROXY}/api/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: email, password: pass, subscriptionKey: '' }),
-    });
-    const data = await resp.json();
-
-    if (!resp.ok) {
-      showLoginError(data.error || 'Inloggning misslyckades.'); return;
-    }
-
-    saveCredentials(email, pass);
-    proxyLoggedIn = true;
-    updateSourceBar('proxy', data.username);
-    closeLogin();
-    fetchAll();
-  } catch (err) {
-    showLoginError('Kunde inte nå proxyn. Är proxy.py igång?');
-  } finally {
-    btn.disabled = false; btn.textContent = 'Logga in';
-  }
-}
-
-function showLoginError(msg) {
-  const el = document.getElementById('loginError');
-  el.textContent = msg; el.style.display = 'block';
-}
-
-async function doLogout() {
-  try { await fetch(`${PROXY}/api/logout`, { method: 'POST' }); } catch {}
-  proxyLoggedIn = false;
-  updateSourceBar('gbif');
-  fetchAll();
-}
-
-/* ── Automatisk inloggning med sparade uppgifter ── */
-async function tryAutoLogin() {
-  const email  = localStorage.getItem('ap_email')    || '';
-  const pass   = localStorage.getItem('ap_password') || '';
-  if (!email || !pass) return false;
-  try {
-    const resp = await fetch(`${PROXY}/api/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: email, password: pass, subscriptionKey: '' }),
-      signal: AbortSignal.timeout(70000),
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      proxyLoggedIn = true;
-      updateSourceBar('proxy', data.username);
-      return true;
-    }
-  } catch {}
-  return false;
-}
+/* Login hanteras automatiskt av proxyn via miljövariabler */
 
 /* ═══════════════════════════════════════════════════════════════════
    Datahämtning – proxy (artportalen live)
@@ -1868,13 +1770,7 @@ function escHtml(s) {
 initRegionBar();
 updateRegionTitle();
 syncDateUI();
-checkProxy().then(async (proxyUp) => {
-  // Om proxyn körs men sessionen inte är aktiv → försök auto-logga in med sparade uppgifter
-  if (proxyUp && !proxyLoggedIn) {
-    await tryAutoLogin();
-  }
-  fetchAll();
-});
+checkProxy().then(() => fetchAll());
 </script>
 </body>
 </html>
