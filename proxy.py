@@ -17,11 +17,19 @@ import requests
 import re
 import secrets
 from urllib.parse import urljoin
+import threading as _threading
+import json as _json
+import time as _time
+from datetime import datetime as _dt, date as _date_type
+from collections import defaultdict as _defaultdict
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
+APP_VERSION   = "2.3"          # Uppdatera vid varje deploy
+_SERVER_START = _dt.now()      # Tidpunkt då servern startades
+
 SLU_AUTH_URL  = "https://useradmin-auth.slu.se/connect/authorize"
 SOS_API_BASE  = "https://api.artdatabanken.se/species-observation-system/v1"
 CLIENT_ID     = "Artportalen"
@@ -189,9 +197,21 @@ def _auth_headers():
 
 # ── Statiska filer ──────────────────────────────────────────────────────────
 
+_BASE_DIR   = _os.path.dirname(_os.path.abspath(__file__))
+_CACHE_FILE = _os.path.join(_BASE_DIR, 'stats_cache.json')
+_FIRST_YEAR = 2022
+
+_stats_cache    = {}   # { "2025": { aggregerat } }
+_build_progress = {}   # { "2025": { status, fetched, total } }
+_stats_lock     = _threading.Lock()
+
 @app.route("/")
 def index():
-    return send_from_directory(_os.path.dirname(_os.path.abspath(__file__)), "faglar-vasterbotten.html")
+    return send_from_directory(_BASE_DIR, "faglar-vasterbotten.html")
+
+@app.route("/<path:filename>")
+def static_files(filename):
+    return send_from_directory(_BASE_DIR, filename)
 
 # ── API-endpoints ───────────────────────────────────────────────────────────
 
@@ -202,6 +222,14 @@ def status():
         "logged_in": bool(_session["access_token"] or _session["subscription_key"]),
         "username":  _session["username"],
         "auth_mode": _session["auth_mode"],
+    })
+
+
+@app.route("/api/version")
+def version():
+    return jsonify({
+        "version":    APP_VERSION,
+        "started_at": _SERVER_START.isoformat(),
     })
 
 
@@ -591,6 +619,264 @@ def debug_observation():
         return jsonify({"error": str(e)}), 500
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Statistik-cache – aggregering, hämtning och bakgrundstråd
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _get_rl_category(taxon_obj):
+    """Extraherar rödlistekategori från taxon-objekt."""
+    attrs = taxon_obj.get('attributes') or taxon_obj.get('Attributes') or {}
+    for field in ('redListCategory', 'redlistCategory', 'RedListCategory'):
+        val = (attrs.get(field) or taxon_obj.get(field) or '')
+        if val.upper() in ('CR', 'EN', 'VU', 'NT', 'DD', 'RE'):
+            return val.upper()
+    return None
+
+
+def _aggregate_observations(records):
+    """Aggregerar en lista råobservationer till statistik-dict."""
+    species   = _defaultdict(lambda: {
+        'obs': 0, 'ind': 0, 'sv': '', 'sci': '', 'key': None,
+        'rl': None, 'last_date': '', 'last_rep': ''
+    })
+    reporters = _defaultdict(lambda: {'obs': 0, 'species': set()})
+    monthly   = [0] * 12
+    total_ind = 0
+
+    for rec in records:
+        taxon = rec.get('taxon') or rec.get('Taxon') or {}
+        occ   = rec.get('occurrence') or rec.get('Occurrence') or {}
+        event = rec.get('event') or rec.get('Event') or {}
+
+        key = taxon.get('id') or taxon.get('taxonId') or taxon.get('dyntaxaId')
+        if not key:
+            continue
+        key = int(key)
+
+        sv_name  = taxon.get('vernacularName') or taxon.get('commonName') or ''
+        sci_name = taxon.get('scientificName') or ''
+        count    = int(occ.get('individualCount') or occ.get('quantity') or 1)
+        reporter = (occ.get('reportedBy') or occ.get('observer') or '').strip()
+        start_dt = event.get('startDate') or event.get('startDayOfYear') or ''
+        rl_cat   = _get_rl_category(taxon)
+
+        # Månad (0-indexerad)
+        month = None
+        if start_dt and len(start_dt) >= 7:
+            try:
+                month = int(start_dt[5:7]) - 1
+            except ValueError:
+                pass
+
+        sp = species[key]
+        sp['obs'] += 1
+        sp['ind'] += count
+        if sv_name:  sp['sv']  = sv_name
+        if sci_name: sp['sci'] = sci_name
+        sp['key'] = key
+        if rl_cat:
+            sp['rl'] = rl_cat
+        if start_dt[:10] > sp['last_date']:
+            sp['last_date'] = start_dt[:10]
+            sp['last_rep']  = reporter
+
+        if reporter:
+            reporters[reporter]['obs'] += 1
+            reporters[reporter]['species'].add(key)
+
+        if month is not None:
+            monthly[month] += 1
+        total_ind += count
+
+    top_sp = sorted(
+        [{'sv': v['sv'], 'sci': v['sci'], 'key': v['key'],
+          'obs': v['obs'], 'ind': v['ind']} for v in species.values()],
+        key=lambda x: x['obs'], reverse=True
+    )[:20]
+
+    top_rap = sorted(
+        [{'name': k, 'arter': len(v['species']), 'obs': v['obs']}
+         for k, v in reporters.items()],
+        key=lambda x: x['arter'], reverse=True
+    )[:20]
+
+    redlisted = sorted(
+        [{'sv': v['sv'], 'sci': v['sci'], 'key': v['key'], 'status': v['rl'],
+          'obs': v['obs'], 'ind': v['ind'],
+          'last_date': v['last_date'], 'last_rep': v['last_rep']}
+         for v in species.values() if v['rl'] in ('CR', 'EN', 'VU', 'NT')],
+        key=lambda x: ('CR', 'EN', 'VU', 'NT').index(x['status'])
+    )
+
+    return {
+        'kpi':          {'arter': len(species), 'obs': sum(v['obs'] for v in species.values()),
+                         'ind': total_ind, 'reporters': len(reporters)},
+        'monthly':      monthly,
+        'top_species':  top_sp,
+        'top_reporters': top_rap,
+        'redlisted':    redlisted,
+    }
+
+
+def _fetch_year_stats(year):
+    """Hämtar och aggregerar alla observationer för ett år via paginering."""
+    if not _session['access_token'] and not _session['subscription_key']:
+        return None
+
+    all_records, skip, take, total = [], 0, 1000, None
+    year_key = str(year)
+    body = {
+        'taxon':       {'ids': [AVES_TAXON_ID], 'includeUnderlyingTaxa': True},
+        'date':        {'startDate': f'{year}-01-01', 'endDate': f'{year}-12-31',
+                        'dateFilterType': 'OverlappingStartDateAndEndDate'},
+        'geographics': {'areas': [{'areaType': 'County', 'featureId': VASTERBOTTEN_FEATURE_ID}]},
+    }
+
+    while True:
+        try:
+            resp = requests.post(
+                f'{SOS_API_BASE}/Observations/Search',
+                headers=_auth_headers(), json=body,
+                params={'skip': skip, 'take': take}, timeout=40,
+            )
+        except requests.RequestException as e:
+            print(f'  Stats ({year}): nätverksfel – {e}')
+            break
+        if not resp.ok:
+            print(f'  Stats ({year}): HTTP {resp.status_code}')
+            break
+
+        data    = resp.json()
+        records = data.get('records') or data.get('observations') or data.get('results') or []
+        if total is None:
+            total = int(data.get('totalCount') or data.get('total') or 0)
+        all_records.extend(records)
+
+        with _stats_lock:
+            _build_progress[year_key] = {
+                'status': 'building', 'fetched': len(all_records), 'total': total
+            }
+
+        skip += take
+        if not records or (total and skip >= total):
+            break
+        _time.sleep(0.4)
+
+    if not all_records:
+        return None
+    result = _aggregate_observations(all_records)
+    result.update({'year': year, 'cached_at': _dt.now().isoformat(),
+                   'total_fetched': len(all_records)})
+    return result
+
+
+def _stats_builder():
+    """Bakgrundstråd: laddar cache från fil, hämtar saknade år, uppdaterar dagligen."""
+    global _stats_cache
+
+    # Ladda befintlig cache
+    if _os.path.exists(_CACHE_FILE):
+        try:
+            with open(_CACHE_FILE, 'r', encoding='utf-8') as f:
+                loaded = _json.load(f)
+            with _stats_lock:
+                _stats_cache = loaded
+            print(f'  Stats: cache laddad ({len(loaded)} år)')
+        except Exception as e:
+            print(f'  Stats: kunde inte läsa cache – {e}')
+
+    while True:
+        # Vänta på autentisering (max 5 min)
+        for _ in range(60):
+            if _session['access_token'] or _session['subscription_key']:
+                break
+            _time.sleep(5)
+
+        if not _session['access_token'] and not _session['subscription_key']:
+            print('  Stats: ingen autentisering – försöker igen om 10 min')
+            _time.sleep(600)
+            continue
+
+        current_year = _date_type.today().year
+
+        for year in range(_FIRST_YEAR, current_year + 1):
+            year_key = str(year)
+            with _stats_lock:
+                cached = _stats_cache.get(year_key)
+
+            # Historiska år: hämta bara en gång
+            if cached and year < current_year:
+                continue
+
+            # Innevarande år: hoppa över om cache är < 24 h gammal
+            if cached and year == current_year:
+                try:
+                    age = (_dt.now() - _dt.fromisoformat(cached['cached_at'])).total_seconds()
+                    if age < 86400:
+                        continue
+                except Exception:
+                    pass
+
+            print(f'  Stats: hämtar {year}…')
+            with _stats_lock:
+                _build_progress[year_key] = {'status': 'building', 'fetched': 0, 'total': 0}
+
+            result = _fetch_year_stats(year)
+            if result:
+                with _stats_lock:
+                    _stats_cache[year_key] = result
+                    _build_progress[year_key] = {'status': 'ready'}
+                try:
+                    with open(_CACHE_FILE, 'w', encoding='utf-8') as f:
+                        _json.dump(_stats_cache, f, ensure_ascii=False, indent=2)
+                    print(f'  Stats: {year} klar – '
+                          f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
+                except Exception as e:
+                    print(f'  Stats: kunde inte spara cache – {e}')
+            else:
+                with _stats_lock:
+                    _build_progress[year_key] = {'status': 'error'}
+                print(f'  Stats: misslyckades för {year}')
+
+        # Sov till nästa dag kl 03:00
+        from datetime import timedelta as _td
+        now   = _dt.now()
+        next3 = now.replace(hour=3, minute=0, second=0, microsecond=0)
+        if now >= next3:
+            next3 += _td(days=1)
+        sleep_s = (next3 - now).total_seconds()
+        print(f'  Stats: nästa uppdatering om {sleep_s / 3600:.1f}h')
+        _time.sleep(sleep_s)
+
+
+@app.route('/api/statistics')
+def get_statistics():
+    year = request.args.get('year', str(_date_type.today().year))
+    with _stats_lock:
+        data     = _stats_cache.get(year)
+        progress = _build_progress.get(year, {})
+
+    if data:
+        return jsonify({'status': 'ready', 'data': data})
+    # Cachad data returneras alltid, men bygge kräver autentisering
+    if not _session['access_token'] and not _session['subscription_key']:
+        return jsonify({'status': 'unauthenticated'}), 401
+    if progress.get('status') == 'building':
+        return jsonify({'status': 'building',
+                        'fetched': progress.get('fetched', 0),
+                        'total':   progress.get('total', 0)}), 202
+    return jsonify({'status': 'pending'}), 202
+
+
+@app.route('/api/statistics/years')
+def statistics_years():
+    """Returnerar vilka år som finns i cachen."""
+    with _stats_lock:
+        years = {y: {'cached_at': d.get('cached_at'), 'kpi': d.get('kpi')}
+                 for y, d in _stats_cache.items()}
+    return jsonify(years)
+
+
 # ── Auto-inloggning vid uppstart (körs oavsett om Flask eller Gunicorn används) ──
 _auto_key   = _os.environ.get("SOS_SUBSCRIPTION_KEY", "").strip()
 _auto_email = _os.environ.get("SLU_EMAIL", "").strip()
@@ -623,6 +909,10 @@ if _auto_email and _auto_pass:
     except Exception as e:
         print(f"  ✗ SLU-inloggning misslyckades: {e}")
 
+
+# ── Starta statistik-bakgrundstråd ──────────────────────────────────────────
+_stats_thread = _threading.Thread(target=_stats_builder, daemon=True, name='stats-builder')
+_stats_thread.start()
 
 # ── Startup (endast vid direktkörning lokalt) ────────────────────────────────
 if __name__ == "__main__":

@@ -644,6 +644,12 @@
   <h1>🦅 Fågelobservationer</h1>
 </header>
 
+<!-- ── Sidlänkar ── -->
+<nav style="display:flex;justify-content:center;gap:0;background:#163d6a">
+  <a href="faglar-vasterbotten.html" style="padding:.45rem 1.4rem;font-size:.78rem;font-weight:700;color:white;text-decoration:none;border-bottom:3px solid #63b3ed;letter-spacing:.02em">📋 Dagslista</a>
+  <a href="faglar-statistik.html"    style="padding:.45rem 1.4rem;font-size:.78rem;font-weight:700;color:rgba(255,255,255,.65);text-decoration:none;border-bottom:3px solid transparent;letter-spacing:.02em">📊 Statistik</a>
+</nav>
+
 <!-- ── Source bar ── -->
 <div class="source-bar offline" id="sourceBar">
   <span class="dot"></span>
@@ -706,7 +712,7 @@
 </div>
 
 <footer>
-  Utvecklad av Jonas Karlsson 2026
+  Utvecklad av Jonas Karlsson 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span>
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -1842,6 +1848,17 @@ initRegionBar();
 updateRegionTitle();
 syncDateUI();
 checkProxy().then(() => fetchAll());
+
+/* ── Versionsinfo i footer ── */
+fetch(`${PROXY}/api/version`, { signal: AbortSignal.timeout(5000) })
+  .then(r => r.json())
+  .then(v => {
+    const started = v.started_at
+      ? new Date(v.started_at).toLocaleString('sv', { dateStyle: 'short', timeStyle: 'short' })
+      : '–';
+    document.getElementById('footerVersion').textContent = `v${v.version} · Startad ${started}`;
+  })
+  .catch(() => {});
 </script>
 </body>
 </html>
