@@ -32,7 +32,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "2.3"          # Uppdatera vid varje deploy
+APP_VERSION   = "2.4"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
 
 SLU_AUTH_URL  = "https://useradmin-auth.slu.se/connect/authorize"
@@ -655,10 +655,16 @@ def _aggregate_observations(records, rl_override=None):
     monthly_sp  = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0}))
     monthly_rep = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))
 
+    # Per-kommun-spårning (featureId som nyckel)
+    muni_sp  = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0}))
+    muni_rep = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))
+
     for rec in records:
-        taxon = rec.get('taxon') or rec.get('Taxon') or {}
-        occ   = rec.get('occurrence') or rec.get('Occurrence') or {}
-        event = rec.get('event') or rec.get('Event') or {}
+        taxon    = rec.get('taxon')     or rec.get('Taxon')    or {}
+        occ      = rec.get('occurrence') or rec.get('Occurrence') or {}
+        event    = rec.get('event')     or rec.get('Event')    or {}
+        location = rec.get('location')  or rec.get('Location') or {}
+        muni_fid = (location.get('municipality') or {}).get('featureId') or ''
 
         key = taxon.get('id') or taxon.get('taxonId') or taxon.get('dyntaxaId')
         if not key:
@@ -705,6 +711,13 @@ def _aggregate_observations(records, rl_override=None):
                 monthly_rep[m1][reporter]['obs'] += 1
                 monthly_rep[m1][reporter]['species'].add(key)
 
+        if muni_fid:
+            muni_sp[muni_fid][key]['obs'] += 1
+            muni_sp[muni_fid][key]['ind'] += count
+            if reporter:
+                muni_rep[muni_fid][reporter]['obs'] += 1
+                muni_rep[muni_fid][reporter]['species'].add(key)
+
         total_ind += count
 
     top_sp = sorted(
@@ -737,6 +750,23 @@ def _aggregate_observations(records, rl_override=None):
             key=lambda x: x['arter'], reverse=True
         )[:20]
 
+    # Bygg per-kommun topplista
+    muni_species   = {}
+    muni_reporters = {}
+    for fid, ms in muni_sp.items():
+        muni_species[fid] = sorted(
+            [{'key': k, 'sv': species[k]['sv'], 'sci': species[k]['sci'],
+              'obs': v['obs'], 'ind': v['ind']}
+             for k, v in ms.items() if k in species],
+            key=lambda x: x['obs'], reverse=True
+        )[:20]
+    for fid, mr in muni_rep.items():
+        muni_reporters[fid] = sorted(
+            [{'name': nm, 'obs': v['obs'], 'arter': len(v['species'])}
+             for nm, v in mr.items()],
+            key=lambda x: x['arter'], reverse=True
+        )[:20]
+
     return {
         'kpi':             {'arter': len(species), 'obs': sum(v['obs'] for v in species.values()),
                             'ind': total_ind, 'reporters': len(reporters)},
@@ -745,6 +775,8 @@ def _aggregate_observations(records, rl_override=None):
         'top_reporters':   top_rap,
         'month_species':   month_species,
         'month_reporters': month_reporters,
+        'muni_species':    muni_species,
+        'muni_reporters':  muni_reporters,
     }
 
 
