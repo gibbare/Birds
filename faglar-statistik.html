@@ -318,39 +318,6 @@
       margin-bottom: .15rem;
     }
 
-    /* ── Sällsynta/rödlistade arter-tabell ── */
-    .rl-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .84rem;
-    }
-    .rl-table thead th {
-      text-align: left;
-      font-size: .7rem;
-      font-weight: 700;
-      color: #718096;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-      padding: .4rem .6rem;
-      border-bottom: 2px solid #e2e8f0;
-    }
-    .rl-table tbody td {
-      padding: .5rem .6rem;
-      border-bottom: 1px solid #f0f4f8;
-      vertical-align: middle;
-    }
-    .rl-table tbody tr:last-child td { border-bottom: none; }
-    .rl-table tbody tr:hover { background: #f7faff; }
-    .rl-badge {
-      display: inline-block;
-      font-size: .64rem; font-weight: 800;
-      border-radius: 4px; padding: .15rem .32rem;
-      letter-spacing: .03em;
-    }
-    .rl-cr { background: #c53030; color: #fff; }
-    .rl-en { background: #dd6b20; color: #fff; }
-    .rl-vu { background: #d69e2e; color: #1a202c; }
-    .rl-nt { background: #2b6cb0; color: #fff; }
 
     /* ── Cache-info ── */
     .cache-info {
@@ -554,23 +521,6 @@
 
   </div>
 
-  <!-- Rödlistade arter -->
-  <div class="card">
-    <div class="section-title">🔴 Rödlistade & sällsynta arter <span id="rlPeriod">2025 · Hela länet</span></div>
-    <table class="rl-table">
-      <thead>
-        <tr>
-          <th>Art</th>
-          <th>Status</th>
-          <th>Obs.</th>
-          <th>Individer</th>
-          <th>Senast sedd</th>
-          <th>Rapportör</th>
-        </tr>
-      </thead>
-      <tbody id="rlList"></tbody>
-    </table>
-  </div>
 
 </div>
 
@@ -696,8 +646,6 @@ function showError(msg) {
     `<div style="padding:1.5rem;text-align:center;color:#c53030;font-size:.85rem">${msg}</div>`;
   document.getElementById('topRapList').innerHTML =
     `<tr><td colspan="4" style="padding:1.5rem;text-align:center;color:#c53030;font-size:.85rem">${msg}</td></tr>`;
-  document.getElementById('rlList').innerHTML =
-    `<tr><td colspan="6" style="padding:1.5rem;text-align:center;color:#c53030;font-size:.85rem">${msg}</td></tr>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -708,9 +656,13 @@ function renderAll(year, month) {
   const d = statsData[year];
   if (!d) return;
   renderMonthChart(d.monthly, month);
-  renderTopArter(d.top_species);
-  renderTopRap(d.top_reporters);
-  renderRodlist(d.redlisted);
+  // Använd månadsspecifik data om månad är vald, annars helårdata
+  const sp  = month && d.month_species   && d.month_species[month]
+                ? d.month_species[month]   : d.top_species;
+  const rep = month && d.month_reporters && d.month_reporters[month]
+                ? d.month_reporters[month] : d.top_reporters;
+  renderTopArter(sp);
+  renderTopRap(rep);
   updateKpi(d, month);
   updateLabels();
   updateCacheInfo(year, d);
@@ -792,25 +744,6 @@ function renderTopRap(topReporters) {
   }).join('');
 }
 
-function renderRodlist(redlisted) {
-  const tbody = document.getElementById('rlList');
-  const cats  = { VU:'rl-vu', EN:'rl-en', CR:'rl-cr', NT:'rl-nt' };
-  if (!redlisted || !redlisted.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="padding:1.5rem;text-align:center;color:#a0aec0">
-      Inga rödlistade arter hittade – rödlistestatus kräver SLU-inloggning (bearer-token).</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = redlisted.map(r => `
-    <tr>
-      <td><strong>${esc(r.sv || r.sci)}</strong>
-          <br><em style="color:#a0aec0;font-size:.75rem">${esc(r.sci)}</em></td>
-      <td><span class="rl-badge ${cats[r.status] || ''}">${r.status}</span></td>
-      <td>${r.obs}</td>
-      <td>${r.ind}</td>
-      <td style="white-space:nowrap;color:#718096;font-size:.8rem">${r.last_date || ''}</td>
-      <td style="font-size:.8rem">${esc(r.last_rep || '')}</td>
-    </tr>`).join('');
-}
 
 function updateKpi(d, month) {
   const kpi = d.kpi;
@@ -825,7 +758,7 @@ function updateKpi(d, month) {
     document.getElementById('kpiArterTrend').textContent = MÅNADER_FULL[month - 1];
     document.getElementById('kpiObsTrend').textContent   = 'observationer';
     document.getElementById('kpiIndTrend').textContent   = 'individer (uppskattning)';
-    document.getElementById('kpiRapTrend').textContent   = 'Top-listor visar hela året';
+    document.getElementById('kpiRapTrend').textContent   = ' ';
   } else {
     document.getElementById('kpiArter').textContent = kpi.arter.toLocaleString('sv');
     document.getElementById('kpiObs').textContent   = kpi.obs.toLocaleString('sv');
@@ -847,7 +780,6 @@ function updateLabels() {
   const period = `${year} · ${monLbl} · ${regLbl}`;
   document.getElementById('topArterPeriod').textContent = period;
   document.getElementById('topRapPeriod').textContent   = period;
-  document.getElementById('rlPeriod').textContent       = period;
   document.getElementById('monthChartYear').textContent = year;
 }
 

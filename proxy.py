@@ -10,6 +10,11 @@ Krav:  pip install flask flask-cors requests
 Starta: python proxy.py
 """
 
+import sys as _sys, io as _io
+if _sys.stdout and hasattr(_sys.stdout, 'buffer') and \
+        (_sys.stdout.encoding or '').lower() not in ('utf-8', 'utf8'):
+    _sys.stdout = _io.TextIOWrapper(_sys.stdout.buffer, encoding='utf-8', errors='replace')
+
 from flask import Flask, request, jsonify, send_from_directory
 import os as _os
 from flask_cors import CORS
@@ -633,8 +638,11 @@ def _get_rl_category(taxon_obj):
     return None
 
 
-def _aggregate_observations(records):
-    """Aggregerar en lista råobservationer till statistik-dict."""
+def _aggregate_observations(records, rl_override=None):
+    """Aggregerar en lista råobservationer till statistik-dict.
+    rl_override: {taxon_id (int): 'NT'|'VU'|'EN'|'CR'} – extra rödlistestatus
+                 som används om taxon-objektet saknar attributet (t.ex. vid API-nyckelauth).
+    """
     species   = _defaultdict(lambda: {
         'obs': 0, 'ind': 0, 'sv': '', 'sci': '', 'key': None,
         'rl': None, 'last_date': '', 'last_rep': ''
@@ -642,6 +650,10 @@ def _aggregate_observations(records):
     reporters = _defaultdict(lambda: {'obs': 0, 'species': set()})
     monthly   = [0] * 12
     total_ind = 0
+
+    # Per-månads-spårning (1-indexerat)
+    monthly_sp  = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0}))
+    monthly_rep = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))
 
     for rec in records:
         taxon = rec.get('taxon') or rec.get('Taxon') or {}
@@ -658,13 +670,13 @@ def _aggregate_observations(records):
         count    = int(occ.get('individualCount') or occ.get('quantity') or 1)
         reporter = (occ.get('reportedBy') or occ.get('observer') or '').strip()
         start_dt = event.get('startDate') or event.get('startDayOfYear') or ''
-        rl_cat   = _get_rl_category(taxon)
+        rl_cat   = _get_rl_category(taxon) or (rl_override or {}).get(key)
 
-        # Månad (0-indexerad)
-        month = None
+        # Månad (0-indexerad för monthly-array, 1-indexerad för per-månads-dict)
+        month_0 = None
         if start_dt and len(start_dt) >= 7:
             try:
-                month = int(start_dt[5:7]) - 1
+                month_0 = int(start_dt[5:7]) - 1
             except ValueError:
                 pass
 
@@ -684,8 +696,15 @@ def _aggregate_observations(records):
             reporters[reporter]['obs'] += 1
             reporters[reporter]['species'].add(key)
 
-        if month is not None:
-            monthly[month] += 1
+        if month_0 is not None:
+            monthly[month_0] += 1
+            m1 = month_0 + 1
+            monthly_sp[m1][key]['obs'] += 1
+            monthly_sp[m1][key]['ind'] += count
+            if reporter:
+                monthly_rep[m1][reporter]['obs'] += 1
+                monthly_rep[m1][reporter]['species'].add(key)
+
         total_ind += count
 
     top_sp = sorted(
@@ -700,21 +719,32 @@ def _aggregate_observations(records):
         key=lambda x: x['arter'], reverse=True
     )[:20]
 
-    redlisted = sorted(
-        [{'sv': v['sv'], 'sci': v['sci'], 'key': v['key'], 'status': v['rl'],
-          'obs': v['obs'], 'ind': v['ind'],
-          'last_date': v['last_date'], 'last_rep': v['last_rep']}
-         for v in species.values() if v['rl'] in ('CR', 'EN', 'VU', 'NT')],
-        key=lambda x: ('CR', 'EN', 'VU', 'NT').index(x['status'])
-    )
+    # Bygg per-månads topplista (top 20 per månad)
+    month_species   = {}
+    month_reporters = {}
+    for m in range(1, 13):
+        ms = monthly_sp.get(m, {})
+        month_species[m] = sorted(
+            [{'key': k, 'sv': species[k]['sv'], 'sci': species[k]['sci'],
+              'obs': v['obs'], 'ind': v['ind']}
+             for k, v in ms.items() if k in species],
+            key=lambda x: x['obs'], reverse=True
+        )[:20]
+        mr = monthly_rep.get(m, {})
+        month_reporters[m] = sorted(
+            [{'name': nm, 'obs': v['obs'], 'arter': len(v['species'])}
+             for nm, v in mr.items()],
+            key=lambda x: x['arter'], reverse=True
+        )[:20]
 
     return {
-        'kpi':          {'arter': len(species), 'obs': sum(v['obs'] for v in species.values()),
-                         'ind': total_ind, 'reporters': len(reporters)},
-        'monthly':      monthly,
-        'top_species':  top_sp,
-        'top_reporters': top_rap,
-        'redlisted':    redlisted,
+        'kpi':             {'arter': len(species), 'obs': sum(v['obs'] for v in species.values()),
+                            'ind': total_ind, 'reporters': len(reporters)},
+        'monthly':         monthly,
+        'top_species':     top_sp,
+        'top_reporters':   top_rap,
+        'month_species':   month_species,
+        'month_reporters': month_reporters,
     }
 
 
@@ -764,7 +794,57 @@ def _fetch_year_stats(year):
 
     if not all_records:
         return None
-    result = _aggregate_observations(all_records)
+
+    # ── Hämta rödlistestatus via SOS Taxon-API (max 60 s, ingen Artfakta-scraping) ──
+    unique_ids = list({
+        int(r.get('taxon', {}).get('id') or r.get('taxon', {}).get('taxonId') or 0)
+        for r in all_records
+        if r.get('taxon', {}).get('id') or r.get('taxon', {}).get('taxonId')
+    } - {0})
+
+    rl_override = {}
+    if unique_ids:
+        print(f'  Stats ({year}): rödlistekoll för {len(unique_ids)} arter…')
+        t0 = _time.time()
+        for i in range(0, len(unique_ids), 50):
+            if _time.time() - t0 > 60:
+                print(f'  Stats ({year}): rödlistekoll avbruten (>60 s)')
+                break
+            batch = unique_ids[i:i + 50]
+            for method, url, kw in [
+                ('POST', f'{SOS_API_BASE}/Taxon/Search',
+                 {'json': {'ids': batch, 'take': len(batch)}}),
+                ('GET',  f'{SOS_API_BASE}/Taxon',
+                 {'params': {'ids': ','.join(str(x) for x in batch)}}),
+            ]:
+                try:
+                    r = requests.request(
+                        method, url, headers=_auth_headers(), timeout=8, **kw
+                    )
+                    if r.ok:
+                        data = r.json()
+                        taxa = (data.get('taxa') or data.get('records')
+                                or data.get('results') or [])
+                        if isinstance(data, list):
+                            taxa = data
+                        for t in taxa:
+                            tid = t.get('id') or t.get('taxonId')
+                            if not tid:
+                                continue
+                            attrs = t.get('attributes') or {}
+                            rl = (attrs.get('redListCategory')
+                                  or attrs.get('redlistCategory')
+                                  or t.get('redListCategory') or '')
+                            if rl.upper() in ('CR', 'EN', 'VU', 'NT'):
+                                rl_override[int(tid)] = rl.upper()
+                        break  # lyckades – hoppa över nästa metod
+                except Exception:
+                    pass
+            _time.sleep(0.2)
+        elapsed = _time.time() - t0
+        print(f'  Stats ({year}): {len(rl_override)} rödlistade (SOS API, {elapsed:.0f}s)')
+
+    result = _aggregate_observations(all_records, rl_override)
     result.update({'year': year, 'cached_at': _dt.now().isoformat(),
                    'total_fetched': len(all_records)})
     return result
