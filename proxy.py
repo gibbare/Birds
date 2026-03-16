@@ -1216,6 +1216,7 @@ def error_logs():
   </style>
 </head>
 <body>
+  <a href="javascript:history.back()" style="display:inline-block;margin-bottom:1.2rem;color:#888;font-size:0.8rem;text-decoration:none;">← Tillbaka</a>
   <h1>Fellogg – {len(entries)} poster (max 500, nyaste först)</h1>
   <div class="meta">Serverstart: {_SERVER_START.strftime('%Y-%m-%d %H:%M:%S')} &nbsp;·&nbsp; Version {APP_VERSION}</div>
   {table}
