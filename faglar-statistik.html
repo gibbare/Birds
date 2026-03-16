@@ -670,13 +670,11 @@ function renderAll(year, month) {
 
   renderMonthChart(d.monthly, month);
 
-  // Välj rätt datakälla: kommun → månad → helår (fallback-kedja)
+  // Välj rätt datakälla med fallback-kedja: kommun×månad → kommun → månad → helår
   let sp, rep;
   if (feid && month) {
-    // Kommun + månad: korsfiltrering – ta kommundata och månadsfiltrering av den
-    // (vi har inte kors-aggregerat, använd kommundata som bästa approximation)
-    sp  = (d.muni_species?.[feid]  || d.top_species);
-    rep = (d.muni_reporters?.[feid] || d.top_reporters);
+    sp  = d.muni_month_species?.[feid]?.[month]   || d.muni_species?.[feid]   || d.top_species;
+    rep = d.muni_month_reporters?.[feid]?.[month] || d.muni_reporters?.[feid] || d.top_reporters;
   } else if (feid) {
     sp  = d.muni_species?.[feid]   || d.top_species;
     rep = d.muni_reporters?.[feid] || d.top_reporters;

@@ -32,7 +32,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "2.4"          # Uppdatera vid varje deploy
+APP_VERSION   = "2.5"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
 
 SLU_AUTH_URL  = "https://useradmin-auth.slu.se/connect/authorize"
@@ -659,6 +659,10 @@ def _aggregate_observations(records, rl_override=None):
     muni_sp  = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0}))
     muni_rep = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))
 
+    # Per-kommun × månad (featureId → månad 1-12 → art/rapportör)
+    muni_month_sp  = _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0})))
+    muni_month_rep = _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()})))
+
     for rec in records:
         taxon    = rec.get('taxon')     or rec.get('Taxon')    or {}
         occ      = rec.get('occurrence') or rec.get('Occurrence') or {}
@@ -717,6 +721,13 @@ def _aggregate_observations(records, rl_override=None):
             if reporter:
                 muni_rep[muni_fid][reporter]['obs'] += 1
                 muni_rep[muni_fid][reporter]['species'].add(key)
+            if month_0 is not None:
+                m1 = month_0 + 1
+                muni_month_sp[muni_fid][m1][key]['obs'] += 1
+                muni_month_sp[muni_fid][m1][key]['ind'] += count
+                if reporter:
+                    muni_month_rep[muni_fid][m1][reporter]['obs'] += 1
+                    muni_month_rep[muni_fid][m1][reporter]['species'].add(key)
 
         total_ind += count
 
@@ -767,16 +778,39 @@ def _aggregate_observations(records, rl_override=None):
             key=lambda x: x['arter'], reverse=True
         )[:20]
 
+    # Bygg per-kommun × månad topplista
+    muni_month_species   = {}
+    muni_month_reporters = {}
+    for fid, months in muni_month_sp.items():
+        muni_month_species[fid] = {}
+        for m, ms in months.items():
+            muni_month_species[fid][m] = sorted(
+                [{'key': k, 'sv': species[k]['sv'], 'sci': species[k]['sci'],
+                  'obs': v['obs'], 'ind': v['ind']}
+                 for k, v in ms.items() if k in species],
+                key=lambda x: x['obs'], reverse=True
+            )[:20]
+    for fid, months in muni_month_rep.items():
+        muni_month_reporters[fid] = {}
+        for m, mr in months.items():
+            muni_month_reporters[fid][m] = sorted(
+                [{'name': nm, 'obs': v['obs'], 'arter': len(v['species'])}
+                 for nm, v in mr.items()],
+                key=lambda x: x['arter'], reverse=True
+            )[:20]
+
     return {
-        'kpi':             {'arter': len(species), 'obs': sum(v['obs'] for v in species.values()),
-                            'ind': total_ind, 'reporters': len(reporters)},
-        'monthly':         monthly,
-        'top_species':     top_sp,
-        'top_reporters':   top_rap,
-        'month_species':   month_species,
-        'month_reporters': month_reporters,
-        'muni_species':    muni_species,
-        'muni_reporters':  muni_reporters,
+        'kpi':                  {'arter': len(species), 'obs': sum(v['obs'] for v in species.values()),
+                                 'ind': total_ind, 'reporters': len(reporters)},
+        'monthly':              monthly,
+        'top_species':          top_sp,
+        'top_reporters':        top_rap,
+        'month_species':        month_species,
+        'month_reporters':      month_reporters,
+        'muni_species':         muni_species,
+        'muni_reporters':       muni_reporters,
+        'muni_month_species':   muni_month_species,
+        'muni_month_reporters': muni_month_reporters,
     }
 
 
