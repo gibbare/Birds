@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fågelstatistik – Västerbotten</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #eef2f7;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a4a7a, #2b6cb0);
+      color: white;
+      padding: 1.1rem 1.5rem .8rem;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+
+    /* ── Sidlänkar ── */
+    .page-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      background: #163d6a;
+    }
+    .page-tab {
+      padding: .45rem 1.4rem;
+      font-size: .78rem;
+      font-weight: 700;
+      color: rgba(255,255,255,.65);
+      text-decoration: none;
+      border-bottom: 3px solid transparent;
+      transition: color .15s, border-color .15s;
+      letter-spacing: .02em;
+    }
+    .page-tab:hover { color: white; }
+    .page-tab.active { color: white; border-bottom-color: #63b3ed; }
+
+    /* ── Source bar ── */
+    .source-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .6rem;
+      padding: .45rem 1rem;
+      font-size: .78rem;
+      font-weight: 600;
+    }
+    .source-bar.demo     { background: #744210; color: #fefcbf; }
+    .source-bar.live     { background: #276749; color: white; }
+    .source-bar.building { background: #2c5282; color: #bee3f8; }
+    .source-bar .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: .9;
+    }
+
+    /* ── Nav-bar ── */
+    .nav-bar {
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: .55rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07);
+    }
+    .nav-select {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: .38rem .65rem;
+      font-size: .82rem;
+      background: white;
+      color: #2d3748;
+      cursor: pointer;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .nav-select:focus { border-color: #2b6cb0; }
+    .nav-select:hover { border-color: #bee3f8; }
+    .nav-label {
+      font-size: .78rem;
+      font-weight: 600;
+      color: #718096;
+    }
+    .nav-sep {
+      width: 1px; height: 22px;
+      background: #e2e8f0;
+      margin: 0 .2rem;
+    }
+
+    /* ── Container ── */
+    .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem 3rem; }
+
+    /* ── Sammanfattningskort ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .75rem;
+      margin-bottom: 1.5rem;
+    }
+    .kpi-card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.1rem 1.25rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      text-align: center;
+    }
+    .kpi-card .val {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #2b6cb0;
+      line-height: 1;
+    }
+    .kpi-card .lbl {
+      font-size: .72rem;
+      color: #718096;
+      margin-top: .3rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .kpi-card .trend {
+      font-size: .72rem;
+      color: #276749;
+      margin-top: .25rem;
+      font-weight: 600;
+    }
+
+    /* ── Sektionsrubriker ── */
+    .section-title {
+      font-size: .95rem;
+      font-weight: 800;
+      color: #2d3748;
+      margin-bottom: .75rem;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+    }
+    .section-title span { color: #718096; font-weight: 400; font-size: .8rem; }
+
+    /* ── Tvåkolumns-layout ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Topplista-kort ── */
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    }
+
+    /* ── Artstabell med staplar ── */
+    .species-row {
+      display: grid;
+      grid-template-columns: 1.6rem 1fr auto;
+      gap: .4rem .6rem;
+      align-items: center;
+      padding: .45rem 0;
+      border-bottom: 1px solid #f0f4f8;
+    }
+    .species-row:last-child { border-bottom: none; }
+    .species-rank {
+      font-size: .72rem;
+      font-weight: 700;
+      color: #a0aec0;
+      text-align: right;
+    }
+    .species-rank.top3 { color: #d69e2e; }
+    .species-name-wrap {}
+    .species-sv {
+      font-weight: 600;
+      font-size: .88rem;
+      color: #1a202c;
+    }
+    .species-sv a { color: inherit; text-decoration: none; }
+    .species-sv a:hover { color: #2b6cb0; text-decoration: underline; }
+    .species-sci {
+      font-style: italic;
+      font-size: .72rem;
+      color: #a0aec0;
+    }
+    .species-bar-wrap {
+      grid-column: 1 / -1;
+      padding-left: 2.2rem;
+    }
+    .species-bar-bg {
+      background: #eef2f7;
+      border-radius: 99px;
+      height: 6px;
+      overflow: hidden;
+    }
+    .species-bar-fill {
+      background: linear-gradient(90deg, #2b6cb0, #63b3ed);
+      height: 100%;
+      border-radius: 99px;
+    }
+    .species-count {
+      font-size: .8rem;
+      font-weight: 700;
+      color: #2b6cb0;
+      white-space: nowrap;
+      text-align: right;
+    }
+    .species-count small {
+      display: block;
+      font-size: .68rem;
+      font-weight: 400;
+      color: #a0aec0;
+    }
+
+    /* ── Rapportörstabell ── */
+    .reporter-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .84rem;
+    }
+    .reporter-table thead th {
+      text-align: left;
+      font-size: .7rem;
+      font-weight: 700;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      padding: .4rem .5rem;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .reporter-table thead th.num { text-align: right; }
+    .reporter-table tbody td {
+      padding: .5rem .5rem;
+      border-bottom: 1px solid #f0f4f8;
+      vertical-align: middle;
+    }
+    .reporter-table tbody tr:last-child td { border-bottom: none; }
+    .reporter-table tbody tr:hover { background: #f7faff; }
+    .reporter-rank {
+      font-size: .75rem;
+      font-weight: 700;
+      color: #a0aec0;
+      text-align: center;
+      width: 1.8rem;
+    }
+    .reporter-rank.top3 { color: #d69e2e; }
+    .reporter-medal { font-size: .95rem; }
+    .reporter-name { font-weight: 600; color: #1a202c; }
+    .reporter-num {
+      text-align: right;
+      font-weight: 700;
+      color: #2b6cb0;
+      white-space: nowrap;
+    }
+    .reporter-num small {
+      display: block;
+      font-size: .68rem;
+      font-weight: 400;
+      color: #a0aec0;
+    }
+
+    /* ── Månadsdiagram ── */
+    .month-chart {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: .3rem;
+      align-items: flex-end;
+      height: 140px;
+      margin-bottom: .4rem;
+    }
+    .month-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      height: 100%;
+      cursor: pointer;
+    }
+    .month-bar {
+      width: 100%;
+      background: linear-gradient(180deg, #63b3ed, #2b6cb0);
+      border-radius: 4px 4px 0 0;
+      min-height: 4px;
+      transition: opacity .15s;
+      position: relative;
+    }
+    .month-col:hover .month-bar { opacity: .75; }
+    .month-col.selected .month-bar {
+      background: linear-gradient(180deg, #68d391, #276749);
+    }
+    .month-lbl {
+      font-size: .62rem;
+      color: #718096;
+      margin-top: .3rem;
+      text-align: center;
+      font-weight: 600;
+    }
+    .month-col.selected .month-lbl { color: #276749; font-weight: 800; }
+    .month-val {
+      font-size: .62rem;
+      color: #4a5568;
+      text-align: center;
+      margin-bottom: .15rem;
+    }
+
+
+    /* ── Cache-info ── */
+    .cache-info {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.2rem;
+      flex-wrap: wrap;
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      padding: .45rem 1rem;
+      font-size: .75rem;
+      color: #718096;
+    }
+    .cache-info strong { color: #2d3748; }
+    .cache-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      background: #eef2f7;
+      border-radius: 99px;
+      padding: .18rem .6rem;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: .75rem;
+      color: #a0aec0;
+    }
+
+    /* ── Laddningsindikator ── */
+    .loading-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(255,255,255,.7);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: .75rem;
+      font-size: .9rem;
+      color: #4a5568;
+      font-weight: 600;
+    }
+    .loading-overlay.active { display: flex; }
+    .spinner {
+      width: 38px; height: 38px;
+      border: 4px solid #e2e8f0; border-top-color: #2b6cb0;
+      border-radius: 50%; animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsiv ── */
+    @media (max-width: 768px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .two-col  { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      header h1 { font-size: 1.1rem; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: .5rem; }
+      .kpi-card .val { font-size: 1.5rem; }
+      .container { padding: 0 .5rem 2rem; margin-top: .75rem; }
+      .nav-bar { padding: .4rem .6rem; gap: .3rem; }
+      .nav-select { font-size: .75rem; padding: .28rem .45rem; }
+      .nav-sep { display: none; }
+      .month-lbl { font-size: .55rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <span id="loadingMsg">Hämtar statistik…</span>
+</div>
+
+<!-- Header -->
+<header>
+  <h1>🐦 Fågelobservationer – Västerbotten</h1>
+</header>
+
+<!-- Sidlänkar -->
+<nav class="page-tabs">
+  <a href="faglar-vasterbotten.html" class="page-tab">📋 Dagslista</a>
+  <a href="faglar-statistik.html"    class="page-tab active">📊 Statistik</a>
+</nav>
+
+<!-- Source bar -->
+<div class="source-bar demo" id="sourceBar">
+  <div class="dot"></div>
+  Exempeldata – Statistik hämtas från Artportalen via proxy när det är klart
+</div>
+
+<!-- Nav-bar: Period + Region -->
+<div class="nav-bar">
+  <span class="nav-label">År</span>
+  <select class="nav-select" id="selYear" onchange="updatePeriod()">
+    <option value="2026">2026</option>
+    <option value="2025" selected>2025</option>
+    <option value="2024">2024</option>
+    <option value="2023">2023</option>
+    <option value="2022">2022</option>
+  </select>
+
+  <select class="nav-select" id="selMonth" onchange="updatePeriod()">
+    <option value="0" selected>Hela året</option>
+    <option value="1">Januari</option>
+    <option value="2">Februari</option>
+    <option value="3">Mars</option>
+    <option value="4">April</option>
+    <option value="5">Maj</option>
+    <option value="6">Juni</option>
+    <option value="7">Juli</option>
+    <option value="8">Augusti</option>
+    <option value="9">September</option>
+    <option value="10">Oktober</option>
+    <option value="11">November</option>
+    <option value="12">December</option>
+  </select>
+
+  <div class="nav-sep"></div>
+
+  <select class="nav-select" id="selRegion" onchange="updatePeriod()">
+    <option value="county">Västerbottens län</option>
+    <option value="skelleftea">Skellefteå</option>
+    <option value="umea">Umeå</option>
+    <option value="lycksele">Lycksele</option>
+    <option value="storuman">Storuman</option>
+    <option value="vilhelmina">Vilhelmina</option>
+  </select>
+</div>
+
+<!-- Cache-info -->
+<div class="cache-info" id="cacheInfo" style="display:none">
+  <span>📦 Statistik för <strong id="cacheYear">–</strong></span>
+  <span class="cache-chip">🕐 Hämtad från Artportalen: <strong id="cacheFetched">–</strong></span>
+</div>
+
+<!-- Huvudinnehåll -->
+<div class="container">
+
+  <!-- KPI-kort -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="val" id="kpiArter">–</div>
+      <div class="lbl">Arter</div>
+      <div class="trend" id="kpiArterTrend"> </div>
+    </div>
+    <div class="kpi-card">
+      <div class="val" id="kpiObs">–</div>
+      <div class="lbl">Observationer</div>
+      <div class="trend" id="kpiObsTrend"> </div>
+    </div>
+    <div class="kpi-card">
+      <div class="val" id="kpiInd">–</div>
+      <div class="lbl">Individer</div>
+      <div class="trend" id="kpiIndTrend"> </div>
+    </div>
+    <div class="kpi-card">
+      <div class="val" id="kpiRap">–</div>
+      <div class="lbl">Rapportörer</div>
+      <div class="trend" id="kpiRapTrend"> </div>
+    </div>
+  </div>
+
+  <!-- Månadsdiagram (döljs vid månadsfilter) -->
+  <div class="card" id="monthChartCard" style="margin-bottom:1rem">
+    <div class="section-title">📅 Observationer per månad <span id="monthChartYear">2025</span></div>
+    <div class="month-chart" id="monthChart"></div>
+    <div style="font-size:.7rem;color:#a0aec0;text-align:center;margin-top:.2rem">
+      Klicka på en månad för att filtrera
+    </div>
+  </div>
+
+  <!-- Topplista + Rapportörer -->
+  <div class="two-col">
+
+    <!-- Top 10 arter -->
+    <div class="card">
+      <div class="section-title">🏆 Mest observerade arter <span id="topArterPeriod">2025 · Hela länet</span></div>
+      <div id="topArtList"></div>
+    </div>
+
+    <!-- Topplista rapportörer -->
+    <div class="card">
+      <div class="section-title">👁️ Mest aktiva rapportörer <span id="topRapPeriod">2025 · Hela länet</span></div>
+      <table class="reporter-table">
+        <thead>
+          <tr>
+            <th style="width:2rem">#</th>
+            <th>Rapportör</th>
+            <th class="num">Arter</th>
+            <th class="num">Obs.</th>
+          </tr>
+        </thead>
+        <tbody id="topRapList"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+
+</div>
+
+<footer>Utvecklad av Jonas Karlsson 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   Konfiguration
+══════════════════════════════════════════════════════════════════ */
+
+/* PROXY-URL: automatisk – fungerar lokalt och på Render utan ändringar */
+const PROXY = (window.location.origin === 'null' || window.location.origin === 'file://')
+  ? 'http://localhost:5050'
+  : window.location.origin;
+
+const MÅNADER = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
+const MÅNADER_FULL = ['Januari','Februari','Mars','April','Maj','Juni',
+                      'Juli','Augusti','September','Oktober','November','December'];
+
+/* Kommunnamn → SOS featureId */
+const REGION_TO_FEID = {
+  skelleftea: '2482',
+  umea:       '2480',
+  lycksele:   '2460',
+  storuman:   '2421',
+  vilhelmina: '2462',
+};
+
+/* ── State ── */
+let selectedYear  = new Date().getFullYear();
+let selectedMonth = 0;          // 0 = hela året
+let statsData     = {};         // { "2025": { kpi, monthly, top_species, ... } }
+let pollTimer     = null;       // pågående polling-timer
+
+/* ══════════════════════════════════════════════════════════════════
+   UI-hjälpfunktioner
+══════════════════════════════════════════════════════════════════ */
+
+function showLoading(msg = 'Hämtar statistik…') {
+  document.getElementById('loadingMsg').textContent = msg;
+  document.getElementById('loadingOverlay').classList.add('active');
+}
+
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.remove('active');
+}
+
+function setSourceBar(state, extra = '') {
+  const bar = document.getElementById('sourceBar');
+  bar.className = 'source-bar ' + state;
+  if (state === 'live') {
+    bar.innerHTML = `<div class="dot"></div> ✓ Live-data från Artportalen${extra}`;
+  } else if (state === 'building') {
+    bar.innerHTML = `<div class="dot"></div> Bygger statistikcache… ${extra}`;
+  } else {
+    bar.innerHTML = `<div class="dot"></div> ${extra || 'Ansluter…'}`;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   API-anrop med polling
+══════════════════════════════════════════════════════════════════ */
+
+async function fetchStats(year) {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+
+  /* Cache-träff – rendera direkt */
+  if (statsData[year]) {
+    renderAll(year, selectedMonth);
+    return;
+  }
+
+  showLoading('Hämtar statistik för ' + year + '…');
+
+  try {
+    const resp = await fetch(`${PROXY}/api/statistics?year=${year}`,
+                             { signal: AbortSignal.timeout(15000) });
+    const json = await resp.json();
+
+    if (json.status === 'ready') {
+      statsData[year] = json.data;
+      hideLoading();
+      setSourceBar('live', ` · Cache: ${fmtCachedAt(json.data.cached_at)}`);
+      renderAll(year, selectedMonth);
+
+    } else if (json.status === 'building') {
+      const fetched = json.fetched || 0;
+      const total   = json.total   || 0;
+      const pct     = total ? Math.round((fetched / total) * 100) : 0;
+      const msg     = total
+        ? `Bygger statistik för ${year}… ${fetched.toLocaleString('sv')} / ${total.toLocaleString('sv')} obs (${pct}%)`
+        : `Bygger statistik för ${year}… ${fetched.toLocaleString('sv')} obs hämtade`;
+      showLoading(msg);
+      setSourceBar('building', `${fetched.toLocaleString('sv')}${total ? ' / ' + total.toLocaleString('sv') : ''} obs`);
+      pollTimer = setTimeout(() => fetchStats(year), 3000);
+
+    } else if (json.status === 'unauthenticated') {
+      /* Försök logga in automatiskt med sparade uppgifter */
+      const didLogin = await tryAutoLogin();
+      if (didLogin) {
+        pollTimer = setTimeout(() => fetchStats(year), 500);
+      } else {
+        hideLoading();
+        setSourceBar('demo', 'Proxy ej ansluten');
+        showError('Proxyn är inte inloggad. Öppna fliken Dagslista och logga in där först.');
+      }
+
+    } else {
+      /* pending – vänta i kö utan att blockera sidan med overlay */
+      hideLoading();
+      setSourceBar('building', `${year} väntar i kö…`);
+      showError(`Statistik för ${year} har inte byggts än – den byggs upp automatiskt i bakgrunden. Sidan uppdateras när det är klart.`);
+      pollTimer = setTimeout(() => fetchStats(year), 4000);
+    }
+  } catch (err) {
+    hideLoading();
+    setSourceBar('demo', 'Proxy ej nåbar');
+    showError(`Kunde inte nå proxyn (${PROXY}). Kontrollera att proxy.py körs.`);
+  }
+}
+
+function fmtCachedAt(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('sv') + ' ' + d.toLocaleTimeString('sv', {hour:'2-digit',minute:'2-digit'});
+  } catch { return ''; }
+}
+
+function showError(msg) {
+  document.getElementById('topArtList').innerHTML =
+    `<div style="padding:1.5rem;text-align:center;color:#c53030;font-size:.85rem">${msg}</div>`;
+  document.getElementById('topRapList').innerHTML =
+    `<tr><td colspan="4" style="padding:1.5rem;text-align:center;color:#c53030;font-size:.85rem">${msg}</td></tr>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Render-funktioner (använder statsData)
+══════════════════════════════════════════════════════════════════ */
+
+function renderAll(year, month) {
+  const d = statsData[year];
+  if (!d) return;
+
+  const region = document.getElementById('selRegion').value;
+  const feid   = REGION_TO_FEID[region] || null;
+
+  renderMonthChart(d.monthly, month);
+
+  // Välj rätt datakälla: kommun → månad → helår (fallback-kedja)
+  let sp, rep;
+  if (feid && month) {
+    // Kommun + månad: korsfiltrering – ta kommundata och månadsfiltrering av den
+    // (vi har inte kors-aggregerat, använd kommundata som bästa approximation)
+    sp  = (d.muni_species?.[feid]  || d.top_species);
+    rep = (d.muni_reporters?.[feid] || d.top_reporters);
+  } else if (feid) {
+    sp  = d.muni_species?.[feid]   || d.top_species;
+    rep = d.muni_reporters?.[feid] || d.top_reporters;
+  } else if (month) {
+    sp  = d.month_species?.[month]   || d.top_species;
+    rep = d.month_reporters?.[month] || d.top_reporters;
+  } else {
+    sp  = d.top_species;
+    rep = d.top_reporters;
+  }
+
+  renderTopArter(sp);
+  renderTopRap(rep);
+  updateKpi(d, month);
+  updateLabels();
+  updateCacheInfo(year, d);
+}
+
+function updateCacheInfo(year, d) {
+  const el = document.getElementById('cacheInfo');
+  if (!d || !d.cached_at) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  document.getElementById('cacheYear').textContent    = year;
+  document.getElementById('cacheFetched').textContent = fmtCachedAt(d.cached_at);
+}
+
+function renderMonthChart(monthly, activeMonth) {
+  const max   = Math.max(...monthly, 1);
+  const chart = document.getElementById('monthChart');
+  chart.innerHTML = monthly.map((val, i) => {
+    const pct = Math.round((val / max) * 100);
+    const sel = activeMonth === i + 1 ? ' selected' : '';
+    return `
+      <div class="month-col${sel}" onclick="selectMonth(${i + 1})">
+        <div class="month-val">${val >= 1000 ? (val/1000).toFixed(1)+'k' : val}</div>
+        <div class="month-bar" style="height:${Math.max(pct,2)}%"></div>
+        <div class="month-lbl">${MÅNADER[i]}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderTopArter(topSpecies) {
+  if (!topSpecies || !topSpecies.length) {
+    document.getElementById('topArtList').innerHTML =
+      '<div style="padding:1.5rem;text-align:center;color:#a0aec0">Inga data</div>';
+    return;
+  }
+  const maxObs = topSpecies[0].obs;
+  const list   = document.getElementById('topArtList');
+  list.innerHTML = topSpecies.map((a, i) => {
+    const pct     = Math.round((a.obs / maxObs) * 100);
+    const rankCls = i < 3 ? ' top3' : '';
+    const medal   = ['🥇','🥈','🥉'][i] || '';
+    const artUrl  = a.key ? `https://artfakta.artdatabanken.se/taxon/${a.key}` : null;
+    const nameHtml = artUrl
+      ? `<a href="${artUrl}" target="_blank">${esc(a.sv || a.sci)}</a>`
+      : esc(a.sv || a.sci);
+    return `
+      <div class="species-row">
+        <div class="species-rank${rankCls}">${medal || (i+1)}</div>
+        <div class="species-name-wrap">
+          <div class="species-sv">${nameHtml}</div>
+          <div class="species-sci">${esc(a.sci)}</div>
+        </div>
+        <div class="species-count">${a.obs.toLocaleString('sv')} obs
+          <small>${a.ind.toLocaleString('sv')} ind</small></div>
+        <div class="species-bar-wrap">
+          <div class="species-bar-bg">
+            <div class="species-bar-fill" style="width:${pct}%"></div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderTopRap(topReporters) {
+  const tbody = document.getElementById('topRapList');
+  if (!topReporters || !topReporters.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="padding:1.5rem;text-align:center;color:#a0aec0">Inga data</td></tr>';
+    return;
+  }
+  tbody.innerHTML = topReporters.map((r, i) => {
+    const medal   = ['🥇','🥈','🥉'][i] || '';
+    const rankCls = i < 3 ? ' top3' : '';
+    return `
+      <tr>
+        <td class="reporter-rank${rankCls}">${medal || (i+1)}</td>
+        <td class="reporter-name">${esc(r.name)}</td>
+        <td class="reporter-num">${r.arter}<small>arter</small></td>
+        <td class="reporter-num">${r.obs}<small>obs.</small></td>
+      </tr>`;
+  }).join('');
+}
+
+
+function updateKpi(d, month) {
+  const kpi = d.kpi;
+  if (month) {
+    /* Månadsvy: visa obs för den månaden, övriga från kpi skalas proportionellt */
+    const monthObs = d.monthly[month - 1] || 0;
+    const scale    = kpi.obs > 0 ? monthObs / kpi.obs : 0;
+    document.getElementById('kpiArter').textContent = '–';
+    document.getElementById('kpiObs').textContent   = monthObs.toLocaleString('sv');
+    document.getElementById('kpiInd').textContent   = Math.round(kpi.ind * scale).toLocaleString('sv');
+    document.getElementById('kpiRap').textContent   = '–';
+    document.getElementById('kpiArterTrend').textContent = MÅNADER_FULL[month - 1];
+    document.getElementById('kpiObsTrend').textContent   = 'observationer';
+    document.getElementById('kpiIndTrend').textContent   = 'individer (uppskattning)';
+    document.getElementById('kpiRapTrend').textContent   = ' ';
+  } else {
+    document.getElementById('kpiArter').textContent = kpi.arter.toLocaleString('sv');
+    document.getElementById('kpiObs').textContent   = kpi.obs.toLocaleString('sv');
+    document.getElementById('kpiInd').textContent   = kpi.ind.toLocaleString('sv');
+    document.getElementById('kpiRap').textContent   = kpi.reporters.toLocaleString('sv');
+    document.getElementById('kpiArterTrend').textContent = 'registrerade arter';
+    document.getElementById('kpiObsTrend').textContent   = 'observationer';
+    document.getElementById('kpiIndTrend').textContent   = 'individer';
+    document.getElementById('kpiRapTrend').textContent   = 'aktiva rapportörer';
+  }
+}
+
+function updateLabels() {
+  const year   = selectedYear;
+  const monthI = selectedMonth;
+  const region = document.getElementById('selRegion');
+  const regLbl = region.options[region.selectedIndex].text;
+  const monLbl = monthI ? MÅNADER_FULL[monthI - 1] : 'Hela året';
+  const period = `${year} · ${monLbl} · ${regLbl}`;
+  document.getElementById('topArterPeriod').textContent = period;
+  document.getElementById('topRapPeriod').textContent   = period;
+  document.getElementById('monthChartYear').textContent = year;
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Interaktion
+══════════════════════════════════════════════════════════════════ */
+
+function selectMonth(m) {
+  selectedMonth = selectedMonth === m ? 0 : m;
+  document.getElementById('selMonth').value = selectedMonth;
+  updatePeriod();
+}
+
+function updatePeriod() {
+  selectedYear  = +document.getElementById('selYear').value;
+  selectedMonth = +document.getElementById('selMonth').value;
+
+  document.getElementById('monthChartCard').style.display = selectedMonth ? 'none' : '';
+
+  if (statsData[selectedYear]) {
+    renderAll(selectedYear, selectedMonth);
+  } else {
+    fetchStats(selectedYear);
+  }
+}
+
+/* ── Auto-login med sparade uppgifter ── */
+async function tryAutoLogin() {
+  const email = localStorage.getItem('ap_email')    || '';
+  const pass  = localStorage.getItem('ap_password') || '';
+  if (!email || !pass) return false;
+  try {
+    const resp = await fetch(`${PROXY}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: email, password: pass, subscriptionKey: '' }),
+      signal: AbortSignal.timeout(70000),
+    });
+    const data = await resp.json();
+    return resp.ok && data.success;
+  } catch { return false; }
+}
+
+/* ── Init: hitta det senast cachade året och ladda det direkt ── */
+async function initPage() {
+  setSourceBar('demo', 'Ansluter till proxy…');
+
+  /* Hämta versioninfo och cacheöversikt parallellt */
+  const [yearsResp, verResp] = await Promise.allSettled([
+    fetch(`${PROXY}/api/statistics/years`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
+    fetch(`${PROXY}/api/version`,          { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
+  ]);
+
+  /* Välj senaste cachade år */
+  if (yearsResp.status === 'fulfilled') {
+    const years  = yearsResp.value;
+    const cached = Object.keys(years).map(Number).sort((a, b) => b - a);
+    if (cached.length > 0) {
+      const best = cached[0];
+      document.getElementById('selYear').value = best;
+      selectedYear = best;
+    }
+  }
+
+  /* Visa version i footer */
+  if (verResp.status === 'fulfilled') {
+    const v  = verResp.value;
+    const started = v.started_at
+      ? new Date(v.started_at).toLocaleString('sv', {dateStyle:'short', timeStyle:'short'})
+      : '–';
+    document.getElementById('footerVersion').textContent =
+      `v${v.version} · Startad ${started}`;
+  }
+
+  fetchStats(selectedYear);
+}
+initPage();
+</script>
+</body>
+</html>
