@@ -1062,9 +1062,13 @@ def _stats_builder():
             if building:
                 continue
 
-            # Historiska år: hämta bara en gång, aldrig om
+            # Historiska år: hämta bara en gång – men kontrollera att cachen är komplett
             if cached and year < current_year:
-                continue
+                monthly = cached.get('monthly', [])
+                months_with_data = sum(1 for m in (monthly or []) if m > 0)
+                if months_with_data >= 6:
+                    continue  # Ser komplett ut, hoppa över
+                print(f'  Stats: {cache_key} verkar ofullständig ({months_with_data}/12 månader) – hämtar om')
 
             # Innevarande år: uppdatera om cachen är > 6 h gammal
             if cached and year == current_year:

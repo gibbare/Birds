@@ -1,0 +1,6 @@
+stats_cache.json
+stats_cache_*.json
+__pycache__/
+*.pyc
+.env
+.claude/
