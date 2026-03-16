@@ -1047,6 +1047,9 @@ function updatePeriod() {
   document.getElementById('clearMonthBtn').style.display  = hasMonth ? '' : 'none';
   document.getElementById('monthChartHint').style.display = hasMonth ? 'none' : '';
 
+  // Avbryt alltid ev. pågående polltimer innan vi renderar/hämtar nytt år
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+
   const cacheKey = `${selectedCountyId}_${selectedYear}`;
   if (statsData[cacheKey]) {
     renderAll(selectedYear, selectedMonth);
