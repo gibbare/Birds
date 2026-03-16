@@ -844,7 +844,9 @@ function renderAll(year, month) {
   const d = statsData[cacheKey];
   if (!d) return;
 
-  const feid = document.getElementById('selRegion').value || null;
+  // Strippa ledande nollor så att '0380' → '380' matchar SOS API-nycklar i cachen
+  const rawFeid = document.getElementById('selRegion').value || null;
+  const feid = rawFeid ? String(parseInt(rawFeid, 10)) : null;
 
   renderMonthChart(d.monthly, month);
 
