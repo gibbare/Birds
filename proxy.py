@@ -205,8 +205,12 @@ def _auth_headers():
 # ── Statiska filer ──────────────────────────────────────────────────────────
 
 _BASE_DIR   = _os.path.dirname(_os.path.abspath(__file__))
-_CACHE_FILE = _os.path.join(_BASE_DIR, 'stats_cache.json')
+_CACHE_FILE = _os.path.join(_BASE_DIR, 'stats_cache.json')  # gammal samlad fil (bakåtkompatibilitet)
 _FIRST_YEAR = 2022
+
+def _cache_file_for(county_id, year):
+    """Returnerar sökväg till per-år cachefil: stats_cache_24_2026.json"""
+    return _os.path.join(_BASE_DIR, f'stats_cache_{county_id}_{year}.json')
 
 _stats_cache    = {}   # { "24_2025": { aggregerat } }
 _build_progress = {}   # { "24_2025": { status, fetched, total } }
@@ -834,23 +838,25 @@ def _agg_finalize(state):
     }
 
 
-def _fetch_year_stats(year, county_id=None):
+def _fetch_year_stats(year, county_id=None, max_month=12):
     """Hämtar och aggregerar alla observationer för ett år via månadsvis paginering.
     SOS API tillåter max skip+take=50 000 per fråga, så vi delar upp per månad
-    (och per vecka för månader med > 49 000 observationer, t.ex. stora län)."""
+    (och per vecka för månader med > 49 000 observationer, t.ex. stora län).
+    max_month: hämta bara t.o.m. denna månad (används för innevarande år)."""
     if county_id is None:
         county_id = DEFAULT_COUNTY_ID
     if not _session['access_token'] and not _session['subscription_key']:
         return None
 
     cache_key   = f"{county_id}_{year}"
-    all_records = []
+    state       = _new_agg_state()
+    fetched     = 0
     take        = 1000
 
     with _stats_lock:
         _build_progress[cache_key] = {'status': 'building', 'fetched': 0, 'total': 0}
 
-    for month in range(1, 13):
+    for month in range(1, min(max_month, 12) + 1):
         last_day = _calendar.monthrange(year, month)[1]
         m_start  = f'{year}-{month:02d}-01'
         m_end    = f'{year}-{month:02d}-{last_day:02d}'
@@ -913,11 +919,13 @@ def _fetch_year_stats(year, county_id=None):
                 records   = data.get('records') or data.get('observations') or data.get('results') or []
                 if win_total is None:
                     win_total = int(data.get('totalCount') or 0)
-                all_records.extend(records)
+
+                _agg_add_records(state, records)
+                fetched += len(records)
 
                 with _stats_lock:
                     _build_progress[cache_key] = {
-                        'status': 'building', 'fetched': len(all_records), 'total': 0,
+                        'status': 'building', 'fetched': fetched, 'total': 0,
                     }
 
                 skip += take
@@ -925,24 +933,33 @@ def _fetch_year_stats(year, county_id=None):
                     break
                 _time.sleep(0.3)
 
-    if not all_records:
+    if fetched == 0:
         return None
 
-    result = _aggregate_observations(all_records)
+    result = _agg_finalize(state)
     result.update({'year': year, 'county_id': county_id,
-                   'cached_at': _dt.now().isoformat(), 'total_fetched': len(all_records)})
+                   'cached_at': _dt.now().isoformat(), 'total_fetched': fetched})
     return result
 
 
-def _save_cache():
-    """Sparar _stats_cache till fil (kräver inte att _stats_lock hålls)."""
-    try:
-        with _stats_lock:
-            snapshot = dict(_stats_cache)
-        with open(_CACHE_FILE, 'w', encoding='utf-8') as f:
-            _json.dump(snapshot, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print(f'  Stats: kunde inte spara cache – {e}')
+def _save_cache(cache_key=None):
+    """Sparar cachefil(er).  Om cache_key anges sparas bara den posten (snabbt).
+    Annars sparas alla poster (används vid start/migrering).
+    Varje county+år sparas i en egen fil: stats_cache_24_2026.json"""
+    with _stats_lock:
+        snapshot = {cache_key: _stats_cache[cache_key]} if cache_key and cache_key in _stats_cache \
+                   else dict(_stats_cache)
+    for ck, data in snapshot.items():
+        try:
+            parts = ck.split('_', 1)
+            if len(parts) == 2:
+                filepath = _cache_file_for(parts[0], parts[1])
+            else:
+                filepath = _CACHE_FILE  # fallback
+            with open(filepath, 'w', encoding='utf-8') as f:
+                _json.dump({ck: data}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f'  Stats: kunde inte spara {ck} – {e}')
 
 
 def _trigger_on_demand(year, county_id):
@@ -957,7 +974,9 @@ def _trigger_on_demand(year, county_id):
         _build_progress[cache_key] = {'status': 'building', 'fetched': 0, 'total': 0}
 
     def _build():
-        result = _fetch_year_stats(year, county_id)
+        today = _date_type.today()
+        max_month = today.month if year == today.year else 12
+        result = _fetch_year_stats(year, county_id, max_month=max_month)
         with _stats_lock:
             _building.discard(cache_key)
             if result:
@@ -966,7 +985,7 @@ def _trigger_on_demand(year, county_id):
             else:
                 _build_progress[cache_key] = {'status': 'error'}
         if result:
-            _save_cache()
+            _save_cache(cache_key)
             print(f'  Stats: {cache_key} klar – '
                   f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
         else:
@@ -976,26 +995,40 @@ def _trigger_on_demand(year, county_id):
 
 
 def _stats_builder():
-    """Bakgrundstråd: laddar cache, hämtar saknade år för defaultlän, uppdaterar dagligen."""
+    """Bakgrundstråd: laddar cache, hämtar saknade år för defaultlän (nyaste år först),
+    uppdaterar innevarande år var 6:e timme."""
     global _stats_cache
 
-    # Ladda befintlig cache
-    if _os.path.exists(_CACHE_FILE):
+    # ── Ladda per-år-filer (stats_cache_24_2026.json etc.) ──────────────────
+    import glob as _glob
+    loaded = {}
+    per_year_files = sorted(_glob.glob(_os.path.join(_BASE_DIR, 'stats_cache_*_*.json')))
+    for filepath in per_year_files:
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = _json.load(f)
+            loaded.update(data)
+        except Exception as e:
+            print(f'  Stats: kunde inte läsa {filepath} – {e}')
+
+    # Fallback: gammal samlad fil (migrering)
+    if not loaded and _os.path.exists(_CACHE_FILE):
         try:
             with open(_CACHE_FILE, 'r', encoding='utf-8') as f:
-                loaded = _json.load(f)
-            # Migrera gamla year-nycklar ("2025") till county_year-format ("24_2025")
-            migrated = {}
-            for k, v in loaded.items():
+                old = _json.load(f)
+            for k, v in old.items():
                 if k.isdigit():
-                    migrated[f"{DEFAULT_COUNTY_ID}_{k}"] = v
+                    loaded[f"{DEFAULT_COUNTY_ID}_{k}"] = v
                 else:
-                    migrated[k] = v
-            with _stats_lock:
-                _stats_cache = migrated
-            print(f'  Stats: cache laddad ({len(migrated)} poster)')
+                    loaded[k] = v
+            print(f'  Stats: migrerade gammal cache ({len(loaded)} poster)')
         except Exception as e:
-            print(f'  Stats: kunde inte läsa cache – {e}')
+            print(f'  Stats: kunde inte läsa gammal cache – {e}')
+
+    if loaded:
+        with _stats_lock:
+            _stats_cache = loaded
+        print(f'  Stats: cache laddad ({len(loaded)} poster)')
 
     while True:
         # Vänta på autentisering (max 5 min)
@@ -1009,9 +1042,12 @@ def _stats_builder():
             _time.sleep(600)
             continue
 
-        current_year = _date_type.today().year
+        today        = _date_type.today()
+        current_year = today.year
+        current_month = today.month
 
-        for year in range(_FIRST_YEAR, current_year + 1):
+        # ── Iterera nyaste år FÖRST (current_year → _FIRST_YEAR) ────────────
+        for year in range(current_year, _FIRST_YEAR - 1, -1):
             cache_key = f"{DEFAULT_COUNTY_ID}_{year}"
 
             with _stats_lock:
@@ -1021,29 +1057,30 @@ def _stats_builder():
             if building:
                 continue
 
-            # Historiska år: hämta bara en gång
+            # Historiska år: hämta bara en gång, aldrig om
             if cached and year < current_year:
                 continue
 
-            # Innevarande år: hoppa över om cache är < 24 h gammal
+            # Innevarande år: uppdatera om cachen är > 6 h gammal
             if cached and year == current_year:
                 try:
-                    age = (_dt.now() - _dt.fromisoformat(cached['cached_at'])).total_seconds()
-                    if age < 86400:
+                    age_h = (_dt.now() - _dt.fromisoformat(cached['cached_at'])).total_seconds() / 3600
+                    if age_h < 6:
                         continue
                 except Exception:
                     pass
 
-            print(f'  Stats: hämtar {cache_key}…')
+            max_month = current_month if year == current_year else 12
+            print(f'  Stats: hämtar {cache_key} (månader 1–{max_month})…')
             with _stats_lock:
                 _build_progress[cache_key] = {'status': 'building', 'fetched': 0, 'total': 0}
 
-            result = _fetch_year_stats(year, DEFAULT_COUNTY_ID)
+            result = _fetch_year_stats(year, DEFAULT_COUNTY_ID, max_month=max_month)
             if result:
                 with _stats_lock:
                     _stats_cache[cache_key] = result
                     _build_progress[cache_key] = {'status': 'ready'}
-                _save_cache()
+                _save_cache(cache_key)   # spara bara detta år direkt
                 print(f'  Stats: {cache_key} klar – '
                       f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
             else:
@@ -1051,14 +1088,8 @@ def _stats_builder():
                     _build_progress[cache_key] = {'status': 'error'}
                 print(f'  Stats: misslyckades för {cache_key}')
 
-        # Sov till nästa dag kl 03:00
-        now   = _dt.now()
-        next3 = now.replace(hour=3, minute=0, second=0, microsecond=0)
-        if now >= next3:
-            next3 += _timedelta(days=1)
-        sleep_s = (next3 - now).total_seconds()
-        print(f'  Stats: nästa uppdatering om {sleep_s / 3600:.1f}h')
-        _time.sleep(sleep_s)
+        # Sov 1 timme (vaknar och kontrollerar om innevarande år behöver uppdateras)
+        _time.sleep(3600)
 
 
 @app.route('/api/statistics')
