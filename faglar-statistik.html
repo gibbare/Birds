@@ -487,12 +487,18 @@
     </div>
   </div>
 
-  <!-- Månadsdiagram (döljs vid månadsfilter) -->
+  <!-- Månadsdiagram (alltid synligt) -->
   <div class="card" id="monthChartCard" style="margin-bottom:1rem">
     <div class="section-title">📅 Observationer per månad <span id="monthChartYear">2025</span></div>
     <div class="month-chart" id="monthChart"></div>
-    <div style="font-size:.7rem;color:#a0aec0;text-align:center;margin-top:.2rem">
+    <div style="font-size:.7rem;color:#a0aec0;text-align:center;margin-top:.2rem" id="monthChartHint">
       Klicka på en månad för att filtrera
+    </div>
+    <div id="clearMonthBtn" style="display:none;text-align:center;margin-top:.5rem">
+      <button onclick="clearMonthFilter()"
+        style="background:#e53e3e;color:#fff;border:none;border-radius:20px;padding:.3rem 1rem;cursor:pointer;font-size:.85rem">
+        ✕ Visa hela året
+      </button>
     </div>
   </div>
 
@@ -1015,7 +1021,9 @@ function updatePeriod() {
   selectedYear  = +document.getElementById('selYear').value;
   selectedMonth = +document.getElementById('selMonth').value;
 
-  document.getElementById('monthChartCard').style.display = selectedMonth ? 'none' : '';
+  const hasMonth = !!selectedMonth;
+  document.getElementById('clearMonthBtn').style.display  = hasMonth ? '' : 'none';
+  document.getElementById('monthChartHint').style.display = hasMonth ? 'none' : '';
 
   const cacheKey = `${selectedCountyId}_${selectedYear}`;
   if (statsData[cacheKey]) {
