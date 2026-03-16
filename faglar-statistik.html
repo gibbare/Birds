@@ -420,13 +420,6 @@
 
 <!-- Nav-bar: Län + Period + Kommun -->
 <div class="nav-bar">
-  <span class="nav-label">Län</span>
-  <select class="nav-select" id="selCounty" onchange="updateCounty()">
-    <!-- fylls dynamiskt av JS -->
-  </select>
-
-  <div class="nav-sep"></div>
-
   <span class="nav-label">År</span>
   <select class="nav-select" id="selYear" onchange="updatePeriod()">
     <option value="2026">2026</option>
@@ -436,6 +429,7 @@
     <option value="2022">2022</option>
   </select>
 
+  <span class="nav-label">Månad</span>
   <select class="nav-select" id="selMonth" onchange="updatePeriod()">
     <option value="0" selected>Hela året</option>
     <option value="1">Januari</option>
@@ -454,6 +448,12 @@
 
   <div class="nav-sep"></div>
 
+  <span class="nav-label">Län</span>
+  <select class="nav-select" id="selCounty" onchange="updateCounty()">
+    <!-- fylls dynamiskt av JS -->
+  </select>
+
+  <span class="nav-label">Område</span>
   <select class="nav-select" id="selRegion" onchange="updatePeriod()">
     <!-- fylls dynamiskt av updateCounty() -->
   </select>
