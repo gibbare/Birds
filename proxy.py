@@ -776,7 +776,7 @@ def _agg_finalize(state):
         [{'name': k, 'arter': len(v['species']), 'obs': v['obs']}
          for k, v in reporters.items()],
         key=lambda x: x['arter'], reverse=True
-    )[:20]
+    )[:200]
 
     month_species   = {}
     month_reporters = {}
@@ -793,7 +793,7 @@ def _agg_finalize(state):
             [{'name': nm, 'obs': v['obs'], 'arter': len(v['species'])}
              for nm, v in mr.items()],
             key=lambda x: x['arter'], reverse=True
-        )[:20]
+        )[:200]
 
     muni_species   = {}
     muni_reporters = {}
@@ -809,7 +809,7 @@ def _agg_finalize(state):
             [{'name': nm, 'obs': v['obs'], 'arter': len(v['species'])}
              for nm, v in mr.items()],
             key=lambda x: x['arter'], reverse=True
-        )[:20]
+        )[:200]
 
     muni_month_species   = {}
     muni_month_reporters = {}

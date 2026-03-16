@@ -947,22 +947,53 @@ function renderTopArter(topSpecies) {
   }).join('');
 }
 
+let _rapporterAll  = [];   // hela listan
+let _rapporterShown = 0;   // hur många som visas just nu
+const RAP_PAGE = 20;
+
 function renderTopRap(topReporters) {
+  _rapporterAll   = topReporters || [];
+  _rapporterShown = 0;
   const tbody = document.getElementById('topRapList');
-  if (!topReporters || !topReporters.length) {
+  if (!_rapporterAll.length) {
     tbody.innerHTML = '<tr><td colspan="4" style="padding:1.5rem;text-align:center;color:#a0aec0">Inga data</td></tr>';
     return;
   }
-  tbody.innerHTML = topReporters.map((r, i) => {
+  tbody.innerHTML = '';
+  _appendRapRows(RAP_PAGE);
+}
+
+function _appendRapRows(count) {
+  const tbody  = document.getElementById('topRapList');
+  const slice  = _rapporterAll.slice(_rapporterShown, _rapporterShown + count);
+  slice.forEach((r, j) => {
+    const i      = _rapporterShown + j;
     const rankCls = i < 3 ? ' top3' : '';
-    return `
-      <tr>
-        <td class="reporter-rank${rankCls}">${i+1}</td>
-        <td class="reporter-name">${esc(r.name)}</td>
-        <td class="reporter-num">${r.arter}<small>arter</small></td>
-        <td class="reporter-num">${r.obs}<small>obs.</small></td>
-      </tr>`;
-  }).join('');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="reporter-rank${rankCls}">${i+1}</td>
+      <td class="reporter-name">${esc(r.name)}</td>
+      <td class="reporter-num">${r.arter}<small>arter</small></td>
+      <td class="reporter-num">${r.obs}<small>obs.</small></td>`;
+    tbody.appendChild(tr);
+  });
+  _rapporterShown += slice.length;
+
+  // Ta bort gammal "visa mer"-rad om den finns
+  const old = document.getElementById('rapShowMoreRow');
+  if (old) old.remove();
+
+  // Lägg till ny "visa mer" om det finns fler
+  if (_rapporterShown < _rapporterAll.length) {
+    const tr = document.createElement('tr');
+    tr.id = 'rapShowMoreRow';
+    tr.innerHTML = `<td colspan="4" style="text-align:center;padding:.6rem">
+      <button onclick="_appendRapRows(${RAP_PAGE})"
+        style="background:none;border:none;color:#2b6cb0;cursor:pointer;font-size:.82rem;text-decoration:underline">
+        Visa mer (${_rapporterAll.length - _rapporterShown} kvar)
+      </button></td>`;
+    tbody.appendChild(tr);
+  }
 }
 
 
