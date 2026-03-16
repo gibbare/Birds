@@ -872,24 +872,32 @@ def _fetch_year_stats(year, county_id=None, max_month=12):
         m_start  = f'{year}-{month:02d}-01'
         m_end    = f'{year}-{month:02d}-{last_day:02d}'
 
-        # Probe: kontrollera hur många obs som finns denna månad
+        # Probe: kontrollera hur många obs som finns denna månad (med retry)
         month_total = 0
-        try:
-            probe_body = {
-                'taxon':       {'ids': [AVES_TAXON_ID], 'includeUnderlyingTaxa': True},
-                'date':        {'startDate': m_start, 'endDate': m_end,
-                                'dateFilterType': 'OverlappingStartDateAndEndDate'},
-                'geographics': {'areas': [{'areaType': 'County', 'featureId': county_id}]},
-            }
-            probe = requests.post(
-                f'{SOS_API_BASE}/Observations/Search',
-                headers=_auth_headers(), json=probe_body,
-                params={'skip': 0, 'take': 1}, timeout=20,
-            )
-            if probe.ok:
-                month_total = int(probe.json().get('totalCount') or 0)
-        except Exception:
-            pass
+        for attempt in range(3):
+            try:
+                probe_body = {
+                    'taxon':       {'ids': [AVES_TAXON_ID], 'includeUnderlyingTaxa': True},
+                    'date':        {'startDate': m_start, 'endDate': m_end,
+                                    'dateFilterType': 'OverlappingStartDateAndEndDate'},
+                    'geographics': {'areas': [{'areaType': 'County', 'featureId': county_id}]},
+                }
+                probe = requests.post(
+                    f'{SOS_API_BASE}/Observations/Search',
+                    headers=_auth_headers(), json=probe_body,
+                    params={'skip': 0, 'take': 1}, timeout=30,
+                )
+                if probe.ok:
+                    month_total = int(probe.json().get('totalCount') or 0)
+                    break
+                else:
+                    print(f'  Stats ({cache_key}): probe {month:02d} HTTP {probe.status_code}, försök {attempt+1}/3')
+                    _time.sleep(5 * (attempt + 1))
+            except Exception as e:
+                print(f'  Stats ({cache_key}): probe {month:02d} fel – {e}, försök {attempt+1}/3')
+                _time.sleep(5 * (attempt + 1))
+
+        _time.sleep(1)  # paus mellan månader för att undvika rate-limiting
 
         # Dela upp i veckofönster om månaden > 49 000 obs (undviker 50K-gränsen)
         if month_total > 49000:
@@ -913,26 +921,38 @@ def _fetch_year_stats(year, county_id=None, max_month=12):
             skip      = 0
             win_total = None
             while True:
+                # Hämta en sida med retry
+                resp = None
+                for attempt in range(3):
+                    try:
+                        resp = requests.post(
+                            f'{SOS_API_BASE}/Observations/Search',
+                            headers=_auth_headers(), json=body,
+                            params={'skip': skip, 'take': take}, timeout=60,
+                        )
+                        if resp.ok:
+                            break
+                        print(f'  Stats ({cache_key}): HTTP {resp.status_code} skip={skip}, försök {attempt+1}/3')
+                        _time.sleep(10 * (attempt + 1))
+                    except requests.RequestException as e:
+                        print(f'  Stats ({cache_key}): nätverksfel – {e}, försök {attempt+1}/3')
+                        _time.sleep(10 * (attempt + 1))
+                        resp = None
+
+                if resp is None or not resp.ok:
+                    print(f'  Stats ({cache_key}): ger upp för {w_start}–{w_end} skip={skip}')
+                    break
+
                 try:
-                    resp = requests.post(
-                        f'{SOS_API_BASE}/Observations/Search',
-                        headers=_auth_headers(), json=body,
-                        params={'skip': skip, 'take': take}, timeout=40,
-                    )
-                except requests.RequestException as e:
-                    print(f'  Stats ({cache_key}): nätverksfel – {e}')
+                    data    = resp.json()
+                    records = data.get('records') or data.get('observations') or data.get('results') or []
+                    if win_total is None:
+                        win_total = int(data.get('totalCount') or 0)
+                    _agg_add_records(state, records)
+                    fetched += len(records)
+                except Exception as e:
+                    print(f'  Stats ({cache_key}): fel vid aggregering – {e}')
                     break
-                if not resp.ok:
-                    print(f'  Stats ({cache_key}): HTTP {resp.status_code}')
-                    break
-
-                data      = resp.json()
-                records   = data.get('records') or data.get('observations') or data.get('results') or []
-                if win_total is None:
-                    win_total = int(data.get('totalCount') or 0)
-
-                _agg_add_records(state, records)
-                fetched += len(records)
 
                 with _stats_lock:
                     _build_progress[cache_key] = {
@@ -942,7 +962,7 @@ def _fetch_year_stats(year, county_id=None, max_month=12):
                 skip += take
                 if not records or skip >= (win_total or 1):
                     break
-                _time.sleep(0.3)
+                _time.sleep(0.5)  # något längre paus mellan sidor
 
     if fetched == 0:
         return None
