@@ -351,6 +351,11 @@ def get_observations():
     # Säkerställ att areaType är ett av de tillåtna värdena
     if area_type not in ("County", "Municipality", "Province", "Parish"):
         area_type = "County"
+    # SOS API vill ha kommuner utan ledande nollor (0380 → 380, 2480 → 2480)
+    try:
+        feature_id = str(int(feature_id))
+    except ValueError:
+        pass
 
     print(f"  Region: areaType={area_type}, featureId={feature_id}")
 
