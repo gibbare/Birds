@@ -762,6 +762,8 @@ async function fetchStats(year, countyId) {
       statsData[cacheKey] = json.data;
       hideLoading();
       setSourceBar('live', ` · Cache: ${fmtCachedAt(json.data.cached_at)}`);
+      // Bygg kommunlistan från SOS-data (rättar featureIds)
+      populateRegionDropdown(countyId, json.data.muni_names);
       renderAll(year, selectedMonth);
 
     } else if (json.status === 'building') {
@@ -1018,14 +1020,25 @@ function selectMonth(m) {
   updatePeriod();
 }
 
-function populateRegionDropdown(countyId) {
+function populateRegionDropdown(countyId, muniNames) {
   const county = COUNTIES.find(c => c.id === countyId);
   const sel    = document.getElementById('selRegion');
   if (!county) { sel.innerHTML = ''; return; }
   const countyName = county.name.replace(' län', '');
-  const sorted = [...county.kommuner].sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+
+  // Använd kommunnamn från SOS API-cachen om de finns (rätta featureIds)
+  // Annars fall tillbaka på hårdkodad COUNTIES-lista
+  let kommuner;
+  if (muniNames && Object.keys(muniNames).length > 0) {
+    kommuner = Object.entries(muniNames)
+      .map(([id, name]) => ({ id, name }));
+  } else {
+    kommuner = county.kommuner.map(k => ({ id: k.id, name: k.name }));
+  }
+  kommuner.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+
   sel.innerHTML = `<option value="">Hela ${countyName}</option>` +
-    sorted.map(k => `<option value="${k.id}">${k.name}</option>`).join('');
+    kommuner.map(k => `<option value="${k.id}">${k.name}</option>`).join('');
 }
 
 function updateCounty() {

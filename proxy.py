@@ -666,6 +666,7 @@ def _new_agg_state():
         'muni_month_sp':  _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0}))),
         'muni_month_rep': _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))),
         'taxon_ids':      set(),
+        'muni_names':     {},   # { featureId: kommunnamn } direkt från SOS API
     }
 
 
@@ -686,7 +687,11 @@ def _agg_add_records(state, records):
         occ      = rec.get('occurrence') or rec.get('Occurrence') or {}
         event    = rec.get('event')      or rec.get('Event')      or {}
         location = rec.get('location')   or rec.get('Location')   or {}
-        muni_fid = (location.get('municipality') or {}).get('featureId') or ''
+        muni_obj = location.get('municipality') or {}
+        muni_fid  = muni_obj.get('featureId') or ''
+        muni_name = muni_obj.get('name') or ''
+        if muni_fid and muni_name and muni_fid not in state['muni_names']:
+            state['muni_names'][muni_fid] = muni_name
 
         key = taxon.get('id') or taxon.get('taxonId') or taxon.get('dyntaxaId')
         if not key:
@@ -836,6 +841,7 @@ def _agg_finalize(state):
         'top_reporters':        top_rap,
         'month_species':        month_species,
         'month_reporters':      month_reporters,
+        'muni_names':           state['muni_names'],
         'muni_species':         muni_species,
         'muni_reporters':       muni_reporters,
         'muni_month_species':   muni_month_species,
