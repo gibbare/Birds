@@ -25,7 +25,8 @@ from urllib.parse import urljoin
 import threading as _threading
 import json as _json
 import time as _time
-from datetime import datetime as _dt, date as _date_type
+from datetime import datetime as _dt, date as _date_type, timedelta as _timedelta
+import calendar as _calendar
 from collections import defaultdict as _defaultdict
 
 app = Flask(__name__)
@@ -43,6 +44,7 @@ SCOPE         = "openid email profile SOS.Observations.Protected"
 
 AVES_TAXON_ID           = 4000104
 VASTERBOTTEN_FEATURE_ID = "24"
+DEFAULT_COUNTY_ID       = VASTERBOTTEN_FEATURE_ID
 
 # Obligatoriska headers för SOS API
 SOS_EXTRA_HEADERS = {
@@ -206,8 +208,9 @@ _BASE_DIR   = _os.path.dirname(_os.path.abspath(__file__))
 _CACHE_FILE = _os.path.join(_BASE_DIR, 'stats_cache.json')
 _FIRST_YEAR = 2022
 
-_stats_cache    = {}   # { "2025": { aggregerat } }
-_build_progress = {}   # { "2025": { status, fetched, total } }
+_stats_cache    = {}   # { "24_2025": { aggregerat } }
+_build_progress = {}   # { "24_2025": { status, fetched, total } }
+_building       = set()  # cache-nycklar under pågående bygge
 _stats_lock     = _threading.Lock()
 
 @app.route("/")
@@ -831,105 +834,149 @@ def _agg_finalize(state):
     }
 
 
-def _aggregate_observations(records, rl_override=None):
-    """Bakåtkompatibelt omslag – aggregerar en lista råobservationer."""
-    state = _new_agg_state()
-    _agg_add_records(state, records)
-    if rl_override:
-        for key, cat in rl_override.items():
-            if key in state['species']:
-                state['species'][key]['rl'] = cat
-    return _agg_finalize(state)
-
-
-def _fetch_year_stats(year):
-    """Hämtar och aggregerar ALLA observationer för ett år.
-    SOS API tillåter max skip+take=50 000 per fråga, så vi delar upp per månad.
-    Varje sida aggregeras direkt – aldrig mer än ~1 000 poster i minnet åt gången."""
+def _fetch_year_stats(year, county_id=None):
+    """Hämtar och aggregerar alla observationer för ett år via månadsvis paginering.
+    SOS API tillåter max skip+take=50 000 per fråga, så vi delar upp per månad
+    (och per vecka för månader med > 49 000 observationer, t.ex. stora län)."""
+    if county_id is None:
+        county_id = DEFAULT_COUNTY_ID
     if not _session['access_token'] and not _session['subscription_key']:
         return None
 
-    year_key = str(year)
-    state    = _new_agg_state()
-    take     = 1000
-    fetched  = 0
+    cache_key   = f"{county_id}_{year}"
+    all_records = []
+    take        = 1000
 
-    # Hämta totalantal för progress-visning
-    total_count = 0
-    try:
-        probe = requests.post(
-            f'{SOS_API_BASE}/Observations/Search',
-            headers=_auth_headers(),
-            json={'taxon': {'ids': [AVES_TAXON_ID], 'includeUnderlyingTaxa': True},
-                  'date':  {'startDate': f'{year}-01-01', 'endDate': f'{year}-12-31',
-                             'dateFilterType': 'OverlappingStartDateAndEndDate'},
-                  'geographics': {'areas': [{'areaType': 'County',
-                                             'featureId': VASTERBOTTEN_FEATURE_ID}]}},
-            params={'skip': 0, 'take': 1}, timeout=20,
-        )
-        if probe.ok:
-            total_count = int(probe.json().get('totalCount') or 0)
-    except Exception:
-        pass
-    print(f'  Stats ({year}): totalt {total_count} observationer – hämtar per månad…')
+    with _stats_lock:
+        _build_progress[cache_key] = {'status': 'building', 'fetched': 0, 'total': 0}
 
-    # Hämta månad för månad (undviker SOS-gränsen skip+take ≤ 50 000)
     for month in range(1, 13):
-        import calendar as _cal
-        last_day = _cal.monthrange(year, month)[1]
-        start = f'{year}-{month:02d}-01'
-        end   = f'{year}-{month:02d}-{last_day:02d}'
-        body  = {
-            'taxon':       {'ids': [AVES_TAXON_ID], 'includeUnderlyingTaxa': True},
-            'date':        {'startDate': start, 'endDate': end,
-                            'dateFilterType': 'OverlappingStartDateAndEndDate'},
-            'geographics': {'areas': [{'areaType': 'County',
-                                       'featureId': VASTERBOTTEN_FEATURE_ID}]},
-        }
-        skip = 0
-        while True:
-            try:
-                resp = requests.post(
-                    f'{SOS_API_BASE}/Observations/Search',
-                    headers=_auth_headers(), json=body,
-                    params={'skip': skip, 'take': take}, timeout=40,
-                )
-            except requests.RequestException as e:
-                print(f'  Stats ({year}-{month:02d}): nätverksfel – {e}')
-                break
-            if not resp.ok:
-                print(f'  Stats ({year}-{month:02d}): HTTP {resp.status_code}')
-                break
+        last_day = _calendar.monthrange(year, month)[1]
+        m_start  = f'{year}-{month:02d}-01'
+        m_end    = f'{year}-{month:02d}-{last_day:02d}'
 
-            data    = resp.json()
-            records = data.get('records') or data.get('observations') or data.get('results') or []
-            month_total = int(data.get('totalCount') or data.get('total') or 0)
+        # Probe: kontrollera hur många obs som finns denna månad
+        month_total = 0
+        try:
+            probe_body = {
+                'taxon':       {'ids': [AVES_TAXON_ID], 'includeUnderlyingTaxa': True},
+                'date':        {'startDate': m_start, 'endDate': m_end,
+                                'dateFilterType': 'OverlappingStartDateAndEndDate'},
+                'geographics': {'areas': [{'areaType': 'County', 'featureId': county_id}]},
+            }
+            probe = requests.post(
+                f'{SOS_API_BASE}/Observations/Search',
+                headers=_auth_headers(), json=probe_body,
+                params={'skip': 0, 'take': 1}, timeout=20,
+            )
+            if probe.ok:
+                month_total = int(probe.json().get('totalCount') or 0)
+        except Exception:
+            pass
 
-            _agg_add_records(state, records)
-            fetched += len(records)
+        # Dela upp i veckofönster om månaden > 49 000 obs (undviker 50K-gränsen)
+        if month_total > 49000:
+            windows = []
+            d = _date_type(year, month, 1)
+            end_d = _date_type(year, month, last_day)
+            while d <= end_d:
+                w_end = min(d + _timedelta(days=6), end_d)
+                windows.append((d.isoformat(), w_end.isoformat()))
+                d = w_end + _timedelta(days=1)
+        else:
+            windows = [(m_start, m_end)]
 
-            with _stats_lock:
-                _build_progress[year_key] = {
-                    'status': 'building', 'fetched': fetched, 'total': total_count
-                }
+        for w_start, w_end in windows:
+            body = {
+                'taxon':       {'ids': [AVES_TAXON_ID], 'includeUnderlyingTaxa': True},
+                'date':        {'startDate': w_start, 'endDate': w_end,
+                                'dateFilterType': 'OverlappingStartDateAndEndDate'},
+                'geographics': {'areas': [{'areaType': 'County', 'featureId': county_id}]},
+            }
+            skip      = 0
+            win_total = None
+            while True:
+                try:
+                    resp = requests.post(
+                        f'{SOS_API_BASE}/Observations/Search',
+                        headers=_auth_headers(), json=body,
+                        params={'skip': skip, 'take': take}, timeout=40,
+                    )
+                except requests.RequestException as e:
+                    print(f'  Stats ({cache_key}): nätverksfel – {e}')
+                    break
+                if not resp.ok:
+                    print(f'  Stats ({cache_key}): HTTP {resp.status_code}')
+                    break
 
-            skip += take
-            if not records or skip >= month_total:
-                break
-            _time.sleep(0.3)
+                data      = resp.json()
+                records   = data.get('records') or data.get('observations') or data.get('results') or []
+                if win_total is None:
+                    win_total = int(data.get('totalCount') or 0)
+                all_records.extend(records)
 
-    if fetched == 0:
+                with _stats_lock:
+                    _build_progress[cache_key] = {
+                        'status': 'building', 'fetched': len(all_records), 'total': 0,
+                    }
+
+                skip += take
+                if not records or skip >= (win_total or 1):
+                    break
+                _time.sleep(0.3)
+
+    if not all_records:
         return None
 
-    result = _agg_finalize(state)
-    result.update({'year': year, 'cached_at': _dt.now().isoformat(),
-                   'total_fetched': fetched})
-    print(f'  Stats ({year}): klar – {fetched} av {total_count} observationer hämtade')
+    result = _aggregate_observations(all_records)
+    result.update({'year': year, 'county_id': county_id,
+                   'cached_at': _dt.now().isoformat(), 'total_fetched': len(all_records)})
     return result
 
 
+def _save_cache():
+    """Sparar _stats_cache till fil (kräver inte att _stats_lock hålls)."""
+    try:
+        with _stats_lock:
+            snapshot = dict(_stats_cache)
+        with open(_CACHE_FILE, 'w', encoding='utf-8') as f:
+            _json.dump(snapshot, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f'  Stats: kunde inte spara cache – {e}')
+
+
+def _trigger_on_demand(year, county_id):
+    """Startar bakgrundsbygge för en specifik county+year om det inte redan byggs."""
+    cache_key = f"{county_id}_{year}"
+    with _stats_lock:
+        if cache_key in _stats_cache:
+            return
+        if cache_key in _building:
+            return
+        _building.add(cache_key)
+        _build_progress[cache_key] = {'status': 'building', 'fetched': 0, 'total': 0}
+
+    def _build():
+        result = _fetch_year_stats(year, county_id)
+        with _stats_lock:
+            _building.discard(cache_key)
+            if result:
+                _stats_cache[cache_key] = result
+                _build_progress[cache_key] = {'status': 'ready'}
+            else:
+                _build_progress[cache_key] = {'status': 'error'}
+        if result:
+            _save_cache()
+            print(f'  Stats: {cache_key} klar – '
+                  f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
+        else:
+            print(f'  Stats: misslyckades för {cache_key}')
+
+    _threading.Thread(target=_build, daemon=True, name=f'stats-{cache_key}').start()
+
+
 def _stats_builder():
-    """Bakgrundstråd: laddar cache från fil, hämtar saknade år, uppdaterar dagligen."""
+    """Bakgrundstråd: laddar cache, hämtar saknade år för defaultlän, uppdaterar dagligen."""
     global _stats_cache
 
     # Ladda befintlig cache
@@ -937,9 +984,16 @@ def _stats_builder():
         try:
             with open(_CACHE_FILE, 'r', encoding='utf-8') as f:
                 loaded = _json.load(f)
+            # Migrera gamla year-nycklar ("2025") till county_year-format ("24_2025")
+            migrated = {}
+            for k, v in loaded.items():
+                if k.isdigit():
+                    migrated[f"{DEFAULT_COUNTY_ID}_{k}"] = v
+                else:
+                    migrated[k] = v
             with _stats_lock:
-                _stats_cache = loaded
-            print(f'  Stats: cache laddad ({len(loaded)} år)')
+                _stats_cache = migrated
+            print(f'  Stats: cache laddad ({len(migrated)} poster)')
         except Exception as e:
             print(f'  Stats: kunde inte läsa cache – {e}')
 
@@ -958,9 +1012,14 @@ def _stats_builder():
         current_year = _date_type.today().year
 
         for year in range(_FIRST_YEAR, current_year + 1):
-            year_key = str(year)
+            cache_key = f"{DEFAULT_COUNTY_ID}_{year}"
+
             with _stats_lock:
-                cached = _stats_cache.get(year_key)
+                cached   = _stats_cache.get(cache_key)
+                building = cache_key in _building
+
+            if building:
+                continue
 
             # Historiska år: hämta bara en gång
             if cached and year < current_year:
@@ -975,33 +1034,28 @@ def _stats_builder():
                 except Exception:
                     pass
 
-            print(f'  Stats: hämtar {year}…')
+            print(f'  Stats: hämtar {cache_key}…')
             with _stats_lock:
-                _build_progress[year_key] = {'status': 'building', 'fetched': 0, 'total': 0}
+                _build_progress[cache_key] = {'status': 'building', 'fetched': 0, 'total': 0}
 
-            result = _fetch_year_stats(year)
+            result = _fetch_year_stats(year, DEFAULT_COUNTY_ID)
             if result:
                 with _stats_lock:
-                    _stats_cache[year_key] = result
-                    _build_progress[year_key] = {'status': 'ready'}
-                try:
-                    with open(_CACHE_FILE, 'w', encoding='utf-8') as f:
-                        _json.dump(_stats_cache, f, ensure_ascii=False, indent=2)
-                    print(f'  Stats: {year} klar – '
-                          f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
-                except Exception as e:
-                    print(f'  Stats: kunde inte spara cache – {e}')
+                    _stats_cache[cache_key] = result
+                    _build_progress[cache_key] = {'status': 'ready'}
+                _save_cache()
+                print(f'  Stats: {cache_key} klar – '
+                      f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
             else:
                 with _stats_lock:
-                    _build_progress[year_key] = {'status': 'error'}
-                print(f'  Stats: misslyckades för {year}')
+                    _build_progress[cache_key] = {'status': 'error'}
+                print(f'  Stats: misslyckades för {cache_key}')
 
         # Sov till nästa dag kl 03:00
-        from datetime import timedelta as _td
         now   = _dt.now()
         next3 = now.replace(hour=3, minute=0, second=0, microsecond=0)
         if now >= next3:
-            next3 += _td(days=1)
+            next3 += _timedelta(days=1)
         sleep_s = (next3 - now).total_seconds()
         print(f'  Stats: nästa uppdatering om {sleep_s / 3600:.1f}h')
         _time.sleep(sleep_s)
@@ -1009,29 +1063,38 @@ def _stats_builder():
 
 @app.route('/api/statistics')
 def get_statistics():
-    year = request.args.get('year', str(_date_type.today().year))
+    year      = request.args.get('year', str(_date_type.today().year))
+    county    = request.args.get('county', DEFAULT_COUNTY_ID)
+    cache_key = f"{county}_{year}"
+
     with _stats_lock:
-        data     = _stats_cache.get(year)
-        progress = _build_progress.get(year, {})
+        data     = _stats_cache.get(cache_key)
+        progress = _build_progress.get(cache_key, {})
 
     if data:
         return jsonify({'status': 'ready', 'data': data})
-    # Cachad data returneras alltid, men bygge kräver autentisering
     if not _session['access_token'] and not _session['subscription_key']:
         return jsonify({'status': 'unauthenticated'}), 401
     if progress.get('status') == 'building':
         return jsonify({'status': 'building',
                         'fetched': progress.get('fetched', 0),
                         'total':   progress.get('total', 0)}), 202
-    return jsonify({'status': 'pending'}), 202
+    # Starta on-demand-bygge för ej cachade county/år-kombinationer
+    _trigger_on_demand(int(year), county)
+    return jsonify({'status': 'building', 'fetched': 0, 'total': 0}), 202
 
 
 @app.route('/api/statistics/years')
 def statistics_years():
-    """Returnerar vilka år som finns i cachen."""
+    """Returnerar vilka år som finns i cachen, filtrerat per county."""
+    county = request.args.get('county', DEFAULT_COUNTY_ID)
+    prefix = f"{county}_"
     with _stats_lock:
-        years = {y: {'cached_at': d.get('cached_at'), 'kpi': d.get('kpi')}
-                 for y, d in _stats_cache.items()}
+        years = {
+            k[len(prefix):]: {'cached_at': d.get('cached_at'), 'kpi': d.get('kpi')}
+            for k, d in _stats_cache.items()
+            if k.startswith(prefix)
+        }
     return jsonify(years)
 
 
