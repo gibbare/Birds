@@ -27,14 +27,26 @@ import json as _json
 import time as _time
 from datetime import datetime as _dt, date as _date_type, timedelta as _timedelta
 import calendar as _calendar
-from collections import defaultdict as _defaultdict
+from collections import defaultdict as _defaultdict, deque as _deque
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "2.5"          # Uppdatera vid varje deploy
+APP_VERSION   = "2.6"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
+
+# ── Fellogg (cirkulär buffer, max 500 poster) ────────────────────────────────
+_error_log: _deque = _deque(maxlen=500)
+
+def _log_error(msg: str) -> None:
+    """Lägg till ett felmeddelande i felloggen."""
+    now = _dt.now()
+    _error_log.append({
+        'date': now.strftime('%Y-%m-%d'),
+        'time': now.strftime('%H:%M:%S'),
+        'msg':  str(msg)[:400],
+    })
 
 SLU_AUTH_URL  = "https://useradmin-auth.slu.se/connect/authorize"
 SOS_API_BASE  = "https://api.artdatabanken.se/species-observation-system/v1"
@@ -892,9 +904,11 @@ def _fetch_year_stats(year, county_id=None, max_month=12):
                     break
                 else:
                     print(f'  Stats ({cache_key}): probe {month:02d} HTTP {probe.status_code}, försök {attempt+1}/3')
+                    _log_error(f'Stats {cache_key}: probe {month:02d} HTTP {probe.status_code}')
                     _time.sleep(5 * (attempt + 1))
             except Exception as e:
                 print(f'  Stats ({cache_key}): probe {month:02d} fel – {e}, försök {attempt+1}/3')
+                _log_error(f'Stats {cache_key}: probe {month:02d} – {e}')
                 _time.sleep(5 * (attempt + 1))
 
         _time.sleep(1)  # paus mellan månader för att undvika rate-limiting
@@ -933,14 +947,17 @@ def _fetch_year_stats(year, county_id=None, max_month=12):
                         if resp.ok:
                             break
                         print(f'  Stats ({cache_key}): HTTP {resp.status_code} skip={skip}, försök {attempt+1}/3')
+                        _log_error(f'Stats {cache_key}: HTTP {resp.status_code} skip={skip}')
                         _time.sleep(10 * (attempt + 1))
                     except requests.RequestException as e:
                         print(f'  Stats ({cache_key}): nätverksfel – {e}, försök {attempt+1}/3')
+                        _log_error(f'Stats {cache_key}: nätverksfel – {e}')
                         _time.sleep(10 * (attempt + 1))
                         resp = None
 
                 if resp is None or not resp.ok:
                     print(f'  Stats ({cache_key}): ger upp för {w_start}–{w_end} skip={skip}')
+                    _log_error(f'Stats {cache_key}: ger upp {w_start}–{w_end} skip={skip}')
                     break
 
                 try:
@@ -952,6 +969,7 @@ def _fetch_year_stats(year, county_id=None, max_month=12):
                     fetched += len(records)
                 except Exception as e:
                     print(f'  Stats ({cache_key}): fel vid aggregering – {e}')
+                    _log_error(f'Stats {cache_key}: aggregeringsfel – {e}')
                     break
 
                 with _stats_lock:
@@ -991,6 +1009,7 @@ def _save_cache(cache_key=None):
                 _json.dump({ck: data}, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f'  Stats: kunde inte spara {ck} – {e}')
+            _log_error(f'Stats: kunde inte spara {ck} – {e}')
 
 
 def _trigger_on_demand(year, county_id):
@@ -1021,6 +1040,7 @@ def _trigger_on_demand(year, county_id):
                   f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
         else:
             print(f'  Stats: misslyckades för {cache_key}')
+            _log_error(f'Stats: misslyckades för {cache_key}')
 
     _threading.Thread(target=_build, daemon=True, name=f'stats-{cache_key}').start()
 
@@ -1162,6 +1182,46 @@ def statistics_years():
             if k.startswith(prefix)
         }
     return jsonify(years)
+
+
+@app.route('/logs')
+def error_logs():
+    """Visar felloggen som en enkel HTML-sida."""
+    entries = list(reversed(list(_error_log)))
+    rows = ''.join(
+        f'<tr><td>{e["date"]}</td><td>{e["time"]}</td><td>{e["msg"]}</td></tr>'
+        for e in entries
+    )
+    table = (
+        f'<table><thead><tr><th>Datum</th><th>Tid</th><th>Meddelande</th></tr></thead>'
+        f'<tbody>{rows}</tbody></table>'
+        if entries else '<p class="empty">Inga fel loggade sedan serverstart.</p>'
+    )
+    html = f"""<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <title>Fellogg – Fågelobservationer v{APP_VERSION}</title>
+  <style>
+    body {{ font-family: monospace; background: #111; color: #ccc; padding: 1.5rem; margin: 0; }}
+    h1   {{ color: #e77; font-size: 1.1rem; margin-bottom: 0.3rem; }}
+    .meta {{ color: #555; font-size: 0.75rem; margin-bottom: 1.2rem; }}
+    table {{ border-collapse: collapse; width: 100%; font-size: 0.8rem; }}
+    th    {{ background: #2a2a2a; color: #999; padding: 5px 10px; text-align: left;
+             border-bottom: 1px solid #333; }}
+    td    {{ padding: 4px 10px; border-bottom: 1px solid #1e1e1e; vertical-align: top; }}
+    td:nth-child(1), td:nth-child(2) {{ white-space: nowrap; color: #666; }}
+    td:nth-child(3) {{ color: #ffd; word-break: break-all; }}
+    .empty {{ color: #555; font-style: italic; }}
+  </style>
+</head>
+<body>
+  <h1>Fellogg – {len(entries)} poster (max 500, nyaste först)</h1>
+  <div class="meta">Serverstart: {_SERVER_START.strftime('%Y-%m-%d %H:%M:%S')} &nbsp;·&nbsp; Version {APP_VERSION}</div>
+  {table}
+</body>
+</html>"""
+    return html, 200, {'Content-Type': 'text/html; charset=utf-8'}
 
 
 # ── Auto-inloggning vid uppstart (körs oavsett om Flask eller Gunicorn används) ──
