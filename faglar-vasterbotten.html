@@ -912,7 +912,8 @@ const COUNTIES = [
 ═══════════════════════════════════════════════════════════════════ */
 function initRegionBar() {
   const lanSel = document.getElementById('lanSelect');
-  lanSel.innerHTML = COUNTIES.map(c =>
+  const sortedCounties = [...COUNTIES].sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  lanSel.innerHTML = sortedCounties.map(c =>
     `<option value="${c.id}" ${c.id === selectedLanId ? 'selected' : ''}>${c.name}</option>`
   ).join('');
   populateKommuner(selectedLanId);
@@ -923,7 +924,8 @@ function populateKommuner(lanId) {
   const sel    = document.getElementById('kommunSelect');
   sel.innerHTML = '<option value="">– Hela länet –</option>';
   if (county) {
-    county.kommuner.forEach(k => {
+    const sortedKommuner = [...county.kommuner].sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+    sortedKommuner.forEach(k => {
       const opt = document.createElement('option');
       opt.value = k.id;
       opt.textContent = k.name;

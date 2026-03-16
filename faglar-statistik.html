@@ -791,8 +791,10 @@ async function fetchStats(year, countyId) {
     } else {
       /* pending – vänta i kö utan att blockera sidan med overlay */
       hideLoading();
-      setSourceBar('building', `${year} väntar i kö…`);
-      showError(`Statistik för ${year} har inte byggts än – den byggs upp automatiskt i bakgrunden. Sidan uppdateras när det är klart.`);
+      const pendingCounty = COUNTIES.find(c => c.id === countyId);
+      const pendingName   = pendingCounty ? pendingCounty.name : countyId;
+      setSourceBar('building', `Läser in ${pendingName}…`);
+      showFirstTimeMsg(year, pendingName);
       pollTimer = setTimeout(() => fetchStats(year, countyId), 4000);
     }
   } catch (err) {
@@ -829,6 +831,20 @@ function showBuildingStatus(year, fetched, total, pct, countyName) {
     <div style="color:#718096">${fetched.toLocaleString('sv')}${total ? ' / ' + total.toLocaleString('sv') : ''} observationer hämtade${pctStr}</div>
     ${prog}
     <div style="margin-top:.5rem;color:#a0aec0;font-size:.75rem">Uppdateras automatiskt…</div>
+  </div>`;
+  document.getElementById('topArtList').innerHTML = html;
+  document.getElementById('topRapList').innerHTML =
+    `<tr><td colspan="4">${html}</td></tr>`;
+}
+
+function showFirstTimeMsg(year, countyName) {
+  const html = `<div style="padding:2rem;text-align:center;color:#4a5568;font-size:.85rem;max-width:420px;margin:0 auto">
+    <div style="font-size:1.8rem;margin-bottom:.6rem">🦅</div>
+    <div style="font-weight:600;margin-bottom:.5rem">Du är först att öppna statistik för ${countyName}!</div>
+    <div style="color:#718096;line-height:1.6">Appen hämtar nu alla fågelobservationer från Artportalen för detta län.
+    Det kan ta <strong>5–15 minuter</strong> beroende på länets storlek.
+    Sidan uppdateras automatiskt när data är redo.</div>
+    <div style="margin-top:1rem;color:#a0aec0;font-size:.75rem">⏳ Hämtar ${year}…</div>
   </div>`;
   document.getElementById('topArtList').innerHTML = html;
   document.getElementById('topRapList').innerHTML =
@@ -1009,8 +1025,9 @@ function populateRegionDropdown(countyId) {
   const sel    = document.getElementById('selRegion');
   if (!county) { sel.innerHTML = ''; return; }
   const countyName = county.name.replace(' län', '');
+  const sorted = [...county.kommuner].sort((a, b) => a.name.localeCompare(b.name, 'sv'));
   sel.innerHTML = `<option value="">Hela ${countyName}</option>` +
-    county.kommuner.map(k => `<option value="${k.id}">${k.name}</option>`).join('');
+    sorted.map(k => `<option value="${k.id}">${k.name}</option>`).join('');
 }
 
 function updateCounty() {
@@ -1061,7 +1078,8 @@ async function tryAutoLogin() {
 async function initPage() {
   /* Bygg länsdropdown */
   const countySel = document.getElementById('selCounty');
-  countySel.innerHTML = COUNTIES.map(c =>
+  const sortedCounties = [...COUNTIES].sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  countySel.innerHTML = sortedCounties.map(c =>
     `<option value="${c.id}" ${c.id === selectedCountyId ? 'selected' : ''}>${c.name}</option>`
   ).join('');
 
