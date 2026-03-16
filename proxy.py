@@ -641,51 +641,57 @@ def _get_rl_category(taxon_obj):
     return None
 
 
-def _aggregate_observations(records, rl_override=None):
-    """Aggregerar en lista råobservationer till statistik-dict.
-    rl_override: {taxon_id (int): 'NT'|'VU'|'EN'|'CR'} – extra rödlistestatus
-                 som används om taxon-objektet saknar attributet (t.ex. vid API-nyckelauth).
-    """
-    species   = _defaultdict(lambda: {
-        'obs': 0, 'ind': 0, 'sv': '', 'sci': '', 'key': None,
-        'rl': None, 'last_date': '', 'last_rep': ''
-    })
-    reporters = _defaultdict(lambda: {'obs': 0, 'species': set()})
-    monthly   = [0] * 12
-    total_ind = 0
+def _new_agg_state():
+    """Skapar ett tomt aggregeringstillstånd för inkrementell bearbetning."""
+    return {
+        'species':        _defaultdict(lambda: {
+                              'obs': 0, 'ind': 0, 'sv': '', 'sci': '', 'key': None,
+                              'rl': None, 'last_date': '', 'last_rep': ''}),
+        'reporters':      _defaultdict(lambda: {'obs': 0, 'species': set()}),
+        'monthly':        [0] * 12,
+        'total_ind':      0,
+        'monthly_sp':     _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0})),
+        'monthly_rep':    _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()})),
+        'muni_sp':        _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0})),
+        'muni_rep':       _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()})),
+        'muni_month_sp':  _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0}))),
+        'muni_month_rep': _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))),
+        'taxon_ids':      set(),
+    }
 
-    # Per-månads-spårning (1-indexerat)
-    monthly_sp  = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0}))
-    monthly_rep = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))
 
-    # Per-kommun-spårning (featureId som nyckel)
-    muni_sp  = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0}))
-    muni_rep = _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))
-
-    # Per-kommun × månad (featureId → månad 1-12 → art/rapportör)
-    muni_month_sp  = _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'ind': 0})))
-    muni_month_rep = _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()})))
+def _agg_add_records(state, records):
+    """Lägger till en sida av observationer i ett pågående aggregeringstillstånd."""
+    species     = state['species']
+    reporters   = state['reporters']
+    monthly     = state['monthly']
+    monthly_sp  = state['monthly_sp']
+    monthly_rep = state['monthly_rep']
+    muni_sp     = state['muni_sp']
+    muni_rep    = state['muni_rep']
+    muni_month_sp  = state['muni_month_sp']
+    muni_month_rep = state['muni_month_rep']
 
     for rec in records:
-        taxon    = rec.get('taxon')     or rec.get('Taxon')    or {}
+        taxon    = rec.get('taxon')      or rec.get('Taxon')      or {}
         occ      = rec.get('occurrence') or rec.get('Occurrence') or {}
-        event    = rec.get('event')     or rec.get('Event')    or {}
-        location = rec.get('location')  or rec.get('Location') or {}
+        event    = rec.get('event')      or rec.get('Event')      or {}
+        location = rec.get('location')   or rec.get('Location')   or {}
         muni_fid = (location.get('municipality') or {}).get('featureId') or ''
 
         key = taxon.get('id') or taxon.get('taxonId') or taxon.get('dyntaxaId')
         if not key:
             continue
         key = int(key)
+        state['taxon_ids'].add(key)
 
         sv_name  = taxon.get('vernacularName') or taxon.get('commonName') or ''
         sci_name = taxon.get('scientificName') or ''
         count    = int(occ.get('individualCount') or occ.get('quantity') or 1)
         reporter = (occ.get('reportedBy') or occ.get('observer') or '').strip()
         start_dt = event.get('startDate') or event.get('startDayOfYear') or ''
-        rl_cat   = _get_rl_category(taxon) or (rl_override or {}).get(key)
+        rl_cat   = _get_rl_category(taxon)
 
-        # Månad (0-indexerad för monthly-array, 1-indexerad för per-månads-dict)
         month_0 = None
         if start_dt and len(start_dt) >= 7:
             try:
@@ -708,6 +714,8 @@ def _aggregate_observations(records, rl_override=None):
         if reporter:
             reporters[reporter]['obs'] += 1
             reporters[reporter]['species'].add(key)
+
+        state['total_ind'] += count
 
         if month_0 is not None:
             monthly[month_0] += 1
@@ -732,7 +740,17 @@ def _aggregate_observations(records, rl_override=None):
                     muni_month_rep[muni_fid][m1][reporter]['obs'] += 1
                     muni_month_rep[muni_fid][m1][reporter]['species'].add(key)
 
-        total_ind += count
+
+def _agg_finalize(state):
+    """Sorterar och formaterar aggregeringstillståndet till ett resultat-dict."""
+    species     = state['species']
+    reporters   = state['reporters']
+    monthly_sp  = state['monthly_sp']
+    monthly_rep = state['monthly_rep']
+    muni_sp     = state['muni_sp']
+    muni_rep    = state['muni_rep']
+    muni_month_sp  = state['muni_month_sp']
+    muni_month_rep = state['muni_month_rep']
 
     top_sp = sorted(
         [{'sv': v['sv'], 'sci': v['sci'], 'key': v['key'],
@@ -746,7 +764,6 @@ def _aggregate_observations(records, rl_override=None):
         key=lambda x: x['arter'], reverse=True
     )[:20]
 
-    # Bygg per-månads topplista (top 20 per månad)
     month_species   = {}
     month_reporters = {}
     for m in range(1, 13):
@@ -764,7 +781,6 @@ def _aggregate_observations(records, rl_override=None):
             key=lambda x: x['arter'], reverse=True
         )[:20]
 
-    # Bygg per-kommun topplista
     muni_species   = {}
     muni_reporters = {}
     for fid, ms in muni_sp.items():
@@ -781,7 +797,6 @@ def _aggregate_observations(records, rl_override=None):
             key=lambda x: x['arter'], reverse=True
         )[:20]
 
-    # Bygg per-kommun × månad topplista
     muni_month_species   = {}
     muni_month_reporters = {}
     for fid, months in muni_month_sp.items():
@@ -803,9 +818,11 @@ def _aggregate_observations(records, rl_override=None):
             )[:20]
 
     return {
-        'kpi':                  {'arter': len(species), 'obs': sum(v['obs'] for v in species.values()),
-                                 'ind': total_ind, 'reporters': len(reporters)},
-        'monthly':              monthly,
+        'kpi':                  {'arter': len(species),
+                                 'obs':   sum(v['obs'] for v in species.values()),
+                                 'ind':   state['total_ind'],
+                                 'reporters': len(reporters)},
+        'monthly':              state['monthly'],
         'top_species':          top_sp,
         'top_reporters':        top_rap,
         'month_species':        month_species,
