@@ -540,6 +540,15 @@ const MÅNADER = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','N
 const MÅNADER_FULL = ['Januari','Februari','Mars','April','Maj','Juni',
                       'Juli','Augusti','September','Oktober','November','December'];
 
+/* Kommunnamn → SOS featureId */
+const REGION_TO_FEID = {
+  skelleftea: '2482',
+  umea:       '2480',
+  lycksele:   '2460',
+  storuman:   '2421',
+  vilhelmina: '2462',
+};
+
 /* ── State ── */
 let selectedYear  = new Date().getFullYear();
 let selectedMonth = 0;          // 0 = hela året
@@ -655,12 +664,30 @@ function showError(msg) {
 function renderAll(year, month) {
   const d = statsData[year];
   if (!d) return;
+
+  const region = document.getElementById('selRegion').value;
+  const feid   = REGION_TO_FEID[region] || null;
+
   renderMonthChart(d.monthly, month);
-  // Använd månadsspecifik data om månad är vald, annars helårdata
-  const sp  = month && d.month_species   && d.month_species[month]
-                ? d.month_species[month]   : d.top_species;
-  const rep = month && d.month_reporters && d.month_reporters[month]
-                ? d.month_reporters[month] : d.top_reporters;
+
+  // Välj rätt datakälla: kommun → månad → helår (fallback-kedja)
+  let sp, rep;
+  if (feid && month) {
+    // Kommun + månad: korsfiltrering – ta kommundata och månadsfiltrering av den
+    // (vi har inte kors-aggregerat, använd kommundata som bästa approximation)
+    sp  = (d.muni_species?.[feid]  || d.top_species);
+    rep = (d.muni_reporters?.[feid] || d.top_reporters);
+  } else if (feid) {
+    sp  = d.muni_species?.[feid]   || d.top_species;
+    rep = d.muni_reporters?.[feid] || d.top_reporters;
+  } else if (month) {
+    sp  = d.month_species?.[month]   || d.top_species;
+    rep = d.month_reporters?.[month] || d.top_reporters;
+  } else {
+    sp  = d.top_species;
+    rep = d.top_reporters;
+  }
+
   renderTopArter(sp);
   renderTopRap(rep);
   updateKpi(d, month);
