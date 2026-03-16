@@ -746,7 +746,7 @@ async function fetchStats(year, countyId) {
     return;
   }
 
-  showLoading('Hämtar statistik för ' + year + '…');
+  setSourceBar('building', `Hämtar ${year}…`);
 
   try {
     const resp = await fetch(`${PROXY}/api/statistics?year=${year}&county=${countyId}`,
@@ -764,11 +764,12 @@ async function fetchStats(year, countyId) {
       const total   = json.total   || 0;
       const pct     = total ? Math.round((fetched / total) * 100) : 0;
       const county  = COUNTIES.find(c => c.id === countyId);
-      const msg     = total
-        ? `Bygger statistik för ${year}… ${fetched.toLocaleString('sv')} / ${total.toLocaleString('sv')} obs (${pct}%)`
-        : `Bygger statistik för ${year} (${county ? county.name : countyId})… ${fetched.toLocaleString('sv')} obs hämtade`;
-      showLoading(msg);
-      setSourceBar('building', `${fetched.toLocaleString('sv')}${total ? ' / ' + total.toLocaleString('sv') : ''} obs`);
+      const barMsg  = total
+        ? `Bygger ${year} (${county ? county.name : countyId})… ${fetched.toLocaleString('sv')} / ${total.toLocaleString('sv')} obs (${pct}%)`
+        : `Bygger ${year} (${county ? county.name : countyId})… ${fetched.toLocaleString('sv')} obs hämtade`;
+      hideLoading();   /* <-- Låt sidan vara klickbar under byggandet */
+      setSourceBar('building', barMsg);
+      showBuildingStatus(year, fetched, total, pct, county ? county.name : countyId);
       pollTimer = setTimeout(() => fetchStats(year, countyId), 3000);
 
     } else if (json.status === 'unauthenticated') {
@@ -809,6 +810,24 @@ function showError(msg) {
     `<div style="padding:1.5rem;text-align:center;color:#c53030;font-size:.85rem">${msg}</div>`;
   document.getElementById('topRapList').innerHTML =
     `<tr><td colspan="4" style="padding:1.5rem;text-align:center;color:#c53030;font-size:.85rem">${msg}</td></tr>`;
+}
+
+function showBuildingStatus(year, fetched, total, pct, countyName) {
+  const pctStr = total ? ` (${pct}%)` : '';
+  const prog   = total
+    ? `<div style="margin:.6rem auto;width:220px;height:6px;background:#e2e8f0;border-radius:3px">
+         <div style="width:${pct}%;height:100%;background:#2b6cb0;border-radius:3px;transition:width .4s"></div>
+       </div>`
+    : '';
+  const html = `<div style="padding:1.5rem;text-align:center;color:#4a5568;font-size:.85rem">
+    <div style="margin-bottom:.4rem">⏳ Bygger statistik för <strong>${year}</strong> – ${countyName}</div>
+    <div style="color:#718096">${fetched.toLocaleString('sv')}${total ? ' / ' + total.toLocaleString('sv') : ''} observationer hämtade${pctStr}</div>
+    ${prog}
+    <div style="margin-top:.5rem;color:#a0aec0;font-size:.75rem">Uppdateras automatiskt…</div>
+  </div>`;
+  document.getElementById('topArtList').innerHTML = html;
+  document.getElementById('topRapList').innerHTML =
+    `<tr><td colspan="4">${html}</td></tr>`;
 }
 
 /* ══════════════════════════════════════════════════════════════════
