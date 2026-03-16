@@ -923,14 +923,13 @@ function renderTopArter(topSpecies) {
   list.innerHTML = topSpecies.map((a, i) => {
     const pct     = Math.round((a.obs / maxObs) * 100);
     const rankCls = i < 3 ? ' top3' : '';
-    const medal   = ['🥇','🥈','🥉'][i] || '';
     const artUrl  = a.key ? `https://artfakta.artdatabanken.se/taxon/${a.key}` : null;
     const nameHtml = artUrl
       ? `<a href="${artUrl}" target="_blank">${esc(a.sv || a.sci)}</a>`
       : esc(a.sv || a.sci);
     return `
       <div class="species-row">
-        <div class="species-rank${rankCls}">${medal || (i+1)}</div>
+        <div class="species-rank${rankCls}">${i+1}</div>
         <div class="species-name-wrap">
           <div class="species-sv">${nameHtml}</div>
           <div class="species-sci">${esc(a.sci)}</div>
@@ -953,11 +952,10 @@ function renderTopRap(topReporters) {
     return;
   }
   tbody.innerHTML = topReporters.map((r, i) => {
-    const medal   = ['🥇','🥈','🥉'][i] || '';
     const rankCls = i < 3 ? ' top3' : '';
     return `
       <tr>
-        <td class="reporter-rank${rankCls}">${medal || (i+1)}</td>
+        <td class="reporter-rank${rankCls}">${i+1}</td>
         <td class="reporter-name">${esc(r.name)}</td>
         <td class="reporter-num">${r.arter}<small>arter</small></td>
         <td class="reporter-num">${r.obs}<small>obs.</small></td>
