@@ -32,7 +32,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "2.4"          # Uppdatera vid varje deploy
+APP_VERSION   = "2.5"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
 
 SLU_AUTH_URL  = "https://useradmin-auth.slu.se/connect/authorize"
