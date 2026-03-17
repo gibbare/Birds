@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Häckningskarta – Fågelobservationer</title>
+  <link rel="icon" type="image/png" href="storspov2_ico.png">
+  <link rel="apple-touch-icon" href="storspov2_ico.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f7fafc; color: #2d3748; }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+      color: white; padding: .75rem 1.25rem;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    header h1 { font-size: 1.15rem; font-weight: 700; }
+    header nav { display: flex; gap: .4rem; }
+    header nav a {
+      color: rgba(255,255,255,.75); text-decoration: none;
+      font-size: .8rem; padding: .3rem .65rem;
+      border-radius: 6px; transition: background .15s;
+    }
+    header nav a:hover, header nav a.active {
+      background: rgba(255,255,255,.15); color: white;
+    }
+
+    /* ── Status bar ── */
+    .source-bar {
+      font-size: .75rem; padding: .35rem 1.25rem;
+      display: flex; align-items: center; gap: .5rem;
+      background: #4a5568; color: white;
+    }
+    .source-bar.loading { background: #2c5282; color: #bee3f8; }
+    .source-bar.ok      { background: #276749; color: white; }
+    .source-bar.error   { background: #9b2c2c; color: #fed7d7; }
+    .source-bar .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+    }
+
+    /* ── Controls ── */
+    .nav-bar {
+      background: white; border-bottom: 1px solid #e2e8f0;
+      padding: .5rem 1rem; display: flex; align-items: center;
+      gap: .5rem; flex-wrap: wrap;
+    }
+    .nav-label { font-size: .72rem; color: #718096; white-space: nowrap; }
+    .nav-select {
+      font-size: .82rem; padding: .3rem .55rem;
+      border: 1px solid #e2e8f0; border-radius: 7px;
+      background: #f7fafc; cursor: pointer;
+    }
+    .nav-select:focus { outline: none; border-color: #4299e1; }
+    .nav-btn {
+      font-size: .82rem; padding: .32rem .9rem;
+      border: none; border-radius: 7px; cursor: pointer;
+      font-weight: 600; transition: background .15s, opacity .15s;
+    }
+    .nav-btn.primary   { background: #2c5282; color: white; }
+    .nav-btn.primary:hover  { background: #2a4a7f; }
+    .nav-btn.primary:disabled { opacity: .55; cursor: default; }
+    .nav-btn.secondary { background: #e2e8f0; color: #4a5568; }
+    .nav-btn.secondary:hover { background: #cbd5e0; }
+
+    /* ── Container ── */
+    .container { max-width: 1200px; margin: 1rem auto; padding: 0 1rem 3rem; }
+
+    /* ── Map ── */
+    #map {
+      height: 58vh; min-height: 380px;
+      border-radius: 12px; overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
+      margin-bottom: .75rem;
+    }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex; gap: 1.25rem; align-items: center;
+      font-size: .78rem; color: #4a5568;
+      margin-bottom: 1rem; flex-wrap: wrap;
+    }
+    .legend-item { display: flex; align-items: center; gap: .4rem; }
+    .legend-dot {
+      width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid rgba(0,0,0,.2);
+    }
+    .dot-a { background: #f6e05e; }
+    .dot-b { background: #ed8936; }
+    .dot-c { background: #c53030; }
+    .legend-sep { color: #cbd5e0; }
+
+    /* ── KPI strip ── */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: .65rem; margin-bottom: 1rem;
+    }
+    .kpi-chip {
+      background: white; border-radius: 10px; padding: .65rem .75rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07); text-align: center;
+    }
+    .kpi-chip .val { font-size: 1.5rem; font-weight: 800; color: #2b6cb0; line-height: 1.1; }
+    .kpi-chip .val.cat-a { color: #b7791f; }
+    .kpi-chip .val.cat-b { color: #c05621; }
+    .kpi-chip .val.cat-c { color: #9b2c2c; }
+    .kpi-chip .lbl { font-size: .67rem; color: #718096; text-transform: uppercase; letter-spacing: .04em; margin-top: .2rem; }
+
+    /* ── Truncation warning ── */
+    .trunc-warn {
+      display: none; font-size: .75rem; color: #b7791f;
+      background: #fefcbf; border: 1px solid #f6e05e;
+      padding: .5rem .85rem; border-radius: 8px; margin-bottom: .75rem;
+    }
+
+    /* ── Species card ── */
+    .card {
+      background: white; border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07); overflow: hidden;
+      margin-top: 1rem;
+    }
+    .card-title {
+      font-size: .8rem; font-weight: 700; color: #4a5568;
+      text-transform: uppercase; letter-spacing: .05em;
+      padding: .9rem 1rem .6rem; border-bottom: 1px solid #f0f4f8;
+    }
+    table.sp-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    table.sp-table th {
+      padding: .45rem .75rem; text-align: left; font-size: .72rem;
+      color: #718096; text-transform: uppercase; letter-spacing: .04em;
+      background: #f7fafc; border-bottom: 1px solid #e2e8f0;
+    }
+    table.sp-table th.num { text-align: center; }
+    table.sp-table td { padding: .42rem .75rem; border-bottom: 1px solid #f0f4f8; }
+    table.sp-table tr:last-child td { border-bottom: none; }
+    table.sp-table tr:hover td { background: #f7fafc; }
+    .sp-sv  { font-weight: 600; }
+    .sp-sci { font-size: .72rem; color: #a0aec0; font-style: italic; }
+    .badge  {
+      display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+      font-size: .72rem; font-weight: 700; min-width: 30px; text-align: center;
+    }
+    .badge-a { background: #fefcbf; color: #744210; }
+    .badge-b { background: #feebc8; color: #7b341e; }
+    .badge-c { background: #fed7d7; color: #742a2a; }
+    .tot-num { font-weight: 700; color: #2b6cb0; }
+
+    /* ── Empty state ── */
+    .empty-msg {
+      padding: 3rem 1rem; text-align: center; color: #a0aec0; font-size: .9rem;
+    }
+    .empty-msg .icon { font-size: 2.5rem; margin-bottom: .6rem; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center; font-size: .72rem; color: #a0aec0;
+      padding: 1.5rem 1rem; margin-top: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 500px) {
+      #map { height: 50vh; }
+      .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+      .kpi-chip .val { font-size: 1.15rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><img src="eagle_ico.png" style="height:1.4rem;vertical-align:middle;margin-right:.4rem"> Fågelobservationer</h1>
+  <nav>
+    <a href="faglar-vasterbotten.html">📋 Dagslista</a>
+    <a href="faglar-statistik.html">📊 Statistik</a>
+    <a href="faglar-hackning.html" class="active">🥚 Häckning</a>
+  </nav>
+</header>
+
+<div class="source-bar" id="sourceBar">
+  <div class="dot"></div>
+  <span id="sourceMsg">Välj område och år, klicka sedan Hämta</span>
+</div>
+
+<!-- Controls -->
+<div class="nav-bar">
+  <span class="nav-label">År</span>
+  <select class="nav-select" id="selYear"></select>
+
+  <span class="nav-label">Län</span>
+  <select class="nav-select" id="selCounty" onchange="populateMuni()"></select>
+
+  <span class="nav-label">Kommun</span>
+  <select class="nav-select" id="selMuni"></select>
+
+  <span class="nav-label">Minsta nivå</span>
+  <select class="nav-select" id="selActivity">
+    <option value="1">Alla häckningsnoteringar (A + B + C)</option>
+    <option value="5">Sannolik + Säker (B + C)</option>
+    <option value="13">Säker häckning (C)</option>
+  </select>
+
+  <button class="nav-btn primary" id="btnFetch" onclick="fetchBreeding()">Hämta</button>
+  <button class="nav-btn secondary" onclick="gotoMyLocation()">📍 Min position</button>
+</div>
+
+<div class="container">
+
+  <!-- Leaflet map -->
+  <div id="map"></div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot dot-a"></div> A – Möjlig häckning (kod 1–4)</div>
+    <span class="legend-sep">|</span>
+    <div class="legend-item"><div class="legend-dot dot-b"></div> B – Sannolik häckning (kod 5–12)</div>
+    <span class="legend-sep">|</span>
+    <div class="legend-item"><div class="legend-dot dot-c"></div> C – Säker häckning (kod 13+)</div>
+    <span class="legend-sep">|</span>
+    <div class="legend-item" style="color:#3182ce">● Din position</div>
+  </div>
+
+  <!-- KPI chips -->
+  <div class="kpi-strip">
+    <div class="kpi-chip"><div class="val" id="kpiObs">–</div><div class="lbl">Obs totalt</div></div>
+    <div class="kpi-chip"><div class="val" id="kpiArter">–</div><div class="lbl">Arter</div></div>
+    <div class="kpi-chip"><div class="val cat-a" id="kpiA">–</div><div class="lbl">Möjlig (A)</div></div>
+    <div class="kpi-chip"><div class="val cat-b" id="kpiB">–</div><div class="lbl">Sannolik (B)</div></div>
+    <div class="kpi-chip"><div class="val cat-c" id="kpiC">–</div><div class="lbl">Säker (C)</div></div>
+  </div>
+
+  <!-- Truncation warning -->
+  <div class="trunc-warn" id="truncWarn">
+    ⚠ Mer än 5 000 häckningsobservationer hittades – visar ett urval. Filtrera på kommun eller välj en högre häckningsnivå för fullständiga data.
+  </div>
+
+  <!-- Species table -->
+  <div class="card">
+    <div class="card-title">Arter med häckningsnoteringar</div>
+    <div id="spTableWrap">
+      <div class="empty-msg">
+        <div class="icon">🥚</div>
+        Klicka <strong>Hämta</strong> för att ladda häckningsobservationer för valt område och år.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ══════════════════════════════════════════════════════
+   Config
+══════════════════════════════════════════════════════ */
+const PROXY         = location.hostname === 'localhost' ? 'http://localhost:5000' : '';
+const THIS_YEAR     = new Date().getFullYear();
+const DEFAULT_COUNTY = '24';   // Västerbottens län
+
+/* ══════════════════════════════════════════════════════
+   Häckningskoder (Artportalen-standard)
+══════════════════════════════════════════════════════ */
+const ACT_LABELS = {
+  1: 'Art i lämplig biotop under häckningstid',
+  2: 'Sjungande hane under häckningstid',
+  3: 'Par observerat under häckningstid',
+  4: 'Permanent revir (stadigvarande mellan besök)',
+  5: 'Parningsspel eller parning',
+  6: 'Besöker trolig häckningsplats',
+  7: 'Upprörd fågel / varningsbeteende',
+  8: 'Häckfläck',
+  9: 'Bobyggande eller urgröpning',
+  10: 'Avledningsbeteende',
+  11: 'Nyligen använt bo eller äggskal',
+  12: 'Ungar i dun- eller boungefält',
+  13: 'Ungar sedda eller hörda',
+  14: 'Adult bär mat eller avföringssäck',
+  15: 'Bebott bo (ägg eller ungar)',
+  16: 'Adult ruvar eller matar ungar i bo',
+};
+
+function actCat(a) { return a >= 13 ? 'C' : a >= 5 ? 'B' : 'A'; }
+
+function actColor(a) {
+  const c = actCat(a);
+  return c === 'C' ? '#c53030' : c === 'B' ? '#ed8936' : '#f6e05e';
+}
+function actBorder(a) {
+  const c = actCat(a);
+  return c === 'C' ? '#9b2c2c' : c === 'B' ? '#c05621' : '#d69e2e';
+}
+
+/* ══════════════════════════════════════════════════════
+   Länslista
+══════════════════════════════════════════════════════ */
+const COUNTIES = [
+  { id:'1',  name:'Stockholms län', kommuner:[
+    {id:'0114',name:'Upplands Väsby'},{id:'0115',name:'Vallentuna'},{id:'0117',name:'Österåker'},
+    {id:'0120',name:'Värmdö'},{id:'0123',name:'Järfälla'},{id:'0125',name:'Ekerö'},
+    {id:'0126',name:'Huddinge'},{id:'0127',name:'Botkyrka'},{id:'0128',name:'Salem'},
+    {id:'0136',name:'Haninge'},{id:'0138',name:'Tyresö'},{id:'0139',name:'Upplands-Bro'},
+    {id:'0140',name:'Nykvarn'},{id:'0160',name:'Täby'},{id:'0162',name:'Danderyd'},
+    {id:'0163',name:'Sollentuna'},{id:'0180',name:'Stockholm'},{id:'0181',name:'Södertälje'},
+    {id:'0182',name:'Nacka'},{id:'0183',name:'Sundbyberg'},{id:'0184',name:'Solna'},
+    {id:'0186',name:'Lidingö'},{id:'0187',name:'Vaxholm'},{id:'0188',name:'Norrtälje'},
+    {id:'0191',name:'Sigtuna'},{id:'0192',name:'Nynäshamn'},
+  ]},
+  { id:'3',  name:'Uppsala län', kommuner:[
+    {id:'0305',name:'Håbo'},{id:'0319',name:'Älvkarleby'},{id:'0330',name:'Knivsta'},
+    {id:'0331',name:'Heby'},{id:'0360',name:'Tierp'},{id:'0380',name:'Uppsala'},
+    {id:'0381',name:'Enköping'},{id:'0382',name:'Östhammar'},
+  ]},
+  { id:'4',  name:'Södermanlands län', kommuner:[
+    {id:'0428',name:'Vingåker'},{id:'0461',name:'Gnesta'},{id:'0480',name:'Nyköping'},
+    {id:'0481',name:'Oxelösund'},{id:'0482',name:'Flen'},{id:'0483',name:'Katrineholm'},
+    {id:'0484',name:'Eskilstuna'},{id:'0486',name:'Strängnäs'},{id:'0488',name:'Trosa'},
+  ]},
+  { id:'5',  name:'Östergötlands län', kommuner:[
+    {id:'0509',name:'Ödeshög'},{id:'0512',name:'Ydre'},{id:'0513',name:'Kinda'},
+    {id:'0560',name:'Boxholm'},{id:'0561',name:'Åtvidaberg'},{id:'0562',name:'Finspång'},
+    {id:'0563',name:'Valdemarsvik'},{id:'0580',name:'Linköping'},{id:'0581',name:'Norrköping'},
+    {id:'0582',name:'Söderköping'},{id:'0583',name:'Motala'},{id:'0584',name:'Vadstena'},
+    {id:'0586',name:'Mjölby'},
+  ]},
+  { id:'6',  name:'Jönköpings län', kommuner:[
+    {id:'0604',name:'Aneby'},{id:'0617',name:'Gnosjö'},{id:'0642',name:'Mullsjö'},
+    {id:'0643',name:'Habo'},{id:'0662',name:'Gislaved'},{id:'0665',name:'Vaggeryd'},
+    {id:'0680',name:'Jönköping'},{id:'0682',name:'Nässjö'},{id:'0683',name:'Värnamo'},
+    {id:'0684',name:'Sävsjö'},{id:'0685',name:'Vetlanda'},{id:'0686',name:'Eksjö'},
+    {id:'0687',name:'Tranås'},
+  ]},
+  { id:'7',  name:'Kronobergs län', kommuner:[
+    {id:'0760',name:'Uppvidinge'},{id:'0761',name:'Lessebo'},{id:'0763',name:'Tingsryd'},
+    {id:'0764',name:'Alvesta'},{id:'0765',name:'Älmhult'},{id:'0767',name:'Markaryd'},
+    {id:'0780',name:'Växjö'},{id:'0781',name:'Ljungby'},
+  ]},
+  { id:'8',  name:'Kalmar län', kommuner:[
+    {id:'0821',name:'Högsby'},{id:'0834',name:'Torsås'},{id:'0840',name:'Mörbylånga'},
+    {id:'0860',name:'Hultsfred'},{id:'0861',name:'Mönsterås'},{id:'0862',name:'Emmaboda'},
+    {id:'0880',name:'Kalmar'},{id:'0881',name:'Nybro'},{id:'0882',name:'Oskarshamn'},
+    {id:'0883',name:'Västervik'},{id:'0884',name:'Vimmerby'},{id:'0885',name:'Borgholm'},
+  ]},
+  { id:'9',  name:'Gotlands län', kommuner:[{id:'0980',name:'Gotland'}]},
+  { id:'10', name:'Blekinge län', kommuner:[
+    {id:'1060',name:'Olofström'},{id:'1080',name:'Karlskrona'},{id:'1081',name:'Ronneby'},
+    {id:'1082',name:'Karlshamn'},{id:'1083',name:'Sölvesborg'},
+  ]},
+  { id:'12', name:'Skåne län', kommuner:[
+    {id:'1214',name:'Svalöv'},{id:'1230',name:'Staffanstorp'},{id:'1231',name:'Burlöv'},
+    {id:'1233',name:'Vellinge'},{id:'1256',name:'Östra Göinge'},{id:'1257',name:'Örkelljunga'},
+    {id:'1260',name:'Bjuv'},{id:'1261',name:'Kävlinge'},{id:'1262',name:'Lomma'},
+    {id:'1263',name:'Svedala'},{id:'1264',name:'Skurup'},{id:'1265',name:'Sjöbo'},
+    {id:'1266',name:'Hörby'},{id:'1267',name:'Höör'},{id:'1270',name:'Tomelilla'},
+    {id:'1272',name:'Bromölla'},{id:'1273',name:'Osby'},{id:'1275',name:'Perstorp'},
+    {id:'1276',name:'Klippan'},{id:'1277',name:'Åstorp'},{id:'1278',name:'Båstad'},
+    {id:'1280',name:'Malmö'},{id:'1281',name:'Lund'},{id:'1282',name:'Landskrona'},
+    {id:'1283',name:'Helsingborg'},{id:'1284',name:'Höganäs'},{id:'1285',name:'Eslöv'},
+    {id:'1286',name:'Ystad'},{id:'1287',name:'Trelleborg'},{id:'1290',name:'Kristianstad'},
+    {id:'1291',name:'Simrishamn'},{id:'1292',name:'Ängelholm'},{id:'1293',name:'Hässleholm'},
+  ]},
+  { id:'13', name:'Hallands län', kommuner:[
+    {id:'1315',name:'Hylte'},{id:'1380',name:'Halmstad'},{id:'1381',name:'Laholm'},
+    {id:'1382',name:'Falkenberg'},{id:'1383',name:'Varberg'},{id:'1384',name:'Kungsbacka'},
+  ]},
+  { id:'14', name:'Västra Götalands län', kommuner:[
+    {id:'1401',name:'Härryda'},{id:'1402',name:'Partille'},{id:'1407',name:'Öckerö'},
+    {id:'1415',name:'Stenungsund'},{id:'1419',name:'Tjörn'},{id:'1421',name:'Orust'},
+    {id:'1427',name:'Sotenäs'},{id:'1430',name:'Munkedal'},{id:'1435',name:'Tanum'},
+    {id:'1438',name:'Dals-Ed'},{id:'1439',name:'Färgelanda'},{id:'1440',name:'Ale'},
+    {id:'1441',name:'Lerum'},{id:'1442',name:'Vårgårda'},{id:'1443',name:'Bollebygd'},
+    {id:'1444',name:'Grästorp'},{id:'1445',name:'Essunga'},{id:'1446',name:'Karlsborg'},
+    {id:'1447',name:'Gullspång'},{id:'1452',name:'Tranemo'},{id:'1460',name:'Bengtsfors'},
+    {id:'1461',name:'Mellerud'},{id:'1462',name:'Lilla Edet'},{id:'1463',name:'Mark'},
+    {id:'1465',name:'Svenljunga'},{id:'1466',name:'Herrljunga'},{id:'1470',name:'Vara'},
+    {id:'1471',name:'Götene'},{id:'1472',name:'Tibro'},{id:'1473',name:'Töreboda'},
+    {id:'1480',name:'Göteborg'},{id:'1481',name:'Mölndal'},{id:'1482',name:'Kungälv'},
+    {id:'1484',name:'Lysekil'},{id:'1485',name:'Uddevalla'},{id:'1486',name:'Strömstad'},
+    {id:'1487',name:'Vänersborg'},{id:'1488',name:'Trollhättan'},{id:'1489',name:'Alingsås'},
+    {id:'1490',name:'Borås'},{id:'1491',name:'Ulricehamn'},{id:'1492',name:'Åmål'},
+    {id:'1493',name:'Mariestad'},{id:'1494',name:'Lidköping'},{id:'1495',name:'Skara'},
+    {id:'1496',name:'Skövde'},{id:'1497',name:'Hjo'},{id:'1498',name:'Tidaholm'},
+    {id:'1499',name:'Falköping'},
+  ]},
+  { id:'17', name:'Värmlands län', kommuner:[
+    {id:'1715',name:'Kil'},{id:'1730',name:'Eda'},{id:'1737',name:'Torsby'},
+    {id:'1760',name:'Storfors'},{id:'1761',name:'Hammarö'},{id:'1762',name:'Munkfors'},
+    {id:'1763',name:'Forshaga'},{id:'1764',name:'Grums'},{id:'1765',name:'Årjäng'},
+    {id:'1766',name:'Sunne'},{id:'1780',name:'Karlstad'},{id:'1781',name:'Kristinehamn'},
+    {id:'1782',name:'Filipstad'},{id:'1783',name:'Hagfors'},{id:'1784',name:'Arvika'},
+    {id:'1785',name:'Säffle'},
+  ]},
+  { id:'18', name:'Örebro län', kommuner:[
+    {id:'1814',name:'Lekeberg'},{id:'1860',name:'Laxå'},{id:'1861',name:'Hallsberg'},
+    {id:'1862',name:'Degerfors'},{id:'1863',name:'Hällefors'},{id:'1864',name:'Ljusnarsberg'},
+    {id:'1880',name:'Örebro'},{id:'1881',name:'Kumla'},{id:'1882',name:'Askersund'},
+    {id:'1883',name:'Karlskoga'},{id:'1884',name:'Nora'},{id:'1885',name:'Lindesberg'},
+  ]},
+  { id:'19', name:'Västmanlands län', kommuner:[
+    {id:'1904',name:'Skinnskatteberg'},{id:'1907',name:'Surahammar'},
+    {id:'1960',name:'Hallstahammar'},{id:'1961',name:'Norberg'},{id:'1962',name:'Västerås'},
+    {id:'1980',name:'Sala'},{id:'1981',name:'Fagersta'},{id:'1982',name:'Köping'},
+    {id:'1983',name:'Arboga'},
+  ]},
+  { id:'20', name:'Dalarnas län', kommuner:[
+    {id:'2021',name:'Vansbro'},{id:'2023',name:'Malung-Sälen'},{id:'2026',name:'Gagnef'},
+    {id:'2029',name:'Leksand'},{id:'2031',name:'Rättvik'},{id:'2034',name:'Orsa'},
+    {id:'2039',name:'Älvdalen'},{id:'2061',name:'Smedjebacken'},{id:'2062',name:'Mora'},
+    {id:'2080',name:'Falun'},{id:'2081',name:'Borlänge'},{id:'2082',name:'Säter'},
+    {id:'2083',name:'Hedemora'},{id:'2084',name:'Avesta'},{id:'2085',name:'Ludvika'},
+  ]},
+  { id:'21', name:'Gävleborgs län', kommuner:[
+    {id:'2101',name:'Ockelbo'},{id:'2104',name:'Hofors'},{id:'2121',name:'Ovanåker'},
+    {id:'2132',name:'Nordanstig'},{id:'2161',name:'Ljusdal'},{id:'2180',name:'Gävle'},
+    {id:'2181',name:'Sandviken'},{id:'2182',name:'Söderhamn'},{id:'2183',name:'Bollnäs'},
+    {id:'2184',name:'Hudiksvall'},
+  ]},
+  { id:'22', name:'Västernorrlands län', kommuner:[
+    {id:'2260',name:'Ånge'},{id:'2262',name:'Timrå'},{id:'2280',name:'Härnösand'},
+    {id:'2281',name:'Sundsvall'},{id:'2282',name:'Kramfors'},{id:'2283',name:'Sollefteå'},
+    {id:'2284',name:'Örnsköldsvik'},
+  ]},
+  { id:'23', name:'Jämtlands län', kommuner:[
+    {id:'2303',name:'Ragunda'},{id:'2305',name:'Bräcke'},{id:'2309',name:'Krokom'},
+    {id:'2313',name:'Strömsund'},{id:'2321',name:'Åre'},{id:'2326',name:'Berg'},
+    {id:'2361',name:'Härjedalen'},{id:'2380',name:'Östersund'},
+  ]},
+  { id:'24', name:'Västerbottens län', kommuner:[
+    {id:'2401',name:'Nordmaling'},{id:'2403',name:'Bjurholm'},{id:'2404',name:'Vindeln'},
+    {id:'2405',name:'Robertsfors'},{id:'2406',name:'Norsjö'},{id:'2407',name:'Malå'},
+    {id:'2409',name:'Storuman'},{id:'2410',name:'Sorsele'},{id:'2411',name:'Dorotea'},
+    {id:'2418',name:'Vännäs'},{id:'2421',name:'Vilhelmina'},{id:'2422',name:'Åsele'},
+    {id:'2480',name:'Umeå'},{id:'2481',name:'Lycksele'},{id:'2482',name:'Skellefteå'},
+  ]},
+  { id:'25', name:'Norrbottens län', kommuner:[
+    {id:'2505',name:'Arvidsjaur'},{id:'2506',name:'Arjeplog'},{id:'2507',name:'Jokkmokk'},
+    {id:'2510',name:'Överkalix'},{id:'2513',name:'Kalix'},{id:'2514',name:'Övertorneå'},
+    {id:'2518',name:'Pajala'},{id:'2521',name:'Gällivare'},{id:'2523',name:'Älvsbyn'},
+    {id:'2560',name:'Luleå'},{id:'2581',name:'Piteå'},{id:'2582',name:'Boden'},
+    {id:'2583',name:'Haparanda'},{id:'2584',name:'Kiruna'},
+  ]},
+];
+
+/* ══════════════════════════════════════════════════════
+   Leaflet
+══════════════════════════════════════════════════════ */
+const map = L.map('map').setView([64.6, 18.0], 6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 18,
+}).addTo(map);
+
+let markerLayer   = L.layerGroup().addTo(map);
+let myPosMarker   = null;
+
+/* ══════════════════════════════════════════════════════
+   Helpers
+══════════════════════════════════════════════════════ */
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function setBar(state, msg) {
+  const bar = document.getElementById('sourceBar');
+  bar.className = 'source-bar ' + state;
+  document.getElementById('sourceMsg').textContent = msg;
+}
+
+/* ══════════════════════════════════════════════════════
+   Init
+══════════════════════════════════════════════════════ */
+function initPage() {
+  // Årsväljare
+  const selY = document.getElementById('selYear');
+  for (let y = THIS_YEAR; y >= 2010; y--) {
+    selY.innerHTML += `<option value="${y}">${y}</option>`;
+  }
+
+  // Länsväljare – alfabetisk, Västerbotten förvalt
+  const selC   = document.getElementById('selCounty');
+  const sorted = [...COUNTIES].sort((a,b) => a.name.localeCompare(b.name, 'sv'));
+  sorted.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id; opt.textContent = c.name;
+    if (c.id === DEFAULT_COUNTY) opt.selected = true;
+    selC.appendChild(opt);
+  });
+  populateMuni();
+
+  // Footer version
+  fetch(`${PROXY}/api/status`).then(r => r.json()).then(v => {
+    const started = (v.started_at || '').replace('T',' ').slice(0,16);
+    document.getElementById('footerVersion').textContent = `v${v.version} · Startad ${started}`;
+  }).catch(() => {});
+}
+
+function populateMuni() {
+  const cid    = document.getElementById('selCounty').value;
+  const county = COUNTIES.find(c => c.id === cid);
+  const sel    = document.getElementById('selMuni');
+  const lname  = county ? county.name.replace(' län','') : '';
+  sel.innerHTML = `<option value="">– Hela ${lname} –</option>`;
+  if (county) {
+    [...county.kommuner]
+      .sort((a,b) => a.name.localeCompare(b.name, 'sv'))
+      .forEach(k => sel.innerHTML += `<option value="${k.id}">${k.name}</option>`);
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   Fetch
+══════════════════════════════════════════════════════ */
+async function fetchBreeding() {
+  const year    = document.getElementById('selYear').value;
+  const county  = document.getElementById('selCounty').value;
+  const rawMuni = document.getElementById('selMuni').value;
+  const minAct  = document.getElementById('selActivity').value;
+
+  const muni = rawMuni ? String(parseInt(rawMuni, 10)) : '';
+
+  const countyObj  = COUNTIES.find(c => c.id === county);
+  const countyName = countyObj ? countyObj.name : county;
+  const muniSel    = document.getElementById('selMuni');
+  const muniName   = rawMuni ? muniSel.options[muniSel.selectedIndex].text : null;
+  const areaLabel  = muniName || countyName;
+
+  setBar('loading', `Hämtar häckningsdata för ${areaLabel} ${year}…`);
+  document.getElementById('btnFetch').disabled = true;
+
+  const params = new URLSearchParams({ year, county, minActivity: minAct });
+  if (muni) params.set('municipality', muni);
+
+  try {
+    const resp = await fetch(`${PROXY}/api/breeding?${params}`,
+                             { signal: AbortSignal.timeout(90000) });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    renderBreeding(json, areaLabel, year);
+    setBar('ok', `✓ ${json.total.toLocaleString('sv')} häckningsobservationer – ${areaLabel} ${year}`);
+  } catch (e) {
+    setBar('error', 'Fel vid hämtning: ' + e.message);
+  } finally {
+    document.getElementById('btnFetch').disabled = false;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   Render
+══════════════════════════════════════════════════════ */
+function renderBreeding(json, areaLabel, year) {
+  const obs = json.observations || [];
+
+  // Truncation warning
+  document.getElementById('truncWarn').style.display = json.truncated ? '' : 'none';
+
+  // Clear previous markers
+  markerLayer.clearLayers();
+
+  // Aggregera
+  const catCount = { A: 0, B: 0, C: 0 };
+  const species  = {};   // nyckel → { sv, sci, key, A, B, C }
+  const bounds   = [];
+
+  obs.forEach(o => {
+    const cat = actCat(o.act);
+    catCount[cat]++;
+
+    const spKey = o.key || o.sci || o.sv;
+    if (!species[spKey]) {
+      species[spKey] = { sv: o.sv, sci: o.sci, key: o.key, A: 0, B: 0, C: 0 };
+    }
+    species[spKey][cat]++;
+
+    bounds.push([o.lat, o.lon]);
+
+    // Cirkelmarkör på kartan
+    const m = L.circleMarker([o.lat, o.lon], {
+      radius:      6,
+      fillColor:   actColor(o.act),
+      color:       actBorder(o.act),
+      weight:      1.5,
+      fillOpacity: 0.82,
+    });
+
+    const actLabel = ACT_LABELS[o.act] || `Häckningskod ${o.act}`;
+    const catLabel = cat === 'C' ? 'Säker' : cat === 'B' ? 'Sannolik' : 'Möjlig';
+    m.bindPopup(
+      `<div style="min-width:180px">` +
+      `<div style="font-weight:700;font-size:.9rem">${esc(o.sv)}</div>` +
+      `<div style="font-style:italic;font-size:.75rem;color:#718096;margin-bottom:.4rem">${esc(o.sci)}</div>` +
+      `<div style="font-size:.78rem;margin-bottom:.25rem">` +
+        `<span style="font-weight:600;color:${actColor(o.act) === '#f6e05e' ? '#b7791f' : actColor(o.act) === '#ed8936' ? '#c05621' : '#9b2c2c'}">` +
+        `${catLabel} häckning (${cat})</span></div>` +
+      `<div style="font-size:.75rem;color:#4a5568">${esc(actLabel)}</div>` +
+      (o.site ? `<div style="font-size:.75rem;color:#718096;margin-top:.2rem">📍 ${esc(o.site)}</div>` : '') +
+      (o.date ? `<div style="font-size:.75rem;color:#718096">📅 ${o.date.slice(0,10)}</div>` : '') +
+      `</div>`,
+      { maxWidth: 260 }
+    );
+    markerLayer.addLayer(m);
+  });
+
+  // Zooma kartan
+  if (bounds.length > 0) {
+    map.fitBounds(L.latLngBounds(bounds).pad(0.08));
+  }
+
+  // KPI-chip
+  document.getElementById('kpiObs').textContent    = obs.length.toLocaleString('sv');
+  document.getElementById('kpiArter').textContent  = Object.keys(species).length.toLocaleString('sv');
+  document.getElementById('kpiA').textContent      = catCount.A.toLocaleString('sv');
+  document.getElementById('kpiB').textContent      = catCount.B.toLocaleString('sv');
+  document.getElementById('kpiC').textContent      = catCount.C.toLocaleString('sv');
+
+  // Artlista – sorterad: flest säkra → sannolik → möjlig
+  const rows = Object.values(species)
+    .map(s => ({ ...s, tot: s.A + s.B + s.C }))
+    .sort((a, b) => b.C - a.C || b.B - a.B || b.A - a.A);
+
+  if (!rows.length) {
+    document.getElementById('spTableWrap').innerHTML =
+      '<div class="empty-msg"><div class="icon">🔍</div>Inga häckningsobservationer hittades med dessa filter.</div>';
+    return;
+  }
+
+  document.getElementById('spTableWrap').innerHTML =
+    `<table class="sp-table">
+      <thead><tr>
+        <th>Art</th>
+        <th class="num">A – Möjlig</th>
+        <th class="num">B – Sannolik</th>
+        <th class="num">C – Säker</th>
+        <th class="num">Totalt</th>
+      </tr></thead>
+      <tbody>
+      ${rows.map(s => {
+        const url  = s.key ? `https://artfakta.artdatabanken.se/taxon/${s.key}` : null;
+        const name = url
+          ? `<a href="${url}" target="_blank">${esc(s.sv || s.sci)}</a>`
+          : esc(s.sv || s.sci);
+        return `<tr>
+          <td><div class="sp-sv">${name}</div><div class="sp-sci">${esc(s.sci)}</div></td>
+          <td style="text-align:center">${s.A ? `<span class="badge badge-a">${s.A}</span>` : ''}</td>
+          <td style="text-align:center">${s.B ? `<span class="badge badge-b">${s.B}</span>` : ''}</td>
+          <td style="text-align:center">${s.C ? `<span class="badge badge-c">${s.C}</span>` : ''}</td>
+          <td style="text-align:center"><span class="tot-num">${s.tot}</span></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   Geolokalisering
+══════════════════════════════════════════════════════ */
+function gotoMyLocation() {
+  if (!navigator.geolocation) {
+    alert('Geolokalisering stöds inte av din webbläsare.');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+    map.setView([lat, lon], 11);
+    if (myPosMarker) myPosMarker.remove();
+    myPosMarker = L.circleMarker([lat, lon], {
+      radius: 9, fillColor: '#3182ce', color: 'white', weight: 2.5, fillOpacity: .9,
+    }).addTo(map).bindPopup('📍 Din position').openPopup();
+  }, err => {
+    alert('Kunde inte hämta position: ' + err.message);
+  });
+}
+
+initPage();
+</script>
+</body>
+</html>

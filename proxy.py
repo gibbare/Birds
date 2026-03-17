@@ -411,6 +411,107 @@ def get_observations():
     return jsonify(resp.json())
 
 
+@app.route("/api/breeding")
+def get_breeding():
+    """Häckningsobservationer med koordinater för vald region och år."""
+    if not _session["access_token"] and not _session["subscription_key"]:
+        return jsonify({"error": "Inte inloggad."}), 401
+
+    year         = (request.args.get("year")         or str(_dt.date.today().year)).strip()
+    county       = (request.args.get("county")       or VASTERBOTTEN_FEATURE_ID).strip()
+    municipality = (request.args.get("municipality") or "").strip()
+    try:
+        min_act = max(1, int(request.args.get("minActivity") or 1))
+    except ValueError:
+        min_act = 1
+
+    area_type  = "Municipality" if municipality else "County"
+    feature_id = municipality if municipality else county
+    try:
+        feature_id = str(int(feature_id))
+    except ValueError:
+        pass
+
+    body = {
+        "taxon": {"ids": [AVES_TAXON_ID], "includeUnderlyingTaxa": True},
+        "date": {
+            "startDate": f"{year}-01-01",
+            "endDate":   f"{year}-12-31",
+            "dateFilterType": "OverlappingStartDateAndEndDate",
+        },
+        "geographics": {
+            "areas": [{"areaType": area_type, "featureId": feature_id}],
+        },
+        "birdNestActivityLimit": {"id": min_act},
+    }
+
+    all_obs = []
+    take    = 1000
+    MAX_OBS = 5000
+
+    for page in range(50):
+        skip = page * take
+        if skip + take > 50000:
+            break
+        try:
+            resp = requests.post(
+                f"{SOS_API_BASE}/Observations/Search",
+                headers=_auth_headers(),
+                json=body,
+                params={"skip": skip, "take": take},
+                timeout=30,
+            )
+        except requests.RequestException as e:
+            _log_error(f"breeding p{page}: {e}")
+            break
+        if not resp.ok:
+            _log_error(f"breeding HTTP {resp.status_code}: {resp.text[:200]}")
+            break
+        data    = resp.json()
+        records = data if isinstance(data, list) else data.get("records", [])
+        all_obs.extend(records)
+        if len(records) < take or len(all_obs) >= MAX_OBS:
+            break
+
+    out = []
+    for obs in all_obs:
+        loc   = obs.get("location")   or {}
+        occ   = obs.get("occurrence") or {}
+        taxon = obs.get("taxon")      or {}
+        event = obs.get("event")      or {}
+
+        lat = loc.get("decimalLatitude")
+        lon = loc.get("decimalLongitude")
+        if lat is None or lon is None:
+            continue
+
+        act_raw = occ.get("birdNestActivityId")
+        if isinstance(act_raw, dict):
+            act = int(act_raw.get("id") or 0)
+        else:
+            act = int(act_raw or 0)
+        if act < 1:
+            continue   # Hoppa över obs utan häckningskod
+
+        out.append({
+            "lat":  lat,
+            "lon":  lon,
+            "sv":   taxon.get("vernacularName")    or "",
+            "sci":  taxon.get("scientificName")    or "",
+            "key":  taxon.get("id"),
+            "act":  act,
+            "cnt":  occ.get("organismQuantityInt") or 1,
+            "site": loc.get("locality")            or "",
+            "date": event.get("startDate")         or "",
+        })
+
+    return jsonify({
+        "total":       len(out),
+        "truncated":   len(all_obs) >= MAX_OBS,
+        "observations": out,
+    })
+
+
 @app.route("/api/debug/token")
 def debug_token():
     return jsonify({
