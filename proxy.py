@@ -432,6 +432,22 @@ def get_breeding():
     except ValueError:
         pass
 
+    # ── Cache-kontroll ──────────────────────────────────────────────────────
+    cache_path   = f"breeding_cache_{feature_id}_{year}_{min_act}.json"
+    today        = str(_dt.date.today())
+    current_year = str(_dt.date.today().year)
+
+    if _os.path.exists(cache_path):
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as _cf:
+                _cached = _json.load(_cf)
+            # Innevarande år: cacha en dag; äldre år: cachas permanent
+            if year != current_year or _cached.get('cached_date') == today:
+                print(f"  breeding: cache-träff {cache_path}")
+                return jsonify(_cached['payload'])
+        except Exception as _ce:
+            _log_error(f"breeding cache read: {_ce}")
+
     # SOS returnerar inte häckningsnivå i svaret – bestäm kategori via tre anrop:
     #   Tier A+B+C : birdNestActivityLimit >= 1
     #   Tier B+C   : birdNestActivityLimit >= 5
@@ -520,25 +536,36 @@ def get_breeding():
             act = 1    # Möjlig häckning (A)
 
         out.append({
-            "lat":  lat,
-            "lon":  lon,
-            "sv":   taxon.get("vernacularName")    or "",
-            "sci":  taxon.get("scientificName")    or "",
-            "key":  taxon.get("id"),
-            "act":  act,
-            "cnt":  occ.get("organismQuantityInt") or 1,
-            "site": loc.get("locality")            or "",
-            "date": event.get("startDate")         or "",
+            "lat":      lat,
+            "lon":      lon,
+            "sv":       taxon.get("vernacularName")    or "",
+            "sci":      taxon.get("scientificName")    or "",
+            "key":      taxon.get("id"),
+            "act":      act,
+            "cnt":      occ.get("organismQuantityInt") or 1,
+            "site":     loc.get("locality")            or "",
+            "date":     event.get("startDate")         or "",
+            "reporter": occ.get("recordedBy") or occ.get("reportedBy") or "",
         })
 
     print(f"  breeding: abc={len(tier_abc)} bc={len(tier_bc)} "
           f"c={len(tier_c)} out={len(out)}")
 
-    return jsonify({
+    payload = {
         "total":       len(out),
         "truncated":   len(tier_abc) >= 5000,
         "observations": out,
-    })
+    }
+
+    # ── Spara till cache ────────────────────────────────────────────────────
+    try:
+        with open(cache_path, 'w', encoding='utf-8') as _cf:
+            _json.dump({"cached_date": today, "payload": payload}, _cf,
+                       ensure_ascii=False)
+    except Exception as _ce:
+        _log_error(f"breeding cache write: {_ce}")
+
+    return jsonify(payload)
 
 
 @app.route("/api/breeding/probe")
