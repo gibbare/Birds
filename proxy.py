@@ -417,7 +417,7 @@ def get_breeding():
     if not _session["access_token"] and not _session["subscription_key"]:
         return jsonify({"error": "Inte inloggad."}), 401
 
-    year         = (request.args.get("year")         or str(_dt.date.today().year)).strip()
+    year         = (request.args.get("year")         or str(_date_type.today().year)).strip()
     county       = (request.args.get("county")       or VASTERBOTTEN_FEATURE_ID).strip()
     municipality = (request.args.get("municipality") or "").strip()
     try:
@@ -434,8 +434,8 @@ def get_breeding():
 
     # ── Cache-kontroll ──────────────────────────────────────────────────────
     cache_path   = f"breeding_cache_{feature_id}_{year}_{min_act}.json"
-    today        = str(_dt.date.today())
-    current_year = str(_dt.date.today().year)
+    today        = str(_date_type.today())
+    current_year = str(_date_type.today().year)
 
     if _os.path.exists(cache_path):
         try:
