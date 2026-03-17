@@ -491,6 +491,10 @@
       <div class="trend" id="kpiRapTrend"> </div>
     </div>
   </div>
+  <!-- Fotnot om top-200-begränsning (visas bara vid kommunfilter) -->
+  <div id="kpiFootnote" style="display:none;font-size:.68rem;color:#a0aec0;margin-top:-.75rem;margin-bottom:1.1rem;padding:0 .25rem">
+    * Värdena beräknas ur de 200 vanligaste arterna och kan vara lägre än verkliga totaler.
+  </div>
 
   <!-- Månadsdiagram (alltid synligt) -->
   <div class="card" id="monthChartCard" style="margin-bottom:1rem">
@@ -751,6 +755,7 @@ async function fetchStats(year, countyId) {
     return;
   }
 
+  _kpiPending();
   setSourceBar('building', `Hämtar ${year}…`);
 
   try {
@@ -999,6 +1004,16 @@ function _appendRapRows(count) {
 }
 
 
+/* Visa väntläge i KPI-korten (t.ex. när ett nytt år/län hämtas) */
+function _kpiPending() {
+  ['kpiArter','kpiObs','kpiInd','kpiRap'].forEach(id =>
+    document.getElementById(id).textContent = '…');
+  document.getElementById('kpiArterTrend').textContent = 'Hämtar data…';
+  ['kpiObsTrend','kpiIndTrend','kpiRapTrend'].forEach(id =>
+    document.getElementById(id).textContent = '');
+  document.getElementById('kpiFootnote').style.display = 'none';
+}
+
 /* Räkna ut per-kommun månadsdata från muni_month_species */
 function _muniMonthly(d, feid) {
   return Array.from({length: 12}, (_, i) => {
@@ -1048,10 +1063,14 @@ function updateKpi(d, month, feid) {
   document.getElementById('kpiInd').textContent   = (typeof ind   === 'number') ? ind.toLocaleString('sv')   : '–';
   document.getElementById('kpiRap').textContent   = (typeof reporters === 'number') ? reporters.toLocaleString('sv') : '–';
 
-  document.getElementById('kpiArterTrend').textContent = month && !feid ? MÅNADER_FULL[month - 1] : 'registrerade arter';
-  document.getElementById('kpiObsTrend').textContent   = 'observationer';
-  document.getElementById('kpiIndTrend').textContent   = 'individer';
+  const ast = feid ? ' *' : '';   // asterisk vid kommunfilter
+  document.getElementById('kpiArterTrend').textContent = (month && !feid ? MÅNADER_FULL[month - 1] : 'registrerade arter') + ast;
+  document.getElementById('kpiObsTrend').textContent   = 'observationer' + ast;
+  document.getElementById('kpiIndTrend').textContent   = 'individer' + ast;
   document.getElementById('kpiRapTrend').textContent   = 'aktiva rapportörer';
+
+  // Visa/dölj fotnoten beroende på om kommunfilter är aktivt
+  document.getElementById('kpiFootnote').style.display = feid ? '' : 'none';
 }
 
 function updateLabels() {
