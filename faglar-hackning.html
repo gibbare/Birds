@@ -17,18 +17,26 @@
       background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
       color: white; padding: .75rem 1.25rem;
       display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: nowrap;
       position: sticky; top: 0; z-index: 1000;
       box-shadow: 0 2px 8px rgba(0,0,0,.2);
     }
-    header h1 { font-size: 1.15rem; font-weight: 700; }
-    header nav { display: flex; gap: .4rem; }
+    header h1 {
+      font-size: 1.15rem; font-weight: 700;
+      min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    header nav { display: flex; gap: .4rem; flex-shrink: 0; }
     header nav a {
       color: rgba(255,255,255,.75); text-decoration: none;
       font-size: .8rem; padding: .3rem .65rem;
       border-radius: 6px; transition: background .15s;
+      white-space: nowrap;
     }
     header nav a:hover, header nav a.active {
       background: rgba(255,255,255,.15); color: white;
+    }
+    @media (max-width: 480px) {
+      .nav-text { display: none; }
     }
 
     /* ── Status bar ── */
@@ -45,29 +53,40 @@
       background: currentColor; flex-shrink: 0;
     }
 
-    /* ── Controls ── */
-    .nav-bar {
+    /* ── Filter bar ── */
+    .filter-bar {
       background: white; border-bottom: 1px solid #e2e8f0;
-      padding: .5rem 1rem; display: flex; align-items: center;
-      gap: .5rem; flex-wrap: wrap;
+      padding: .45rem .75rem;
+      display: flex; gap: .45rem; flex-wrap: wrap; align-items: flex-end;
     }
-    .nav-label { font-size: .72rem; color: #718096; white-space: nowrap; }
-    .nav-select {
-      font-size: .82rem; padding: .3rem .55rem;
-      border: 1px solid #e2e8f0; border-radius: 7px;
-      background: #f7fafc; cursor: pointer;
+    .filter-group { display: flex; flex-direction: column; gap: .12rem; flex: 1 1 120px; min-width: 0; }
+    .filter-group.narrow { flex: 0 0 62px; }
+    .filter-group.wide   { flex: 2 1 160px; }
+    .filter-group label  { font-size: .62rem; font-weight: 600; color: #718096; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+    .fsel {
+      font-size: .8rem; padding: .28rem .4rem;
+      border: 1px solid #e2e8f0; border-radius: 6px;
+      background: #f7fafc; cursor: pointer; width: 100%;
     }
-    .nav-select:focus { outline: none; border-color: #4299e1; }
-    .nav-btn {
-      font-size: .82rem; padding: .32rem .9rem;
-      border: none; border-radius: 7px; cursor: pointer;
-      font-weight: 600; transition: background .15s, opacity .15s;
+    .fsel:focus { outline: none; border-color: #4299e1; }
+    .filter-actions { display: flex; gap: .3rem; align-items: flex-end; flex-shrink: 0; }
+    .btn-fetch {
+      font-size: .82rem; padding: .3rem .9rem; border: none;
+      border-radius: 6px; background: #2c5282; color: white;
+      font-weight: 600; cursor: pointer;
     }
-    .nav-btn.primary   { background: #2c5282; color: white; }
-    .nav-btn.primary:hover  { background: #2a4a7f; }
-    .nav-btn.primary:disabled { opacity: .55; cursor: default; }
-    .nav-btn.secondary { background: #e2e8f0; color: #4a5568; }
-    .nav-btn.secondary:hover { background: #cbd5e0; }
+    .btn-fetch:hover    { background: #2a4a7f; }
+    .btn-fetch:disabled { opacity: .55; cursor: default; }
+    .btn-geo {
+      font-size: 1rem; padding: .28rem .55rem; border: none;
+      border-radius: 6px; background: #e2e8f0; cursor: pointer;
+    }
+    .btn-geo:hover { background: #cbd5e0; }
+    @media (max-width: 540px) {
+      .filter-bar { display: grid; grid-template-columns: 1fr 1fr; }
+      .filter-group.wide { grid-column: 1 / -1; }
+      .filter-actions    { grid-column: 1 / -1; justify-content: flex-end; }
+    }
 
     /* ── Container ── */
     .container { max-width: 1200px; margin: 1rem auto; padding: 0 1rem 3rem; }
@@ -80,21 +99,19 @@
       margin-bottom: .75rem;
     }
 
-    /* ── Legend ── */
-    .legend {
-      display: flex; gap: 1.25rem; align-items: center;
-      font-size: .78rem; color: #4a5568;
-      margin-bottom: 1rem; flex-wrap: wrap;
+    /* ── Map legend (inline, compact) ── */
+    .map-legend {
+      display: flex; gap: .8rem; flex-wrap: wrap; align-items: center;
+      font-size: .67rem; color: #718096; margin-bottom: .55rem;
     }
-    .legend-item { display: flex; align-items: center; gap: .4rem; }
-    .legend-dot {
-      width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
-      border: 2px solid rgba(0,0,0,.2);
+    .ml-dot {
+      display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+      border: 1.5px solid rgba(0,0,0,.2); margin-right: .2rem; vertical-align: middle;
     }
-    .dot-a { background: #f6e05e; }
-    .dot-b { background: #ed8936; }
-    .dot-c { background: #c53030; }
-    .legend-sep { color: #cbd5e0; }
+    .dot-a   { background: #f6e05e; }
+    .dot-b   { background: #ed8936; }
+    .dot-c   { background: #c53030; }
+    .dot-pos { background: #3182ce; border-color: white; }
 
     /* ── KPI strip ── */
     .kpi-strip {
@@ -178,9 +195,9 @@
 <header>
   <h1><img src="eagle_ico.png" style="height:1.4rem;vertical-align:middle;margin-right:.4rem"> Fågelobservationer</h1>
   <nav>
-    <a href="faglar-vasterbotten.html">📋 Dagslista</a>
-    <a href="faglar-statistik.html">📊 Statistik</a>
-    <a href="faglar-hackning.html" class="active">🥚 Häckning</a>
+    <a href="faglar-vasterbotten.html">📋 <span class="nav-text">Dagslista</span></a>
+    <a href="faglar-statistik.html">📊 <span class="nav-text">Statistik</span></a>
+    <a href="faglar-hackning.html" class="active">🥚 <span class="nav-text">Häckning</span></a>
   </nav>
 </header>
 
@@ -189,26 +206,32 @@
   <span id="sourceMsg">Välj område och år, klicka sedan Hämta</span>
 </div>
 
-<!-- Controls -->
-<div class="nav-bar">
-  <span class="nav-label">År</span>
-  <select class="nav-select" id="selYear"></select>
-
-  <span class="nav-label">Län</span>
-  <select class="nav-select" id="selCounty" onchange="populateMuni()"></select>
-
-  <span class="nav-label">Kommun</span>
-  <select class="nav-select" id="selMuni"></select>
-
-  <span class="nav-label">Minsta nivå</span>
-  <select class="nav-select" id="selActivity">
-    <option value="1">Alla häckningsnoteringar (A + B + C)</option>
-    <option value="5">Sannolik + Säker (B + C)</option>
-    <option value="13">Säker häckning (C)</option>
-  </select>
-
-  <button class="nav-btn primary" id="btnFetch" onclick="fetchBreeding()">Hämta</button>
-  <button class="nav-btn secondary" onclick="gotoMyLocation()">📍 Min position</button>
+<!-- Filter bar -->
+<div class="filter-bar">
+  <div class="filter-group narrow">
+    <label for="selYear">År</label>
+    <select class="fsel" id="selYear" onchange="onFilterChange()"></select>
+  </div>
+  <div class="filter-group">
+    <label for="selCounty">Län</label>
+    <select class="fsel" id="selCounty" onchange="onCountyChange()"></select>
+  </div>
+  <div class="filter-group">
+    <label for="selMuni">Kommun</label>
+    <select class="fsel" id="selMuni" onchange="onFilterChange()"></select>
+  </div>
+  <div class="filter-group wide">
+    <label for="selActivity">Minsta häckningsnivå</label>
+    <select class="fsel" id="selActivity" onchange="onFilterChange()">
+      <option value="1">Alla (A + B + C)</option>
+      <option value="5">Sannolik + Säker (B + C)</option>
+      <option value="13">Säker häckning (C)</option>
+    </select>
+  </div>
+  <div class="filter-actions">
+    <button class="btn-fetch" id="btnFetch" onclick="fetchBreeding()">Hämta</button>
+    <button class="btn-geo" onclick="gotoMyLocation()" title="Min position">📍</button>
+  </div>
 </div>
 
 <div class="container">
@@ -216,15 +239,12 @@
   <!-- Leaflet map -->
   <div id="map"></div>
 
-  <!-- Legend -->
-  <div class="legend">
-    <div class="legend-item"><div class="legend-dot dot-a"></div> A – Möjlig häckning (kod 1–4)</div>
-    <span class="legend-sep">|</span>
-    <div class="legend-item"><div class="legend-dot dot-b"></div> B – Sannolik häckning (kod 5–12)</div>
-    <span class="legend-sep">|</span>
-    <div class="legend-item"><div class="legend-dot dot-c"></div> C – Säker häckning (kod 13+)</div>
-    <span class="legend-sep">|</span>
-    <div class="legend-item" style="color:#3182ce">● Din position</div>
+  <!-- Inline legend -->
+  <div class="map-legend">
+    <span><span class="ml-dot dot-a"></span>A – Möjlig</span>
+    <span><span class="ml-dot dot-b"></span>B – Sannolik</span>
+    <span><span class="ml-dot dot-c"></span>C – Säker</span>
+    <span><span class="ml-dot dot-pos"></span>Min plats</span>
   </div>
 
   <!-- KPI chips -->
@@ -470,6 +490,33 @@ function setBar(state, msg) {
   const bar = document.getElementById('sourceBar');
   bar.className = 'source-bar ' + state;
   document.getElementById('sourceMsg').textContent = msg;
+}
+
+/* ══════════════════════════════════════════════════════
+   KPI pending state
+══════════════════════════════════════════════════════ */
+function _clearKpi() {
+  ['kpiObs','kpiArter','kpiA','kpiB','kpiC'].forEach(id =>
+    document.getElementById(id).textContent = '–');
+}
+
+function onFilterChange() {
+  _clearKpi();
+  markerLayer.clearLayers();
+  document.getElementById('truncWarn').style.display = 'none';
+  _showEmptyMsg('🥚', 'Tryck <strong>Hämta</strong> för att hämta data för det valda urvalet.');
+  document.getElementById('sourceBar').className = 'source-bar';
+  document.getElementById('sourceMsg').textContent = 'Välj område och år, klicka sedan Hämta';
+}
+
+function onCountyChange() {
+  populateMuni();
+  onFilterChange();
+}
+
+function _showEmptyMsg(icon, text) {
+  document.getElementById('spTableWrap').innerHTML =
+    `<div class="empty-msg"><div class="icon">${icon}</div>${text}</div>`;
 }
 
 /* ══════════════════════════════════════════════════════
