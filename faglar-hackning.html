@@ -595,7 +595,7 @@ async function fetchBreeding() {
 
   setBar('loading', `Hämtar häckningsdata för ${areaLabel} ${year}…`);
   document.getElementById('btnFetch').disabled = true;
-  document.getElementById('loadingIcon').style.display = '';
+  document.getElementById('loadingIcon').style.display = 'inline-block';
 
   const params = new URLSearchParams({ year, county, minActivity: minAct });
   if (muni) params.set('municipality', muni);
