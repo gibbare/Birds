@@ -432,7 +432,8 @@ def get_breeding():
     except ValueError:
         pass
 
-    body = {
+    # Känd SOS-filterfält för häckningsaktivitet – testa båda varianter
+    body_with_filter = {
         "taxon": {"ids": [AVES_TAXON_ID], "includeUnderlyingTaxa": True},
         "date": {
             "startDate": f"{year}-01-01",
@@ -445,9 +446,10 @@ def get_breeding():
         "birdNestActivityLimit": {"id": min_act},
     }
 
-    all_obs = []
-    take    = 1000
-    MAX_OBS = 5000
+    all_obs      = []
+    take         = 1000
+    MAX_OBS      = 5000
+    api_total    = 0   # hur många API returnerade innan vår filtrering
 
     for page in range(50):
         skip = page * take
@@ -457,7 +459,7 @@ def get_breeding():
             resp = requests.post(
                 f"{SOS_API_BASE}/Observations/Search",
                 headers=_auth_headers(),
-                json=body,
+                json=body_with_filter,
                 params={"skip": skip, "take": take},
                 timeout=30,
             )
@@ -465,15 +467,21 @@ def get_breeding():
             _log_error(f"breeding p{page}: {e}")
             break
         if not resp.ok:
-            _log_error(f"breeding HTTP {resp.status_code}: {resp.text[:200]}")
+            _log_error(f"breeding HTTP {resp.status_code}: {resp.text[:300]}")
             break
         data    = resp.json()
         records = data if isinstance(data, list) else data.get("records", [])
+        api_total += len(records)
         all_obs.extend(records)
         if len(records) < take or len(all_obs) >= MAX_OBS:
             break
 
-    out = []
+    # Extrahera häckningsfält – prova flera möjliga fältnamn
+    out          = []
+    no_coords    = 0
+    no_act       = 0
+    act_fieldname = None   # vilket fält vi hittade aktiviteten i
+
     for obs in all_obs:
         loc   = obs.get("location")   or {}
         occ   = obs.get("occurrence") or {}
@@ -483,15 +491,30 @@ def get_breeding():
         lat = loc.get("decimalLatitude")
         lon = loc.get("decimalLongitude")
         if lat is None or lon is None:
+            no_coords += 1
             continue
 
-        act_raw = occ.get("birdNestActivityId")
-        if isinstance(act_raw, dict):
-            act = int(act_raw.get("id") or 0)
-        else:
-            act = int(act_raw or 0)
+        # Prova kända fältnamn för häckningsaktivitet
+        act = 0
+        for field in ("birdNestActivityId", "birdNestActivity",
+                      "nestActivityId",     "breedingActivityId"):
+            raw = occ.get(field)
+            if raw is None:
+                continue
+            if isinstance(raw, dict):
+                act = int(raw.get("id") or 0)
+            else:
+                try:
+                    act = int(raw or 0)
+                except (TypeError, ValueError):
+                    act = 0
+            if act > 0:
+                act_fieldname = field
+                break
+
         if act < 1:
-            continue   # Hoppa över obs utan häckningskod
+            no_act += 1
+            continue
 
         out.append({
             "lat":  lat,
@@ -505,10 +528,78 @@ def get_breeding():
             "date": event.get("startDate")         or "",
         })
 
+    print(f"  breeding: api_total={api_total} no_coords={no_coords} "
+          f"no_act={no_act} out={len(out)} act_field={act_fieldname}")
+
     return jsonify({
         "total":       len(out),
         "truncated":   len(all_obs) >= MAX_OBS,
         "observations": out,
+        # Diagnostik – hjälper felsöka om 0 resultat returneras
+        "_diag": {
+            "api_total":    api_total,
+            "no_coords":    no_coords,
+            "no_act":       no_act,
+            "act_field":    act_fieldname,
+            "filter_used":  "birdNestActivityLimit",
+        },
+    })
+
+
+@app.route("/api/breeding/probe")
+def breeding_probe():
+    """Hämtar 5 råobservationer och returnerar fältnamnen i occurrence+location.
+       Används för att diagnostisera vilket fältnamn häckningsaktiviteten har."""
+    if not _session["access_token"] and not _session["subscription_key"]:
+        return jsonify({"error": "Inte inloggad."}), 401
+
+    # Hämta en handfull obs under häckningstid utan filter
+    body = {
+        "taxon": {"ids": [AVES_TAXON_ID], "includeUnderlyingTaxa": True},
+        "date": {"startDate": "2025-06-01", "endDate": "2025-06-30",
+                 "dateFilterType": "OverlappingStartDateAndEndDate"},
+        "geographics": {"areas": [{"areaType": "County", "featureId": "24"}]},
+    }
+    try:
+        r = requests.post(f"{SOS_API_BASE}/Observations/Search",
+                          headers=_auth_headers(), json=body,
+                          params={"skip": 0, "take": 20}, timeout=20)
+    except requests.RequestException as e:
+        return jsonify({"error": str(e)}), 503
+    if not r.ok:
+        return jsonify({"error": f"HTTP {r.status_code}", "detail": r.text[:400]}), r.status_code
+
+    data    = r.json()
+    records = data if isinstance(data, list) else data.get("records", [])
+
+    samples = []
+    for obs in records[:5]:
+        occ = obs.get("occurrence") or {}
+        loc = obs.get("location")   or {}
+        # Visa alla fält – filtrera inga
+        samples.append({
+            "occurrence": occ,
+            "location_keys": list(loc.keys()),
+        })
+
+    # Testa SAMMA anrop men MED häckningsfilter
+    body_f = dict(body)
+    body_f["birdNestActivityLimit"] = {"id": 1}
+    try:
+        r2 = requests.post(f"{SOS_API_BASE}/Observations/Search",
+                           headers=_auth_headers(), json=body_f,
+                           params={"skip": 0, "take": 10}, timeout=20)
+        filter_result = {
+            "status": r2.status_code,
+            "count":  len(r2.json() if isinstance(r2.json(), list) else r2.json().get("records", [])) if r2.ok else None,
+            "error":  r2.text[:400] if not r2.ok else None,
+        }
+    except Exception as e:
+        filter_result = {"error": str(e)}
+
+    return jsonify({
+        "without_filter_sample": samples,
+        "with_filter_test":      filter_result,
     })
 
 

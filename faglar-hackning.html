@@ -589,7 +589,15 @@ async function fetchBreeding() {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
     renderBreeding(json, areaLabel, year);
-    setBar('ok', `✓ ${json.total.toLocaleString('sv')} häckningsobservationer – ${areaLabel} ${year}`);
+    if (json.total > 0) {
+      setBar('ok', `✓ ${json.total.toLocaleString('sv')} häckningsobservationer – ${areaLabel} ${year}`);
+    } else {
+      const d = json._diag || {};
+      const hint = d.api_total > 0
+        ? `API returnerade ${d.api_total} obs men ingen med häckningskod (fält: ${d.act_field || 'ej hittat'})`
+        : `API returnerade 0 observationer – kontrollera att SOS-prenumerationen innehåller häckningsdata`;
+      setBar('error', `0 häckningsobservationer – ${hint}. Se /api/breeding/probe för diagnostik.`);
+    }
   } catch (e) {
     setBar('error', 'Fel vid hämtning: ' + e.message);
   } finally {
