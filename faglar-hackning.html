@@ -222,6 +222,7 @@
     </select>
   </div>
   <div class="filter-actions">
+    <img id="loadingIcon" src="dots_loading.png" style="display:none;height:1.5rem;vertical-align:middle">
     <button class="btn-fetch" id="btnFetch" onclick="fetchBreeding()">Hämta</button>
     <button class="btn-geo" onclick="gotoMyLocation()" title="Min position">📍</button>
   </div>
@@ -585,6 +586,7 @@ async function fetchBreeding() {
 
   setBar('loading', `Hämtar häckningsdata för ${areaLabel} ${year}…`);
   document.getElementById('btnFetch').disabled = true;
+  document.getElementById('loadingIcon').style.display = '';
 
   const params = new URLSearchParams({ year, county, minActivity: minAct });
   if (muni) params.set('municipality', muni);
@@ -605,6 +607,7 @@ async function fetchBreeding() {
     setBar('error', 'Fel vid hämtning: ' + e.message);
   } finally {
     document.getElementById('btnFetch').disabled = false;
+    document.getElementById('loadingIcon').style.display = 'none';
   }
 }
 
