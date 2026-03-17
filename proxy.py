@@ -582,18 +582,29 @@ def breeding_probe():
             "location_keys": list(loc.keys()),
         })
 
-    # Testa SAMMA anrop men MED häckningsfilter
+    # Testa SAMMA anrop MED häckningsfilter och returnera HELA occurrence-objektet
     body_f = dict(body)
     body_f["birdNestActivityLimit"] = 1
     try:
         r2 = requests.post(f"{SOS_API_BASE}/Observations/Search",
                            headers=_auth_headers(), json=body_f,
                            params={"skip": 0, "take": 10}, timeout=20)
-        filter_result = {
-            "status": r2.status_code,
-            "count":  len(r2.json() if isinstance(r2.json(), list) else r2.json().get("records", [])) if r2.ok else None,
-            "error":  r2.text[:400] if not r2.ok else None,
-        }
+        if r2.ok:
+            recs2   = r2.json() if isinstance(r2.json(), list) else r2.json().get("records", [])
+            with_samples = []
+            for obs in recs2[:5]:
+                occ = obs.get("occurrence") or {}
+                with_samples.append({
+                    "occurrence_keys":   list(occ.keys()),
+                    "occurrence_full":   occ,          # HELA objektet
+                })
+            filter_result = {
+                "status":  r2.status_code,
+                "count":   len(recs2),
+                "samples": with_samples,
+            }
+        else:
+            filter_result = {"status": r2.status_code, "error": r2.text[:400]}
     except Exception as e:
         filter_result = {"error": str(e)}
 
