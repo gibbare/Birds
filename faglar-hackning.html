@@ -14,30 +14,24 @@
 
     /* ── Header ── */
     header {
-      background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
-      color: white; padding: .75rem 1.25rem;
-      display: flex; align-items: center; justify-content: space-between;
-      flex-wrap: nowrap;
-      position: sticky; top: 0; z-index: 1000;
-      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      background: linear-gradient(135deg, #1a4a7a, #2b6cb0);
+      color: white; padding: 1.1rem 1.5rem .8rem;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
     }
-    header h1 {
-      font-size: 1.15rem; font-weight: 700;
-      min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+
+    /* ── Sidflikar (under headern) ── */
+    .page-tabs {
+      display: flex; justify-content: center; gap: 0; background: #163d6a;
     }
-    header nav { display: flex; gap: .4rem; flex-shrink: 0; }
-    header nav a {
-      color: rgba(255,255,255,.75); text-decoration: none;
-      font-size: .8rem; padding: .3rem .65rem;
-      border-radius: 6px; transition: background .15s;
-      white-space: nowrap;
+    .page-tab {
+      padding: .45rem 1.4rem; font-size: .78rem; font-weight: 700;
+      color: rgba(255,255,255,.65); text-decoration: none;
+      border-bottom: 3px solid transparent; letter-spacing: .02em;
     }
-    header nav a:hover, header nav a.active {
-      background: rgba(255,255,255,.15); color: white;
-    }
-    @media (max-width: 480px) {
-      .nav-text { display: none; }
-    }
+    .page-tab.active { color: white; border-bottom-color: #63b3ed; }
+    .page-tab:hover  { color: white; }
 
     /* ── Status bar ── */
     .source-bar {
@@ -193,13 +187,13 @@
 <body>
 
 <header>
-  <h1><img src="eagle_ico.png" style="height:1.4rem;vertical-align:middle;margin-right:.4rem"> Häckningskarta</h1>
-  <nav>
-    <a href="faglar-vasterbotten.html">📋 <span class="nav-text">Dagslista</span></a>
-    <a href="faglar-statistik.html">📊 <span class="nav-text">Statistik</span></a>
-    <a href="faglar-hackning.html" class="active">🥚 <span class="nav-text">Häckning</span></a>
-  </nav>
+  <h1><img src="duva_ico.png" style="height:1.4rem;vertical-align:middle;margin-right:.4rem"> Häckningskarta</h1>
 </header>
+<nav class="page-tabs">
+  <a href="faglar-vasterbotten.html" class="page-tab">📋 Dagslista</a>
+  <a href="faglar-statistik.html"    class="page-tab">📊 Statistik</a>
+  <a href="faglar-hackning.html"     class="page-tab active">🥚 Häckning</a>
+</nav>
 
 <div class="source-bar" id="sourceBar">
   <div class="dot"></div>
@@ -713,8 +707,8 @@ function renderBreeding(json, areaLabel, year) {
         const safeKey = esc(s.spKey);
         const safeSv  = esc(s.sv  || s.sci);
         const safeSci = esc(s.sci || '');
-        return `<tr data-name="${(s.sv||s.sci||'').toLowerCase()}" data-spkey="${safeKey}">
-          <td><div class="sp-sv"><a href="#" onclick="showReporters('${safeKey}','${safeSv}','${safeSci}');return false">${safeSv}</a></div><div class="sp-sci">${safeSci}</div></td>
+        return `<tr data-name="${(s.sv||s.sci||'').toLowerCase()}" data-spkey="${safeKey}" style="cursor:pointer" onclick="showReporters('${safeKey}','${safeSv}','${safeSci}')">
+          <td><div class="sp-sv">${safeSv}</div><div class="sp-sci">${safeSci}</div></td>
           <td style="text-align:center">${s.A ? `<span class="badge badge-a">${s.A}</span>` : ''}</td>
           <td style="text-align:center">${s.B ? `<span class="badge badge-b">${s.B}</span>` : ''}</td>
           <td style="text-align:center">${s.C ? `<span class="badge badge-c">${s.C}</span>` : ''}</td>
