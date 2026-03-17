@@ -866,7 +866,9 @@ function renderAll(year, month) {
   const rawFeid = document.getElementById('selRegion').value || null;
   const feid = rawFeid ? String(parseInt(rawFeid, 10)) : null;
 
-  renderMonthChart(d.monthly, month);
+  // Månadsdiagram: per-kommun om en kommun är vald, annars hela länet
+  const monthlyForChart = feid ? _muniMonthly(d, feid) : d.monthly;
+  renderMonthChart(monthlyForChart, month);
 
   // Välj rätt datakälla med fallback-kedja: kommun×månad → kommun → månad → helår
   let sp, rep;
@@ -886,7 +888,7 @@ function renderAll(year, month) {
 
   renderTopArter(sp);
   renderTopRap(rep);
-  updateKpi(d, month);
+  updateKpi(d, month, feid);
   updateLabels();
   updateCacheInfo(year, d);
 }
@@ -997,30 +999,59 @@ function _appendRapRows(count) {
 }
 
 
-function updateKpi(d, month) {
-  const kpi = d.kpi;
-  if (month) {
-    /* Månadsvy: visa obs för den månaden, övriga från kpi skalas proportionellt */
-    const monthObs = d.monthly[month - 1] || 0;
-    const scale    = kpi.obs > 0 ? monthObs / kpi.obs : 0;
-    document.getElementById('kpiArter').textContent = '–';
-    document.getElementById('kpiObs').textContent   = monthObs.toLocaleString('sv');
-    document.getElementById('kpiInd').textContent   = Math.round(kpi.ind * scale).toLocaleString('sv');
-    document.getElementById('kpiRap').textContent   = '–';
-    document.getElementById('kpiArterTrend').textContent = MÅNADER_FULL[month - 1];
-    document.getElementById('kpiObsTrend').textContent   = 'observationer';
-    document.getElementById('kpiIndTrend').textContent   = 'individer (uppskattning)';
-    document.getElementById('kpiRapTrend').textContent   = ' ';
+/* Räkna ut per-kommun månadsdata från muni_month_species */
+function _muniMonthly(d, feid) {
+  return Array.from({length: 12}, (_, i) => {
+    const sp = d.muni_month_species?.[feid]?.[i + 1];
+    return sp ? sp.reduce((s, a) => s + (a.obs || 0), 0) : 0;
+  });
+}
+
+function updateKpi(d, month, feid) {
+  let arter, obs, ind, reporters;
+
+  // Välj datakälla – samma fallback-kedja som för listorna
+  let sp, rep;
+  if (feid && month) {
+    sp  = d.muni_month_species?.[feid]?.[month]   || d.muni_species?.[feid]   || null;
+    rep = d.muni_month_reporters?.[feid]?.[month] || d.muni_reporters?.[feid] || null;
+  } else if (feid) {
+    sp  = d.muni_species?.[feid]   || null;
+    rep = d.muni_reporters?.[feid] || null;
+  } else if (month) {
+    sp  = d.month_species?.[month]   || null;
+    rep = d.month_reporters?.[month] || null;
   } else {
-    document.getElementById('kpiArter').textContent = kpi.arter.toLocaleString('sv');
-    document.getElementById('kpiObs').textContent   = kpi.obs.toLocaleString('sv');
-    document.getElementById('kpiInd').textContent   = kpi.ind.toLocaleString('sv');
-    document.getElementById('kpiRap').textContent   = kpi.reporters.toLocaleString('sv');
-    document.getElementById('kpiArterTrend').textContent = 'registrerade arter';
-    document.getElementById('kpiObsTrend').textContent   = 'observationer';
-    document.getElementById('kpiIndTrend').textContent   = 'individer';
-    document.getElementById('kpiRapTrend').textContent   = 'aktiva rapportörer';
+    sp = null; rep = null;  // helår, hela länet → använd d.kpi
   }
+
+  if (sp !== null || rep !== null) {
+    // Härleda KPI-värden ur listor
+    if (sp && sp.length) {
+      arter = sp.length;
+      obs   = sp.reduce((s, a) => s + (a.obs || 0), 0);
+      ind   = sp.reduce((s, a) => s + (a.ind || 0), 0);
+    } else {
+      arter = 0; obs = 0; ind = 0;
+    }
+    reporters = rep ? rep.length : 0;
+  } else {
+    // Förberäknade helårsvärden för hela länet
+    arter     = d.kpi.arter;
+    obs       = d.kpi.obs;
+    ind       = d.kpi.ind;
+    reporters = d.kpi.reporters;
+  }
+
+  document.getElementById('kpiArter').textContent = (typeof arter === 'number') ? arter.toLocaleString('sv') : '–';
+  document.getElementById('kpiObs').textContent   = (typeof obs   === 'number') ? obs.toLocaleString('sv')   : '–';
+  document.getElementById('kpiInd').textContent   = (typeof ind   === 'number') ? ind.toLocaleString('sv')   : '–';
+  document.getElementById('kpiRap').textContent   = (typeof reporters === 'number') ? reporters.toLocaleString('sv') : '–';
+
+  document.getElementById('kpiArterTrend').textContent = month && !feid ? MÅNADER_FULL[month - 1] : 'registrerade arter';
+  document.getElementById('kpiObsTrend').textContent   = 'observationer';
+  document.getElementById('kpiIndTrend').textContent   = 'individer';
+  document.getElementById('kpiRapTrend').textContent   = 'aktiva rapportörer';
 }
 
 function updateLabels() {
