@@ -330,7 +330,6 @@
     .obs-table thead th.col-rar    { width: 5%;  text-align: center; padding: .65rem .3rem; cursor: default; }
     .obs-table thead th.col-antal  { width: 8%;  text-align: right; }
     .obs-table thead th.col-art    { width: 17%; }
-    .obs-table thead th.col-akt    { width: 11%; }
     .obs-table thead th.col-huvud  { width: 22%; }
     .obs-table thead th.col-rap    { width: 20%; }
     .obs-table thead th.col-tid    { width: 17%; }
@@ -614,7 +613,6 @@
       .t-unit { font-size: .67rem; font-weight: 400; }
 
       /* ── Sekundärfält (rad 2): flödar inline, alla lika stil ── */
-      .obs-table td.col-akt,
       .obs-table td.col-huvud,
       .obs-table td.col-rap,
       .obs-table td.col-tid {
@@ -633,7 +631,6 @@
       }
 
       /* Göm celler vars enda innehåll är ett dolt t-empty-bindestreck */
-      .obs-table td.col-akt:has(.t-empty),
       .obs-table td.col-huvud:has(.t-empty),
       .obs-table td.col-rap:has(.t-empty),
       .obs-table td.col-tid:has(.t-empty) { display: none; }
@@ -1088,7 +1085,7 @@ function sosStr(val) {
 /* ── Normalisera SOS-svar till internt format ── */
 function normalizeSosResults(sosData) {
   const items = sosData.records || sosData.observations || sosData.results || [];
-  return items.map(obs => {
+return items.map(obs => {
     const taxon = obs.taxon          || {};
     const loc   = obs.location       || {};
     const occ   = obs.occurrence     || {};
@@ -1119,8 +1116,6 @@ function normalizeSosResults(sosData) {
     // Enhet
     const unit = sosStr(occ.unit) || sosStr(occ.organismQuantityUnit) || 'ex.';
 
-    // Aktivitet
-    const activity = sosStr(occ.activity) || sosStr(occ.behavior) || '';
 
     // Rapportör
     const reporter = sosStr(occ.reportedBy) || sosStr(occ.recordedBy) || '';
@@ -1161,7 +1156,6 @@ function normalizeSosResults(sosData) {
       vernacularName:  svName || enName || null,
       individualCount: indCount,
       unit,
-      activity,
       locality,
       site,
       reporter,
@@ -1333,7 +1327,6 @@ function sortedRows(rows) {
     let av, bv;
     switch (tableSortCol) {
       case 'antal': return dir * (a.individualCount - b.individualCount);
-      case 'akt':   av = a.activity;  bv = b.activity;  break;
       case 'lokal': av = a.locality;  bv = b.locality;  break;
       case 'huvud': av = a.site;      bv = b.site;      break;
       case 'rap':   av = a.reporter;  bv = b.reporter;  break;
@@ -1351,7 +1344,6 @@ function filteredRows(rows) {
   return rows.filter(r =>
     (r.vernacularName||'').toLowerCase().includes(q) ||
     r.scientificName.toLowerCase().includes(q) ||
-    (r.activity||'').toLowerCase().includes(q) ||
     (r.locality||'').toLowerCase().includes(q) ||
     (r.site||'').toLowerCase().includes(q) ||
     (r.reporter||'').toLowerCase().includes(q));
@@ -1609,7 +1601,6 @@ function renderMapMarkers() {
       marker.bindPopup(`
         <b>${escHtml(name)}</b><br>
         ${row.individualCount} ${escHtml(row.unit)}
-        ${row.activity  ? `<br>${escHtml(row.activity)}`  : ''}
         ${row.reporter  ? `<br>${escHtml(row.reporter)}`  : ''}
         ${row.startDT   ? `<br>${escHtml(row.startDT)}`   : ''}
         ${uncertainty}${apLink}
@@ -1716,7 +1707,6 @@ function renderTable(content, jumpNotice) {
           <tr>
             ${th('art',   'Artnamn',       'col-art')}
             ${th('antal', 'Antal & enhet', 'col-antal')}
-            ${th('akt',   'Aktivitet',     'col-akt')}
             ${th('huvud', 'Huvudlokal',    'col-huvud')}
             ${th('rap',   'Rapportör',     'col-rap')}
             ${th('tid',   'Start–Slut',    'col-tid')}
@@ -1741,7 +1731,6 @@ function renderTable(content, jumpNotice) {
           ${sci ? `<span class="t-art-sci">${escHtml(sci)}</span>` : ''}
         </td>
         <td class="col-antal">${row.individualCount}<span class="t-unit">${escHtml(row.unit)}</span></td>
-        <td class="col-akt">${row.activity ? escHtml(row.activity) : '<span class="t-empty">–</span>'}</td>
         <td class="col-huvud">${row.site   ? escHtml(row.site)     : '<span class="t-empty">–</span>'}</td>
         <td class="col-rap">${row.reporter ? escHtml(row.reporter) : '<span class="t-empty">–</span>'}</td>
         <td class="col-tid">${fmtTidCell(row.startDT, row.endDT)}</td>
@@ -1770,7 +1759,6 @@ function renderTable(content, jumpNotice) {
               ${sci ? `<span class="t-art-sci">${escHtml(sci)}</span>` : ''}
             </td>
             <td class="col-antal">${g.totalCount}<span class="t-unit"> · ${g.rows.length} obs</span></td>
-            <td class="col-akt"><span class="t-empty">–</span></td>
             <td class="col-huvud"><span class="t-empty">–</span></td>
             <td class="col-rap"><span class="t-empty">–</span></td>
             <td class="col-tid"><span class="t-empty">–</span></td>
