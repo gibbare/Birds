@@ -288,23 +288,12 @@ const DEFAULT_COUNTY = '24';   // Västerbottens län
 /* ══════════════════════════════════════════════════════
    Häckningskoder (Artportalen-standard)
 ══════════════════════════════════════════════════════ */
+// SOS API returnerar inte enskild häckningskod – vi bestämmer kategori
+// via tre separata anrop med olika trösklar (1/5/13).
 const ACT_LABELS = {
-  1: 'Art i lämplig biotop under häckningstid',
-  2: 'Sjungande hane under häckningstid',
-  3: 'Par observerat under häckningstid',
-  4: 'Permanent revir (stadigvarande mellan besök)',
-  5: 'Parningsspel eller parning',
-  6: 'Besöker trolig häckningsplats',
-  7: 'Upprörd fågel / varningsbeteende',
-  8: 'Häckfläck',
-  9: 'Bobyggande eller urgröpning',
-  10: 'Avledningsbeteende',
-  11: 'Nyligen använt bo eller äggskal',
-  12: 'Ungar i dun- eller boungefält',
-  13: 'Ungar sedda eller hörda',
-  14: 'Adult bär mat eller avföringssäck',
-  15: 'Bebott bo (ägg eller ungar)',
-  16: 'Adult ruvar eller matar ungar i bo',
+  1:  'Möjlig häckning (A) – art i lämplig biotop under häckningstid',
+  5:  'Sannolik häckning (B) – parningsspel, bobyggande eller revirhävdning',
+  13: 'Säker häckning (C) – ungar sedda/hörda, bebott bo eller adult matar ungar',
 };
 
 function actCat(a) { return a >= 13 ? 'C' : a >= 5 ? 'B' : 'A'; }
@@ -592,11 +581,8 @@ async function fetchBreeding() {
     if (json.total > 0) {
       setBar('ok', `✓ ${json.total.toLocaleString('sv')} häckningsobservationer – ${areaLabel} ${year}`);
     } else {
-      const d = json._diag || {};
-      const hint = d.api_total > 0
-        ? `API returnerade ${d.api_total} obs men ingen med häckningskod (fält: ${d.act_field || 'ej hittat'})`
-        : `API returnerade 0 observationer – kontrollera att SOS-prenumerationen innehåller häckningsdata`;
-      setBar('error', `0 häckningsobservationer – ${hint}. Se /api/breeding/probe för diagnostik.`);
+      setBar('error', `0 häckningsobservationer för ${areaLabel} ${year} – prova ett annat år eller område`);
+      _showEmptyMsg('🔍', `Inga häckningsobservationer hittades för <strong>${areaLabel} ${year}</strong>.`);
     }
   } catch (e) {
     setBar('error', 'Fel vid hämtning: ' + e.message);

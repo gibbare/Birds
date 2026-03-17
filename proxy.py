@@ -432,8 +432,13 @@ def get_breeding():
     except ValueError:
         pass
 
-    # Känd SOS-filterfält för häckningsaktivitet – testa båda varianter
-    body_with_filter = {
+    # SOS returnerar inte häckningsnivå i svaret – bestäm kategori via tre anrop:
+    #   Tier A+B+C : birdNestActivityLimit >= 1
+    #   Tier B+C   : birdNestActivityLimit >= 5
+    #   Tier C     : birdNestActivityLimit >= 13
+    # Kategori per obs = lägsta tröskeln som INTE inkluderar den (mängdlära).
+
+    base_body = {
         "taxon": {"ids": [AVES_TAXON_ID], "includeUnderlyingTaxa": True},
         "date": {
             "startDate": f"{year}-01-01",
@@ -443,46 +448,59 @@ def get_breeding():
         "geographics": {
             "areas": [{"areaType": area_type, "featureId": feature_id}],
         },
-        "birdNestActivityLimit": min_act,
     }
 
-    all_obs      = []
-    take         = 1000
-    MAX_OBS      = 5000
-    api_total    = 0   # hur många API returnerade innan vår filtrering
+    def _fetch_tier(limit):
+        """Hämta alla obs med birdNestActivityLimit >= limit.
+           Returnerar dict occurrenceId → obs."""
+        body = dict(base_body)
+        body["birdNestActivityLimit"] = limit
+        result = {}
+        take   = 1000
+        for page in range(50):
+            skip = page * take
+            if skip + take > 50000:
+                break
+            try:
+                r = requests.post(
+                    f"{SOS_API_BASE}/Observations/Search",
+                    headers=_auth_headers(),
+                    json=body,
+                    params={"skip": skip, "take": take},
+                    timeout=30,
+                )
+            except requests.RequestException as e:
+                _log_error(f"breeding tier{limit} p{page}: {e}")
+                break
+            if not r.ok:
+                _log_error(f"breeding tier{limit} HTTP {r.status_code}: {r.text[:200]}")
+                break
+            data    = r.json()
+            records = data if isinstance(data, list) else data.get("records", [])
+            for obs in records:
+                oid = (obs.get("occurrence") or {}).get("occurrenceId") or ""
+                if oid:
+                    result[oid] = obs
+            if len(records) < take or len(result) >= 5000:
+                break
+        return result
 
-    for page in range(50):
-        skip = page * take
-        if skip + take > 50000:
-            break
-        try:
-            resp = requests.post(
-                f"{SOS_API_BASE}/Observations/Search",
-                headers=_auth_headers(),
-                json=body_with_filter,
-                params={"skip": skip, "take": take},
-                timeout=30,
-            )
-        except requests.RequestException as e:
-            _log_error(f"breeding p{page}: {e}")
-            break
-        if not resp.ok:
-            _log_error(f"breeding HTTP {resp.status_code}: {resp.text[:300]}")
-            break
-        data    = resp.json()
-        records = data if isinstance(data, list) else data.get("records", [])
-        api_total += len(records)
-        all_obs.extend(records)
-        if len(records) < take or len(all_obs) >= MAX_OBS:
-            break
+    # Välj trösklar baserat på valt minActivity
+    if min_act >= 13:
+        tier_abc = _fetch_tier(13)
+        tier_bc  = tier_abc   # alla är C
+        tier_c   = tier_abc
+    elif min_act >= 5:
+        tier_abc = _fetch_tier(5)
+        tier_bc  = tier_abc
+        tier_c   = _fetch_tier(13)
+    else:
+        tier_abc = _fetch_tier(1)
+        tier_bc  = _fetch_tier(5)
+        tier_c   = _fetch_tier(13)
 
-    # Extrahera häckningsfält – prova flera möjliga fältnamn
-    out          = []
-    no_coords    = 0
-    no_act       = 0
-    act_fieldname = None   # vilket fält vi hittade aktiviteten i
-
-    for obs in all_obs:
+    out = []
+    for oid, obs in tier_abc.items():
         loc   = obs.get("location")   or {}
         occ   = obs.get("occurrence") or {}
         taxon = obs.get("taxon")      or {}
@@ -491,30 +509,15 @@ def get_breeding():
         lat = loc.get("decimalLatitude")
         lon = loc.get("decimalLongitude")
         if lat is None or lon is None:
-            no_coords += 1
             continue
 
-        # Prova kända fältnamn för häckningsaktivitet
-        act = 0
-        for field in ("birdNestActivityId", "birdNestActivity",
-                      "nestActivityId",     "breedingActivityId"):
-            raw = occ.get(field)
-            if raw is None:
-                continue
-            if isinstance(raw, dict):
-                act = int(raw.get("id") or 0)
-            else:
-                try:
-                    act = int(raw or 0)
-                except (TypeError, ValueError):
-                    act = 0
-            if act > 0:
-                act_fieldname = field
-                break
-
-        if act < 1:
-            no_act += 1
-            continue
+        # Bestäm kategori via mängdtillhörighet
+        if oid in tier_c:
+            act = 13   # Säker häckning (C)
+        elif oid in tier_bc:
+            act = 5    # Sannolik häckning (B)
+        else:
+            act = 1    # Möjlig häckning (A)
 
         out.append({
             "lat":  lat,
@@ -528,21 +531,13 @@ def get_breeding():
             "date": event.get("startDate")         or "",
         })
 
-    print(f"  breeding: api_total={api_total} no_coords={no_coords} "
-          f"no_act={no_act} out={len(out)} act_field={act_fieldname}")
+    print(f"  breeding: abc={len(tier_abc)} bc={len(tier_bc)} "
+          f"c={len(tier_c)} out={len(out)}")
 
     return jsonify({
         "total":       len(out),
-        "truncated":   len(all_obs) >= MAX_OBS,
+        "truncated":   len(tier_abc) >= 5000,
         "observations": out,
-        # Diagnostik – hjälper felsöka om 0 resultat returneras
-        "_diag": {
-            "api_total":    api_total,
-            "no_coords":    no_coords,
-            "no_act":       no_act,
-            "act_field":    act_fieldname,
-            "filter_used":  "birdNestActivityLimit",
-        },
     })
 
 
