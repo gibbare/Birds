@@ -443,7 +443,7 @@ def get_breeding():
         "geographics": {
             "areas": [{"areaType": area_type, "featureId": feature_id}],
         },
-        "birdNestActivityLimit": {"id": min_act},
+        "birdNestActivityLimit": min_act,
     }
 
     all_obs      = []
@@ -584,7 +584,7 @@ def breeding_probe():
 
     # Testa SAMMA anrop men MED häckningsfilter
     body_f = dict(body)
-    body_f["birdNestActivityLimit"] = {"id": 1}
+    body_f["birdNestActivityLimit"] = 1
     try:
         r2 = requests.post(f"{SOS_API_BASE}/Observations/Search",
                            headers=_auth_headers(), json=body_f,
