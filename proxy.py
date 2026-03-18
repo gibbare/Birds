@@ -501,19 +501,21 @@ def get_breeding():
                 break
         return result
 
-    # Välj trösklar baserat på valt minActivity
-    if min_act >= 13:
-        tier_abc = _fetch_tier(13)
-        tier_bc  = tier_abc   # alla är C
-        tier_c   = tier_abc
-    elif min_act >= 5:
-        tier_abc = _fetch_tier(5)
+    # birdNestActivityLimit fungerar som ett maxvärde i SOS API:
+    #   limit=13 → alla (A+B+C), limit=5 → B+C, limit=1 → C (säker)
+    # min_act från UI: 13=Alla, 5=B+C, 1=Säker(C)
+    if min_act <= 1:
+        tier_abc = _fetch_tier(1)   # bara C
         tier_bc  = tier_abc
-        tier_c   = _fetch_tier(13)
+        tier_c   = tier_abc
+    elif min_act <= 5:
+        tier_abc = _fetch_tier(5)   # B+C
+        tier_bc  = tier_abc
+        tier_c   = _fetch_tier(1)
     else:
-        tier_abc = _fetch_tier(1)
+        tier_abc = _fetch_tier(13)  # A+B+C
         tier_bc  = _fetch_tier(5)
-        tier_c   = _fetch_tier(13)
+        tier_c   = _fetch_tier(1)
 
     out = []
     for oid, obs in tier_abc.items():
@@ -528,6 +530,7 @@ def get_breeding():
             continue
 
         # Bestäm kategori via mängdtillhörighet
+        # tier_c (limit=1) = säkrast = C, tier_bc (limit=5) = B+C, tier_abc (limit=13) = allt
         if oid in tier_c:
             act = 13   # Säker häckning (C)
         elif oid in tier_bc:
