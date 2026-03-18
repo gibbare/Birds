@@ -1318,8 +1318,7 @@ function filterLists(q) {
   }
 
   const filtSp  = _currentSp.filter(a =>
-    (a.sv  || '').toLowerCase().includes(q) ||
-    (a.sci || '').toLowerCase().includes(q));
+    (a.sv || '').toLowerCase().includes(q));
   const filtRep = _currentRep.filter(r =>
     (r.name || '').toLowerCase().includes(q));
 
