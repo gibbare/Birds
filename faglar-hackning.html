@@ -176,6 +176,7 @@
     }
     .btn-map-sp:hover, .btn-map-sp.active { background: #2b6cb0; color: white; border-color: #2b6cb0; }
     table.sp-table th.map-col, table.sp-table td.map-col { text-align: center; width: 2.5rem; padding-left: .3rem; padding-right: .5rem; }
+    table.sp-table tr.row-map-active td { background: #f0fff4 !important; box-shadow: inset 3px 0 0 #68d391; }
 
     /* ── Empty state ── */
     .empty-msg {
@@ -761,15 +762,18 @@ function filterSpecies(q) {
 let _activeMapSpKey = null;
 
 function showSpeciesOnMap(spKey) {
-  // Återställ föregående aktiv knapp
+  // Återställ föregående aktiv knapp och radmarkering
   if (_activeMapSpKey) {
     const prev = document.getElementById(`mapbtn-${_activeMapSpKey}`);
     if (prev) prev.classList.remove('active');
+    const prevRow = prev ? prev.closest('tr') : null;
+    if (prevRow) prevRow.classList.remove('row-map-active');
   }
 
   // Toggla: klick på samma knapp igen → visa alla
   if (_activeMapSpKey === spKey) {
     _activeMapSpKey = null;
+    document.querySelectorAll('#spTable tr.row-map-active').forEach(r => r.classList.remove('row-map-active'));
     markerLayer.clearLayers();
     _allMarkers.forEach(({ marker }) => markerLayer.addLayer(marker));
     return;
@@ -777,7 +781,11 @@ function showSpeciesOnMap(spKey) {
 
   _activeMapSpKey = spKey;
   const btn = document.getElementById(`mapbtn-${spKey}`);
-  if (btn) btn.classList.add('active');
+  if (btn) {
+    btn.classList.add('active');
+    const row = btn.closest('tr');
+    if (row) row.classList.add('row-map-active');
+  }
 
   markerLayer.clearLayers();
   const bounds = [];

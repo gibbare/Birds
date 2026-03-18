@@ -342,7 +342,7 @@
     }
     .btn-obs-map:hover { background: #2b6cb0; color: white; border-color: #2b6cb0; }
     .obs-table tbody tr.row-clickable { cursor: pointer; }
-    .obs-table tbody tr.row-map-active td { background: #ebf8ff !important; }
+    .obs-table tbody tr.row-map-active td { background: #f0fff4 !important; box-shadow: inset 3px 0 0 #68d391; }
 
     .obs-table td.col-rar { text-align: center; padding: .55rem .3rem; }
 
@@ -1428,6 +1428,14 @@ function toggleGroup(key) {
         bounds.push([row.lat, row.lng]);
       }
       if (bounds.length) leafletMap.fitBounds(L.latLngBounds(bounds).pad(0.1), { maxZoom: 13 });
+
+      // Markera group-header raden grön
+      document.querySelectorAll('.group-header').forEach(tr => {
+        const nameEl = tr.querySelector('.t-art-sv');
+        if (nameEl && nameEl.textContent.replace(/[▼▶]/g,'').trim() === key) {
+          tr.classList.add('row-map-active');
+        }
+      });
 
       document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }));
