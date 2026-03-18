@@ -972,10 +972,7 @@ function renderAll(year, month) {
   updateKpi(d, month, feid);
   updateLabels();
   updateCacheInfo(year, d);
-  if (_mapVisible) {
-    if (!_mapSelection) _mapSelection = { type: 'area', name: '' };
-    _doLoadMap();
-  }
+  if (_mapVisible && _mapSelection && _mapSelection.type !== 'area') _doLoadMap();
 }
 
 function updateCacheInfo(year, d) {
@@ -1359,9 +1356,9 @@ function toggleMap() {
     _mapSelection = null;
     document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
   } else if (!_mapSelection) {
-    // Ladda en areas-översikt direkt när kartan öppnas
-    _mapSelection = { type: 'area', name: '' };
-    _doLoadMap();
+    // Initialisera kartan utan att hämta data
+    _initMap();
+    document.getElementById('mapInfoBar').textContent = 'Välj en art eller rapportör i listan nedan för att visa platser på kartan.';
   }
 }
 
@@ -1435,17 +1432,19 @@ async function _doLoadMap() {
   }
 }
 
+function _initMap() {
+  if (_leafletMap) { requestAnimationFrame(() => _leafletMap.invalidateSize()); return; }
+  _leafletMap = L.map('observationMap', { zoomControl: true }).setView([64.5, 17], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 18,
+  }).addTo(_leafletMap);
+  _markerLayer = L.layerGroup().addTo(_leafletMap);
+}
+
 function _renderMapMarkers(obs) {
-  if (!_leafletMap) {
-    _leafletMap = L.map('observationMap', { zoomControl: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 18,
-    }).addTo(_leafletMap);
-    _markerLayer = L.layerGroup().addTo(_leafletMap);
-  } else {
-    _markerLayer.clearLayers();
-  }
+  _initMap();
+  _markerLayer.clearLayers();
 
   if (!obs.length) { return; }
 
