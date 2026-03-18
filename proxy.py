@@ -1605,7 +1605,7 @@ def _umami_token():
         return None, 'UMAMI_PASSWORD saknas'
     try:
         r = requests.post(f'{_UMAMI_BASE}/api/auth/login',
-                          json={'username': email, 'password': password}, timeout=10)
+                          json={'email': email, 'password': password}, timeout=10)
         if not r.ok:
             return None, f'Inloggning misslyckades: HTTP {r.status_code} – {r.text[:200]}'
         token = r.json().get('token')
