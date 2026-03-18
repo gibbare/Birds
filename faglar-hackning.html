@@ -169,6 +169,13 @@
     .badge-b { background: #feebc8; color: #7b341e; }
     .badge-c { background: #fed7d7; color: #742a2a; }
     .tot-num { font-weight: 700; color: #2b6cb0; }
+    .btn-map-sp {
+      background: none; border: 1px solid #bee3f8; border-radius: 6px;
+      color: #2b6cb0; cursor: pointer; font-size: .8rem; padding: .15rem .4rem;
+      transition: background .12s;
+    }
+    .btn-map-sp:hover, .btn-map-sp.active { background: #2b6cb0; color: white; border-color: #2b6cb0; }
+    table.sp-table th.map-col, table.sp-table td.map-col { text-align: center; width: 2.5rem; padding-left: .3rem; padding-right: .5rem; }
 
     /* ── Empty state ── */
     .empty-msg {
@@ -711,6 +718,7 @@ function renderBreeding(json, areaLabel, year) {
         <th class="num">B – Sannolik</th>
         <th class="num">C – Säker</th>
         <th class="num">Totalt</th>
+        <th class="map-col">🗺</th>
       </tr></thead>
       <tbody>
       ${rows.map(s => {
@@ -723,6 +731,7 @@ function renderBreeding(json, areaLabel, year) {
           <td style="text-align:center">${s.B ? `<span class="badge badge-b">${s.B}</span>` : ''}</td>
           <td style="text-align:center">${s.C ? `<span class="badge badge-c">${s.C}</span>` : ''}</td>
           <td style="text-align:center"><span class="tot-num">${s.tot}</span></td>
+          <td class="map-col"><button class="btn-map-sp" id="mapbtn-${safeKey}" onclick="event.stopPropagation();showSpeciesOnMap('${safeKey}')" title="Visa på karta">📍</button></td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -746,6 +755,43 @@ function filterSpecies(q) {
   _allMarkers.forEach(({ marker, svLower }) => {
     if (!q || svLower.includes(q)) markerLayer.addLayer(marker);
   });
+}
+
+/* ── Visa bara en arts markörer på kartan ── */
+let _activeMapSpKey = null;
+
+function showSpeciesOnMap(spKey) {
+  // Återställ föregående aktiv knapp
+  if (_activeMapSpKey) {
+    const prev = document.getElementById(`mapbtn-${_activeMapSpKey}`);
+    if (prev) prev.classList.remove('active');
+  }
+
+  // Toggla: klick på samma knapp igen → visa alla
+  if (_activeMapSpKey === spKey) {
+    _activeMapSpKey = null;
+    markerLayer.clearLayers();
+    _allMarkers.forEach(({ marker }) => markerLayer.addLayer(marker));
+    return;
+  }
+
+  _activeMapSpKey = spKey;
+  const btn = document.getElementById(`mapbtn-${spKey}`);
+  if (btn) btn.classList.add('active');
+
+  markerLayer.clearLayers();
+  const bounds = [];
+  _allMarkers.forEach(({ marker, spKey: mk }) => {
+    if (mk === spKey) {
+      markerLayer.addLayer(marker);
+      bounds.push(marker.getLatLng());
+    }
+  });
+
+  if (bounds.length) {
+    map.fitBounds(L.latLngBounds(bounds).pad(0.12));
+  }
+  document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 /* ── Reporter-overlay ── */
