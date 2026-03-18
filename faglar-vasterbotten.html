@@ -656,6 +656,7 @@
     } /* end @media 640px */
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script async src="https://cloud.umami.is/script.js" data-website-id="38c468e5-8142-479d-bc5d-62ab6904d5e8"></script>
 </head>
 <body>
 
@@ -676,6 +677,7 @@
   <span class="dot"></span>
   <span id="sourceText">Ansluter…</span>
   <span id="fetchTime"></span>
+  <span id="umamiStats" style="margin-left:.6rem;opacity:.8"></span>
 </div>
 
 <!-- ── Login modal ── -->
@@ -1060,6 +1062,20 @@ function updateFetchTime() {
   const now = new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
   el.textContent = `· Hämtad ${now}`;
 }
+
+async function loadUmamiStats() {
+  try {
+    const r = await fetch('/api/umami_stats');
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = document.getElementById('umamiStats');
+    if (!el || !d.visitors || !d.pageviews) return;
+    const visitors  = d.visitors.value.toLocaleString('sv');
+    const pageviews = d.pageviews.value.toLocaleString('sv');
+    el.textContent = `· 👤 ${visitors} unika besökare · 👁 ${pageviews} sidvisningar`;
+  } catch { /* tyst fel – statistik är inte kritisk */ }
+}
+loadUmamiStats();
 
 /* Login hanteras automatiskt av proxyn via miljövariabler */
 

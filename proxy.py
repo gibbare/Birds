@@ -1587,6 +1587,24 @@ if _auto_email and _auto_pass:
         print(f"  ✗ SLU-inloggning misslyckades: {e}")
 
 
+# ── Umami besöksstatistik ────────────────────────────────────────────────────
+_UMAMI_WEBSITE_ID = '38c468e5-8142-479d-bc5d-62ab6904d5e8'
+
+@app.route('/api/umami_stats')
+def umami_stats():
+    api_key = _os.environ.get('UMAMI_API_KEY', '')
+    if not api_key:
+        return jsonify({'error': 'UMAMI_API_KEY not configured'}), 503
+    url = f'https://cloud.umami.is/api/websites/{_UMAMI_WEBSITE_ID}/stats'
+    headers = {'Authorization': f'Bearer {api_key}'}
+    params  = {'startAt': 0, 'endAt': int(_time.time() * 1000)}
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=10)
+        return jsonify(r.json()), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ── Starta statistik-bakgrundstråd ──────────────────────────────────────────
 _stats_thread = _threading.Thread(target=_stats_builder, daemon=True, name='stats-builder')
 _stats_thread.start()
