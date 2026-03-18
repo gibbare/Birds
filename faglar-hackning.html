@@ -197,6 +197,13 @@
       #map { height: 50vh; }
       .kpi-strip { grid-template-columns: repeat(2, 1fr); }
       .kpi-chip .val { font-size: 1.15rem; }
+      /* Dölj A/B/C-kolumner på mobil – bara Art, Totalt och kartknapp syns */
+      table.sp-table th:nth-child(2),
+      table.sp-table th:nth-child(3),
+      table.sp-table th:nth-child(4),
+      table.sp-table td:nth-child(2),
+      table.sp-table td:nth-child(3),
+      table.sp-table td:nth-child(4) { display: none; }
     }
   </style>
 </head>
