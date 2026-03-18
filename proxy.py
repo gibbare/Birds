@@ -1108,13 +1108,13 @@ def _agg_finalize(state):
         [{'sv': v['sv'], 'sci': v['sci'], 'key': v['key'],
           'obs': v['obs'], 'ind': v['ind']} for v in species.values()],
         key=lambda x: x['obs'], reverse=True
-    )[:20]
+    )
 
     top_rap = sorted(
         [{'name': k, 'arter': len(v['species']), 'obs': v['obs']}
          for k, v in reporters.items()],
         key=lambda x: x['arter'], reverse=True
-    )[:200]
+    )
 
     month_species   = {}
     month_reporters = {}
@@ -1125,13 +1125,13 @@ def _agg_finalize(state):
               'obs': v['obs'], 'ind': v['ind']}
              for k, v in ms.items() if k in species],
             key=lambda x: x['obs'], reverse=True
-        )[:20]
+        )
         mr = monthly_rep.get(m, {})
         month_reporters[m] = sorted(
             [{'name': nm, 'obs': v['obs'], 'arter': len(v['species'])}
              for nm, v in mr.items()],
             key=lambda x: x['arter'], reverse=True
-        )[:200]
+        )
 
     muni_species   = {}
     muni_reporters = {}
@@ -1141,13 +1141,13 @@ def _agg_finalize(state):
               'obs': v['obs'], 'ind': v['ind']}
              for k, v in ms.items() if k in species],
             key=lambda x: x['obs'], reverse=True
-        )[:20]
+        )
     for fid, mr in muni_rep.items():
         muni_reporters[fid] = sorted(
             [{'name': nm, 'obs': v['obs'], 'arter': len(v['species'])}
              for nm, v in mr.items()],
             key=lambda x: x['arter'], reverse=True
-        )[:200]
+        )
 
     muni_month_species   = {}
     muni_month_reporters = {}
@@ -1159,7 +1159,7 @@ def _agg_finalize(state):
                   'obs': v['obs'], 'ind': v['ind']}
                  for k, v in ms.items() if k in species],
                 key=lambda x: x['obs'], reverse=True
-            )[:20]
+            )
     for fid, months in muni_month_rep.items():
         muni_month_reporters[fid] = {}
         for m, mr in months.items():
@@ -1167,7 +1167,7 @@ def _agg_finalize(state):
                 [{'name': nm, 'obs': v['obs'], 'arter': len(v['species'])}
                  for nm, v in mr.items()],
                 key=lambda x: x['arter'], reverse=True
-            )[:20]
+            )
 
     return {
         'kpi':                  {'arter': len(species),

@@ -377,6 +377,26 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Sökfält ── */
+    .search-bar {
+      display: flex; align-items: center; gap: .5rem;
+      background: white; border: 1px solid #cbd5e0; border-radius: 8px;
+      padding: .4rem .75rem; margin: .6rem 1.5rem .3rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .search-bar input {
+      flex: 1; border: none; outline: none; font-size: .88rem; color: #2d3748;
+      background: transparent;
+    }
+    .search-bar .search-icon { color: #a0aec0; font-size: 1rem; }
+    .search-bar .search-clear {
+      background: none; border: none; color: #a0aec0; cursor: pointer;
+      font-size: 1rem; padding: 0; line-height: 1; display: none;
+    }
+    .search-bar .search-clear.visible { display: block; }
+    .search-hint { font-size: .72rem; color: #a0aec0; text-align: center; margin-bottom: .5rem; }
+    @media (max-width: 480px) { .search-bar { margin: .5rem .5rem .2rem; } }
+
     /* ── Kart-toggle-knapp ── */
     .btn-map-toggle {
       display: inline-flex; align-items: center; gap: .3rem;
@@ -544,6 +564,14 @@
       </button>
     </div>
   </div>
+
+  <!-- Sökfält för art/rapportör -->
+  <div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input id="listSearch" type="search" placeholder="Sök art eller rapportör…" oninput="filterLists(this.value)">
+    <button class="search-clear" id="searchClearBtn" onclick="clearListSearch()" title="Rensa">✕</button>
+  </div>
+  <div class="search-hint" id="searchHint" style="display:none"></div>
 
   <!-- Topplista + Rapportörer -->
   <div class="two-col">
@@ -925,6 +953,17 @@ function renderAll(year, month) {
     rep = d.top_reporters;
   }
 
+  _currentSp  = sp  || [];
+  _currentRep = rep || [];
+
+  // Rensa sökfält vid ny filtrering
+  const searchEl = document.getElementById('listSearch');
+  if (searchEl && searchEl.value) {
+    searchEl.value = '';
+    document.getElementById('searchClearBtn').classList.remove('visible');
+    document.getElementById('searchHint').style.display = 'none';
+  }
+
   renderTopArter(sp);
   renderTopRap(rep);
   updateKpi(d, month, feid);
@@ -1258,6 +1297,46 @@ initPage();
 /* ══════════════════════════════════════════════════════════════════
    Kartfunktioner
 ══════════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════════
+   Sök/filter för art- och rapportörlistorna
+══════════════════════════════════════════════════════════════════ */
+
+/* Fullständiga listor för aktuell filtrering – används av sökfältet */
+let _currentSp  = [];
+let _currentRep = [];
+
+function filterLists(q) {
+  q = (q || '').toLowerCase().trim();
+  document.getElementById('searchClearBtn').classList.toggle('visible', q.length > 0);
+
+  if (!q) {
+    document.getElementById('searchHint').style.display = 'none';
+    renderTopArter(_currentSp);
+    renderTopRap(_currentRep);
+    return;
+  }
+
+  const filtSp  = _currentSp.filter(a =>
+    (a.sv  || '').toLowerCase().includes(q) ||
+    (a.sci || '').toLowerCase().includes(q));
+  const filtRep = _currentRep.filter(r =>
+    (r.name || '').toLowerCase().includes(q));
+
+  const hint = document.getElementById('searchHint');
+  hint.style.display = '';
+  hint.textContent = `${filtSp.length} art${filtSp.length !== 1 ? 'er' : ''} · ${filtRep.length} rapportör${filtRep.length !== 1 ? 'er' : ''} matchar "${q}"`;
+
+  renderTopArter(filtSp);
+  renderTopRap(filtRep);
+}
+
+function clearListSearch() {
+  const el = document.getElementById('listSearch');
+  el.value = '';
+  filterLists('');
+  el.focus();
+}
 
 let _mapVisible   = false;
 let _leafletMap   = null;
