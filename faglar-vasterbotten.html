@@ -1069,10 +1069,10 @@ async function loadUmamiStats() {
     if (!r.ok) return;
     const d = await r.json();
     const el = document.getElementById('umamiStats');
-    if (!el || !d.visitors || !d.pageviews) return;
-    const visitors  = d.visitors.value.toLocaleString('sv');
-    const pageviews = d.pageviews.value.toLocaleString('sv');
-    el.textContent = `· 👤 ${visitors} unika besökare · 👁 ${pageviews} sidvisningar`;
+    if (!el || d.visitors == null) return;
+    const visitors  = Number(d.visitors).toLocaleString('sv');
+    const pageviews = Number(d.pageviews).toLocaleString('sv');
+    el.textContent = `· 👤 ${visitors} besökare · 👁 ${pageviews} sidvisningar`;
   } catch { /* tyst fel – statistik är inte kritisk */ }
 }
 loadUmamiStats();
