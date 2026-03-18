@@ -407,10 +407,17 @@
     .btn-map-toggle:hover, .btn-map-toggle.active { background: #2b6cb0; color: white; }
 
     /* ── Kartkontainer ── */
-    #mapContainer { display: none; margin: 0 0 1rem; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.1); }
+    #mapContainer { display: none; margin: 0 0 1rem; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.1); position: relative; }
     #mapContainer.visible { display: block; }
     #observationMap { height: 420px; width: 100%; }
     .map-info-bar { background: #f0f4fa; padding: .4rem 1rem; font-size: .8rem; color: #4a5568; border-top: 1px solid #e2e8f0; }
+    #mapLoadingOverlay {
+      display: none; position: absolute; inset: 0; z-index: 1000;
+      background: rgba(255,255,255,.55); backdrop-filter: blur(2px);
+      align-items: center; justify-content: center;
+    }
+    #mapLoadingOverlay.active { display: flex; }
+    #mapLoadingOverlay .spinner { width: 36px; height: 36px; border-width: 4px; }
 
     /* ── Klickbara rader när karta är aktiv ── */
     .species-row.map-clickable { cursor: pointer; }
@@ -510,6 +517,7 @@
 <!-- Karta (dold tills knappen aktiveras) -->
 <div id="mapContainer">
   <div id="observationMap"></div>
+  <div id="mapLoadingOverlay"><div class="spinner"></div></div>
   <div class="map-info-bar" id="mapInfoBar">Laddar karta…</div>
 </div>
 <div style="font-size:.7rem;color:#a0aec0;margin:-0.6rem 0 .8rem 1.5rem">
@@ -1368,7 +1376,7 @@ function _setRowsClickable(on) {
 }
 
 function onSpeciesClick(taxonId, svName) {
-  if (!_mapVisible) return;
+  if (!_mapVisible) toggleMap();
   _mapSelection = { type: 'species', taxonId, name: svName };
   document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
   document.querySelectorAll(`.species-row[data-taxonid="${taxonId}"]`).forEach(el => el.classList.add('map-selected'));
@@ -1377,7 +1385,7 @@ function onSpeciesClick(taxonId, svName) {
 }
 
 function onReporterClick(name) {
-  if (!_mapVisible) return;
+  if (!_mapVisible) toggleMap();
   _mapSelection = { type: 'reporter', name };
   document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
   document.querySelectorAll(`#topRapList tr[data-name]`).forEach(el => {
@@ -1416,6 +1424,8 @@ async function _doLoadMap() {
     infoBar.textContent = `Hämtar översikt för ${areaName}…`;
   }
 
+  const overlay = document.getElementById('mapLoadingOverlay');
+  overlay.classList.add('active');
   try {
     const resp = await fetch(`${PROXY}/api/obs_map?${params}`, { signal: AbortSignal.timeout(60000) });
     const json = await resp.json();
@@ -1429,6 +1439,8 @@ async function _doLoadMap() {
     _renderMapMarkers(obs);
   } catch (e) {
     infoBar.textContent = `Kunde inte hämta kartdata: ${e.message}`;
+  } finally {
+    overlay.classList.remove('active');
   }
 }
 
