@@ -333,6 +333,16 @@
     .obs-table thead th.col-huvud  { width: 22%; }
     .obs-table thead th.col-rap    { width: 20%; }
     .obs-table thead th.col-tid    { width: 17%; }
+    .obs-table thead th.col-map    { width: 3%;  text-align: center; cursor: default; padding: .65rem .3rem; }
+    .obs-table td.col-map          { text-align: center; padding: .3rem; }
+    .btn-obs-map {
+      background: none; border: 1px solid #bee3f8; border-radius: 5px;
+      color: #2b6cb0; cursor: pointer; font-size: .75rem; padding: .1rem .3rem;
+      transition: background .12s; line-height: 1;
+    }
+    .btn-obs-map:hover { background: #2b6cb0; color: white; border-color: #2b6cb0; }
+    .obs-table tbody tr.row-clickable { cursor: pointer; }
+    .obs-table tbody tr.row-map-active td { background: #ebf8ff !important; }
 
     .obs-table td.col-rar { text-align: center; padding: .55rem .3rem; }
 
@@ -1546,12 +1556,20 @@ async function enrichRedlist() {
 
 /* Togglar kartpanelen och initialiserar Leaflet vid behov */
 function toggleMap() {
+  // Om vi är i enskild-obs-läge och kartan är öppen → återställ alla obs
+  if (mapVisible && _singleObsActive) {
+    _singleObsActive = false;
+    document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
+    renderMapMarkers();
+    return;
+  }
   mapVisible = !mapVisible;
   const container = document.getElementById('mapContainer');
   const btn       = document.getElementById('mapToggleBtn');
   if (mapVisible) {
     container.classList.add('visible');
     if (btn) { btn.classList.add('active'); btn.textContent = 'Dölj karta'; }
+    _singleObsActive = false;
     renderMapMarkers();
   } else {
     container.classList.remove('visible');
@@ -1613,6 +1631,53 @@ function renderMapMarkers() {
     if (bounds.length) {
       leafletMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 13 });
     }
+  }));
+}
+
+/* ── Visa enskild observation på kartan ── */
+let _singleObsActive = false;
+
+function showSingleObsOnMap(lat, lng, name, reporter, count, unit, startDT, apId) {
+  // Öppna kartan om den är stängd
+  if (!mapVisible) toggleMap();
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!leafletMap) return;
+    leafletMap.invalidateSize();
+
+    // Markera att vi är i "enskild obs"-läge
+    _singleObsActive = true;
+    mapMarkerLayer.clearLayers();
+
+    // Ta bort ev. tidigare aktiv-markering i tabellen
+    document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
+
+    if (lat === null || lng === null) {
+      // Obs saknar koordinater – visa alla igen och informera
+      _singleObsActive = false;
+      renderMapMarkers();
+      return;
+    }
+
+    const apLink = apId
+      ? `<br><a href="https://www.artportalen.se/sighting/${apId}" target="_blank" style="color:#2b6cb0">Visa i Artportalen ↗</a>`
+      : '';
+    const marker = L.circleMarker([lat, lng], {
+      radius: 9, fillColor: '#e53e3e', color: '#fff',
+      weight: 2, opacity: 1, fillOpacity: 0.9,
+    });
+    marker.bindPopup(`
+      <b>${escHtml(name)}</b><br>
+      ${count} ${escHtml(unit)}
+      ${reporter ? `<br>${escHtml(reporter)}` : ''}
+      ${startDT  ? `<br>${escHtml(startDT)}`  : ''}
+      ${apLink}
+    `).openPopup();
+    mapMarkerLayer.addLayer(marker);
+    leafletMap.setView([lat, lng], 13);
+
+    // Rulla upp till kartan
+    document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }));
 }
 
@@ -1711,6 +1776,7 @@ function renderTable(content, jumpNotice) {
             ${th('huvud', 'Huvudlokal',    'col-huvud')}
             ${th('rap',   'Rapportör',     'col-rap')}
             ${th('tid',   'Start–Slut',    'col-tid')}
+            <th class="col-map">🗺</th>
           </tr>
         </thead>
         <tbody>
@@ -1723,10 +1789,14 @@ function renderTable(content, jumpNotice) {
       ? `https://www.artportalen.se/sighting/${row.artportalenId}`
       : row.speciesKey ? `https://artfakta.artdatabanken.se/taxon/${row.speciesKey}` : null;
     const nameHtml = nameUrl
-      ? `<a href="${nameUrl}" target="_blank" title="Visa i Artportalen">${escHtml(name)}</a>`
+      ? `<a href="${nameUrl}" target="_blank" title="Visa i Artportalen" onclick="event.stopPropagation()">${escHtml(name)}</a>`
       : escHtml(name);
+    const hasCoord = row.lat !== null && row.lng !== null;
+    const mapBtn = hasCoord
+      ? `<button class="btn-obs-map" onclick="event.stopPropagation();showSingleObsOnMap(${row.lat},${row.lng},${JSON.stringify(name)},${JSON.stringify(row.reporter||'')},${row.individualCount},${JSON.stringify(row.unit||'')},${JSON.stringify(row.startDT||'')},${row.artportalenId||'null'})" title="Visa på karta">📍</button>`
+      : '';
     return `
-      <tr class="${cls}">
+      <tr class="${cls} row-clickable" onclick="showSingleObsOnMap(${row.lat||'null'},${row.lng||'null'},${JSON.stringify(name)},${JSON.stringify(row.reporter||'')},${row.individualCount},${JSON.stringify(row.unit||'')},${JSON.stringify(row.startDT||'')},${row.artportalenId||'null'})">
         <td class="col-art">
           <span class="t-art-sv">${nameHtml}</span>
           ${sci ? `<span class="t-art-sci">${escHtml(sci)}</span>` : ''}
@@ -1735,6 +1805,7 @@ function renderTable(content, jumpNotice) {
         <td class="col-huvud">${row.site   ? escHtml(row.site)     : '<span class="t-empty">–</span>'}</td>
         <td class="col-rap">${row.reporter ? escHtml(row.reporter) : '<span class="t-empty">–</span>'}</td>
         <td class="col-tid">${fmtTidCell(row.startDT, row.endDT)}</td>
+        <td class="col-map">${mapBtn}</td>
       </tr>`;
   }
 
@@ -1763,6 +1834,7 @@ function renderTable(content, jumpNotice) {
             <td class="col-huvud"><span class="t-empty">–</span></td>
             <td class="col-rap"><span class="t-empty">–</span></td>
             <td class="col-tid"><span class="t-empty">–</span></td>
+            <td class="col-map"></td>
           </tr>`;
         if (expanded) {
           for (const row of g.rows) html += rowHtml(row, 'group-sub');
