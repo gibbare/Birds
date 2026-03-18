@@ -411,6 +411,104 @@ def get_observations():
     return jsonify(resp.json())
 
 
+@app.route("/api/obs_map")
+def obs_map():
+    """Observationer med koordinater för kartvisning – filtrerar på art eller rapportör."""
+    if not _session["access_token"] and not _session["subscription_key"]:
+        return jsonify({"error": "Inte inloggad."}), 401
+
+    year     = (request.args.get("year")     or str(_date_type.today().year)).strip()
+    month    = int(request.args.get("month") or 0)
+    county   = (request.args.get("county")   or VASTERBOTTEN_FEATURE_ID).strip()
+    region   = (request.args.get("region")   or "").strip()
+    taxon_id = (request.args.get("taxonId")  or "").strip()
+    reporter = (request.args.get("reporter") or "").strip()
+
+    if not taxon_id and not reporter:
+        return jsonify({"error": "taxonId eller reporter krävs"}), 400
+
+    if month:
+        last_day   = _calendar.monthrange(int(year), month)[1]
+        start_date = f"{year}-{month:02d}-01"
+        end_date   = f"{year}-{month:02d}-{last_day:02d}"
+    else:
+        start_date = f"{year}-01-01"
+        end_date   = f"{year}-12-31"
+
+    area_type  = "Municipality" if region else "County"
+    feature_id = region if region else county
+    try:
+        feature_id = str(int(feature_id))
+    except ValueError:
+        pass
+
+    body = {
+        "taxon": {"ids": [AVES_TAXON_ID], "includeUnderlyingTaxa": True},
+        "date": {
+            "startDate": start_date,
+            "endDate":   end_date,
+            "dateFilterType": "OverlappingStartDateAndEndDate",
+        },
+        "geographics": {
+            "areas": [{"areaType": area_type, "featureId": feature_id}],
+        },
+    }
+    if taxon_id:
+        body["taxon"] = {"ids": [int(taxon_id)], "includeUnderlyingTaxa": True}
+
+    out  = []
+    take = 500
+    for page in range(20):
+        try:
+            resp = requests.post(
+                f"{SOS_API_BASE}/Observations/Search",
+                headers=_auth_headers(),
+                json=body,
+                params={"skip": page * take, "take": take},
+                timeout=25,
+            )
+        except requests.RequestException as e:
+            _log_error(f"obs_map page {page}: {e}")
+            break
+
+        if resp.status_code == 401:
+            _session["access_token"] = None
+            return jsonify({"error": "Sessionen har gått ut."}), 401
+
+        if not resp.ok:
+            _log_error(f"obs_map HTTP {resp.status_code}: {resp.text[:200]}")
+            break
+
+        records = resp.json().get("records") or []
+        for rec in records:
+            loc   = rec.get("location")   or {}
+            occ   = rec.get("occurrence") or {}
+            taxon = rec.get("taxon")      or {}
+            event = rec.get("event")      or {}
+            lat   = loc.get("decimalLatitude")
+            lon   = loc.get("decimalLongitude")
+            if lat is None or lon is None:
+                continue
+            rep = occ.get("recordedBy") or occ.get("reportedBy") or ""
+            if reporter and reporter.lower() not in rep.lower():
+                continue
+            out.append({
+                "lat":      lat,
+                "lon":      lon,
+                "sv":       taxon.get("vernacularName")    or "",
+                "sci":      taxon.get("scientificName")    or "",
+                "date":     event.get("startDate")         or "",
+                "reporter": rep,
+                "cnt":      occ.get("organismQuantityInt") or 1,
+            })
+
+        if len(records) < take:
+            break
+
+    print(f"  obs_map: {len(out)} obs (taxon={taxon_id or '-'} reporter={reporter or '-'})")
+    return jsonify({"total": len(out), "observations": out})
+
+
 @app.route("/api/breeding")
 def get_breeding():
     """Häckningsobservationer med koordinater för vald region och år."""

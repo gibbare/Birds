@@ -377,6 +377,29 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Kart-toggle-knapp ── */
+    .btn-map-toggle {
+      display: inline-flex; align-items: center; gap: .3rem;
+      background: #edf2f7; color: #2b6cb0; border: 1px solid #bee3f8;
+      border-radius: 20px; padding: .28rem .85rem; font-size: .82rem; font-weight: 600;
+      cursor: pointer; transition: background .15s, color .15s; white-space: nowrap;
+    }
+    .btn-map-toggle:hover, .btn-map-toggle.active { background: #2b6cb0; color: white; }
+
+    /* ── Kartkontainer ── */
+    #mapContainer { display: none; margin: 0 0 1rem; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.1); }
+    #mapContainer.visible { display: block; }
+    #observationMap { height: 420px; width: 100%; }
+    .map-info-bar { background: #f0f4fa; padding: .4rem 1rem; font-size: .8rem; color: #4a5568; border-top: 1px solid #e2e8f0; }
+
+    /* ── Klickbara rader när karta är aktiv ── */
+    .species-row.map-clickable { cursor: pointer; }
+    .species-row.map-clickable:hover { background: #ebf4ff; border-radius: 6px; }
+    .species-row.map-selected  { background: #bee3f8 !important; border-radius: 6px; }
+    .reporter-table tbody tr.map-clickable { cursor: pointer; }
+    .reporter-table tbody tr.map-clickable:hover { background: #ebf4ff; }
+    .reporter-table tbody tr.map-selected  { background: #bee3f8 !important; }
+
     /* ── Responsiv ── */
     @media (max-width: 768px) {
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -393,6 +416,7 @@
       .month-lbl { font-size: .55rem; }
     }
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
 </head>
 <body>
 
@@ -458,6 +482,15 @@
   <select class="nav-select" id="selRegion" onchange="updatePeriod()">
     <!-- fylls dynamiskt av updateCounty() -->
   </select>
+
+  <div class="nav-sep"></div>
+  <button id="mapToggleBtn" class="btn-map-toggle" onclick="toggleMap()">🗺 Visa karta</button>
+</div>
+
+<!-- Karta (dold tills knappen aktiveras) -->
+<div id="mapContainer">
+  <div id="observationMap"></div>
+  <div class="map-info-bar" id="mapInfoBar">Välj en art eller rapportör i listan nedan för att visa platser på kartan.</div>
 </div>
 
 <!-- Cache-info -->
@@ -897,6 +930,7 @@ function renderAll(year, month) {
   updateKpi(d, month, feid);
   updateLabels();
   updateCacheInfo(year, d);
+  if (_mapVisible && _mapSelection) _doLoadMap();
 }
 
 function updateCacheInfo(year, d) {
@@ -937,8 +971,9 @@ function renderTopArter(topSpecies) {
     const nameHtml = artUrl
       ? `<a href="${artUrl}" target="_blank">${esc(a.sv || a.sci)}</a>`
       : esc(a.sv || a.sci);
+    const mapCls = _mapVisible ? ' map-clickable' : '';
     return `
-      <div class="species-row">
+      <div class="species-row${mapCls}" data-taxonid="${a.key || ''}" onclick="onSpeciesClick('${a.key}', '${esc(a.sv || a.sci).replace(/'/g,"\\'")}')">
         <div class="species-rank${rankCls}">${i+1}</div>
         <div class="species-name-wrap">
           <div class="species-sv">${nameHtml}</div>
@@ -978,6 +1013,9 @@ function _appendRapRows(count) {
     const i      = _rapporterShown + j;
     const rankCls = i < 3 ? ' top3' : '';
     const tr = document.createElement('tr');
+    tr.dataset.name = r.name;
+    if (_mapVisible) tr.classList.add('map-clickable');
+    tr.onclick = () => onReporterClick(r.name);
     tr.innerHTML = `
       <td class="reporter-rank${rankCls}">${i+1}</td>
       <td class="reporter-name">${esc(r.name)}</td>
@@ -1216,6 +1254,114 @@ async function initPage() {
   fetchStats(selectedYear, selectedCountyId);
 }
 initPage();
+
+/* ══════════════════════════════════════════════════════════════════
+   Kartfunktioner
+══════════════════════════════════════════════════════════════════ */
+
+let _mapVisible   = false;
+let _leafletMap   = null;
+let _markerLayer  = null;
+let _mapSelection = null;  // { type: 'species'|'reporter', taxonId?, name }
+
+function toggleMap() {
+  _mapVisible = !_mapVisible;
+  const btn = document.getElementById('mapToggleBtn');
+  document.getElementById('mapContainer').classList.toggle('visible', _mapVisible);
+  btn.classList.toggle('active', _mapVisible);
+  btn.textContent = _mapVisible ? '🗺 Dölj karta' : '🗺 Visa karta';
+  _setRowsClickable(_mapVisible);
+  if (!_mapVisible) {
+    _mapSelection = null;
+    document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
+  }
+}
+
+function _setRowsClickable(on) {
+  document.querySelectorAll('.species-row[data-taxonid]').forEach(el => el.classList.toggle('map-clickable', on));
+  document.querySelectorAll('#topRapList tr[data-name]').forEach(el => el.classList.toggle('map-clickable', on));
+}
+
+function onSpeciesClick(taxonId, svName) {
+  if (!_mapVisible) return;
+  _mapSelection = { type: 'species', taxonId, name: svName };
+  document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
+  document.querySelectorAll(`.species-row[data-taxonid="${taxonId}"]`).forEach(el => el.classList.add('map-selected'));
+  _doLoadMap();
+}
+
+function onReporterClick(name) {
+  if (!_mapVisible) return;
+  _mapSelection = { type: 'reporter', name };
+  document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
+  document.querySelectorAll(`#topRapList tr[data-name]`).forEach(el => {
+    if (el.dataset.name === name) el.classList.add('map-selected');
+  });
+  _doLoadMap();
+}
+
+async function _doLoadMap() {
+  if (!_mapSelection) return;
+  const infoBar = document.getElementById('mapInfoBar');
+  infoBar.textContent = `Hämtar platser för ${_mapSelection.name}…`;
+
+  const region = document.getElementById('selRegion').value;
+  const params = new URLSearchParams({
+    year:   selectedYear,
+    month:  selectedMonth,
+    county: selectedCountyId,
+    region: region || '',
+  });
+  if (_mapSelection.type === 'species') {
+    params.set('taxonId', _mapSelection.taxonId);
+  } else {
+    params.set('reporter', _mapSelection.name);
+  }
+
+  try {
+    const resp = await fetch(`${PROXY}/api/obs_map?${params}`, { signal: AbortSignal.timeout(30000) });
+    const json = await resp.json();
+    if (json.error) { infoBar.textContent = `Fel: ${json.error}`; return; }
+    const obs = json.observations || [];
+    const period = selectedMonth ? `, ${MÅNADER_FULL[selectedMonth - 1]}` : '';
+    infoBar.textContent = `${obs.length} obs · ${_mapSelection.name} · ${selectedYear}${period}`;
+    _renderMapMarkers(obs);
+  } catch (e) {
+    infoBar.textContent = `Kunde inte hämta kartdata: ${e.message}`;
+  }
+}
+
+function _renderMapMarkers(obs) {
+  if (!_leafletMap) {
+    _leafletMap = L.map('observationMap', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(_leafletMap);
+    _markerLayer = L.layerGroup().addTo(_leafletMap);
+  } else {
+    _markerLayer.clearLayers();
+  }
+
+  if (!obs.length) { return; }
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    _leafletMap.invalidateSize();
+    const bounds = [];
+    for (const o of obs) {
+      const marker = L.circleMarker([o.lat, o.lon], {
+        radius: 6, fillColor: '#2b6cb0', color: '#fff',
+        weight: 1.5, opacity: 1, fillOpacity: 0.8,
+      });
+      const pop = `<b>${esc(o.sv || o.sci)}</b>${o.date ? '<br>' + o.date : ''}${o.reporter ? '<br>' + esc(o.reporter) : ''}`;
+      marker.bindPopup(pop);
+      _markerLayer.addLayer(marker);
+      bounds.push([o.lat, o.lon]);
+    }
+    if (bounds.length) _leafletMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 13 });
+  }));
+}
 </script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </body>
 </html>
