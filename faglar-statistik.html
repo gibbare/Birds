@@ -1287,6 +1287,7 @@ function onSpeciesClick(taxonId, svName) {
   _mapSelection = { type: 'species', taxonId, name: svName };
   document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
   document.querySelectorAll(`.species-row[data-taxonid="${taxonId}"]`).forEach(el => el.classList.add('map-selected'));
+  document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   _doLoadMap();
 }
 
@@ -1297,6 +1298,7 @@ function onReporterClick(name) {
   document.querySelectorAll(`#topRapList tr[data-name]`).forEach(el => {
     if (el.dataset.name === name) el.classList.add('map-selected');
   });
+  document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   _doLoadMap();
 }
 
