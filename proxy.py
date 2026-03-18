@@ -1596,7 +1596,7 @@ def umami_stats():
     if not api_key:
         return jsonify({'error': 'UMAMI_API_KEY not configured'}), 503
     url = f'https://cloud.umami.is/api/websites/{_UMAMI_WEBSITE_ID}/stats'
-    headers = {'Authorization': f'Bearer {api_key}'}
+    headers = {'x-umami-api-key': api_key}
     params  = {'startAt': 0, 'endAt': int(_time.time() * 1000)}
     try:
         r = requests.get(url, headers=headers, params=params, timeout=10)
