@@ -1377,9 +1377,61 @@ function groupRows(rows) {
 }
 
 function toggleGroup(key) {
-  if (expandedGroups.has(key)) expandedGroups.delete(key);
+  const wasExpanded = expandedGroups.has(key);
+  if (wasExpanded) expandedGroups.delete(key);
   else expandedGroups.add(key);
   render(lastTotal);
+
+  // Visa artens alla obs på kartan bara om gruppen var expanderad vid klicket
+  if (wasExpanded) {
+    const rows = groupRows(filteredRows(sortedRows(allResults)));
+    const group = rows.find(g => g.key === key);
+    if (!group) return;
+    const withCoords = group.rows.filter(r => r.lat !== null && r.lng !== null);
+    if (!withCoords.length) return;
+
+    // Öppna kartan om stängd
+    if (!mapVisible) {
+      mapVisible = true;
+      const container = document.getElementById('mapContainer');
+      const btn       = document.getElementById('mapToggleBtn');
+      container.classList.add('visible');
+      if (btn) { btn.classList.add('active'); btn.textContent = 'Dölj karta'; }
+    }
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!leafletMap) {
+        leafletMap = L.map('observationMap', { zoomControl: true });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+          maxZoom: 18,
+        }).addTo(leafletMap);
+        mapMarkerLayer = L.layerGroup().addTo(leafletMap);
+      }
+      leafletMap.invalidateSize();
+      _singleObsActive = true;
+      mapMarkerLayer.clearLayers();
+      document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
+
+      const bounds = [];
+      for (const row of withCoords) {
+        const name  = row.vernacularName || row.scientificName;
+        const color = row.verified ? '#276749' : row.uncertainId ? '#e07b39' : '#2b6cb0';
+        const apLink = row.artportalenId
+          ? `<br><a href="https://www.artportalen.se/sighting/${row.artportalenId}" target="_blank" style="color:#2b6cb0">Visa i Artportalen ↗</a>`
+          : '';
+        const marker = L.circleMarker([row.lat, row.lng], {
+          radius: 7, fillColor: color, color: '#fff', weight: 1.5, opacity: 1, fillOpacity: 0.85,
+        });
+        marker.bindPopup(`<b>${escHtml(name)}</b><br>${row.individualCount} ${escHtml(row.unit)}${row.reporter ? `<br>${escHtml(row.reporter)}` : ''}${row.startDT ? `<br>${escHtml(row.startDT)}` : ''}${apLink}`);
+        mapMarkerLayer.addLayer(marker);
+        bounds.push([row.lat, row.lng]);
+      }
+      if (bounds.length) leafletMap.fitBounds(L.latLngBounds(bounds).pad(0.1), { maxZoom: 13 });
+
+      document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }));
+  }
 }
 
 /* ── Sortera tabell på kolumnklick ── */
