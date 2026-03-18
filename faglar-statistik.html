@@ -510,7 +510,10 @@
 <!-- Karta (dold tills knappen aktiveras) -->
 <div id="mapContainer">
   <div id="observationMap"></div>
-  <div class="map-info-bar" id="mapInfoBar">Välj en art eller rapportör i listan nedan för att visa platser på kartan.</div>
+  <div class="map-info-bar" id="mapInfoBar">Laddar karta…</div>
+</div>
+<div style="font-size:.7rem;color:#a0aec0;margin:-0.6rem 0 .8rem 1.5rem">
+  * Obs utan koordinater visas inte på kartan – antalet punkter kan därför vara lägre än obs-antal i listan.
 </div>
 
 <!-- Cache-info -->
@@ -969,7 +972,10 @@ function renderAll(year, month) {
   updateKpi(d, month, feid);
   updateLabels();
   updateCacheInfo(year, d);
-  if (_mapVisible && _mapSelection) _doLoadMap();
+  if (_mapVisible) {
+    if (!_mapSelection) _mapSelection = { type: 'area', name: '' };
+    _doLoadMap();
+  }
 }
 
 function updateCacheInfo(year, d) {
@@ -1352,6 +1358,10 @@ function toggleMap() {
   if (!_mapVisible) {
     _mapSelection = null;
     document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
+  } else if (!_mapSelection) {
+    // Ladda en areas-översikt direkt när kartan öppnas
+    _mapSelection = { type: 'area', name: '' };
+    _doLoadMap();
   }
 }
 
@@ -1383,28 +1393,42 @@ function onReporterClick(name) {
 async function _doLoadMap() {
   if (!_mapSelection) return;
   const infoBar = document.getElementById('mapInfoBar');
-  infoBar.textContent = `Hämtar platser för ${_mapSelection.name}…`;
 
   const region = document.getElementById('selRegion').value;
+  const county = COUNTIES.find(c => c.id === selectedCountyId);
+  const areaName = region
+    ? (county?.kommuner?.find(k => k.id === region)?.name || region)
+    : (county?.name || selectedCountyId);
+  const period = selectedMonth ? `, ${MÅNADER_FULL[selectedMonth - 1]}` : '';
+
   const params = new URLSearchParams({
     year:   selectedYear,
     month:  selectedMonth,
     county: selectedCountyId,
     region: region || '',
   });
+
   if (_mapSelection.type === 'species') {
     params.set('taxonId', _mapSelection.taxonId);
-  } else {
+    infoBar.textContent = `Hämtar platser för ${_mapSelection.name}…`;
+  } else if (_mapSelection.type === 'reporter') {
     params.set('reporter', _mapSelection.name);
+    infoBar.textContent = `Hämtar platser för ${_mapSelection.name}…`;
+  } else {
+    // area-översikt – inga extra filter
+    infoBar.textContent = `Hämtar översikt för ${areaName}…`;
   }
 
   try {
-    const resp = await fetch(`${PROXY}/api/obs_map?${params}`, { signal: AbortSignal.timeout(30000) });
+    const resp = await fetch(`${PROXY}/api/obs_map?${params}`, { signal: AbortSignal.timeout(60000) });
     const json = await resp.json();
     if (json.error) { infoBar.textContent = `Fel: ${json.error}`; return; }
     const obs = json.observations || [];
-    const period = selectedMonth ? `, ${MÅNADER_FULL[selectedMonth - 1]}` : '';
-    infoBar.textContent = `${obs.length} obs · ${_mapSelection.name} · ${selectedYear}${period}`;
+    if (_mapSelection.type === 'area') {
+      infoBar.textContent = `${obs.length} obs visade · ${areaName} · ${selectedYear}${period} (urval)`;
+    } else {
+      infoBar.textContent = `${obs.length} obs · ${_mapSelection.name} · ${selectedYear}${period}`;
+    }
     _renderMapMarkers(obs);
   } catch (e) {
     infoBar.textContent = `Kunde inte hämta kartdata: ${e.message}`;

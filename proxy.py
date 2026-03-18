@@ -424,8 +424,8 @@ def obs_map():
     taxon_id = (request.args.get("taxonId")  or "").strip()
     reporter = (request.args.get("reporter") or "").strip()
 
-    if not taxon_id and not reporter:
-        return jsonify({"error": "taxonId eller reporter krävs"}), 400
+    # Om varken taxon_id eller reporter anges returneras ett urval av obs för området
+    area_overview = not taxon_id and not reporter
 
     if month:
         last_day   = _calendar.monthrange(int(year), month)[1]
@@ -458,7 +458,8 @@ def obs_map():
 
     out  = []
     take = 1000
-    for page in range(60):  # max 60 000 obs
+    max_pages = 5 if area_overview else 60  # översikt: max 5 000 obs, annars 60 000
+    for page in range(max_pages):
         try:
             resp = requests.post(
                 f"{SOS_API_BASE}/Observations/Search",
