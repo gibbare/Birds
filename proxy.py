@@ -1593,40 +1593,45 @@ _UMAMI_BASE        = 'https://cloud.umami.is'
 _umami_token_cache = {'token': None, 'expires': 0}  # enkel in-memory cache
 
 def _umami_token():
-    """Loggar in mot Umami Cloud och returnerar Bearer-token (cachas i 23 h)."""
+    """Loggar in mot Umami Cloud och returnerar (token, error_str)."""
     now = _time.time()
     if _umami_token_cache['token'] and _umami_token_cache['expires'] > now:
-        return _umami_token_cache['token']
+        return _umami_token_cache['token'], None
     email    = _os.environ.get('UMAMI_EMAIL', '')
     password = _os.environ.get('UMAMI_PASSWORD', '')
-    if not email or not password:
-        return None
-    r = requests.post(f'{_UMAMI_BASE}/api/auth/login',
-                      json={'username': email, 'password': password}, timeout=10)
-    if not r.ok:
-        return None
-    token = r.json().get('token')
-    if token:
+    if not email:
+        return None, 'UMAMI_EMAIL saknas'
+    if not password:
+        return None, 'UMAMI_PASSWORD saknas'
+    try:
+        r = requests.post(f'{_UMAMI_BASE}/api/auth/login',
+                          json={'username': email, 'password': password}, timeout=10)
+        if not r.ok:
+            return None, f'Inloggning misslyckades: HTTP {r.status_code} – {r.text[:200]}'
+        token = r.json().get('token')
+        if not token:
+            return None, f'Inget token i svar: {r.text[:200]}'
         _umami_token_cache['token']   = token
-        _umami_token_cache['expires'] = now + 82800  # 23 timmar
-    return token
+        _umami_token_cache['expires'] = now + 82800
+        return token, None
+    except Exception as e:
+        return None, f'Nätverksfel: {e}'
 
 @app.route('/api/umami_stats')
 def umami_stats():
-    token = _umami_token()
+    token, err = _umami_token()
     if not token:
-        return jsonify({'error': 'UMAMI_EMAIL/UMAMI_PASSWORD not configured or login failed'}), 503
+        return jsonify({'error': err}), 503
     url    = f'{_UMAMI_BASE}/api/websites/{_UMAMI_WEBSITE_ID}/stats'
     params = {'startAt': 0, 'endAt': int(_time.time() * 1000)}
     try:
         r = requests.get(url, headers={'Authorization': f'Bearer {token}'},
                          params=params, timeout=10)
         if r.status_code == 401:
-            # Token kan ha gått ut – rensa cache och försök igen
             _umami_token_cache['token'] = None
-            token = _umami_token()
+            token, err = _umami_token()
             if not token:
-                return jsonify({'error': 'Re-login failed'}), 503
+                return jsonify({'error': err}), 503
             r = requests.get(url, headers={'Authorization': f'Bearer {token}'},
                              params=params, timeout=10)
         return jsonify(r.json()), r.status_code
