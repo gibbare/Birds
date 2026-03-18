@@ -457,15 +457,15 @@ def obs_map():
         body["taxon"] = {"ids": [int(taxon_id)], "includeUnderlyingTaxa": True}
 
     out  = []
-    take = 500
-    for page in range(20):
+    take = 1000
+    for page in range(60):  # max 60 000 obs
         try:
             resp = requests.post(
                 f"{SOS_API_BASE}/Observations/Search",
                 headers=_auth_headers(),
                 json=body,
                 params={"skip": page * take, "take": take},
-                timeout=25,
+                timeout=30,
             )
         except requests.RequestException as e:
             _log_error(f"obs_map page {page}: {e}")
@@ -489,7 +489,9 @@ def obs_map():
             lon   = loc.get("decimalLongitude")
             if lat is None or lon is None:
                 continue
-            rep = occ.get("recordedBy") or occ.get("reportedBy") or ""
+            # Samma fältprioritet som statistikcachen använder
+            rep = (occ.get("reportedBy") or occ.get("observer") or
+                   occ.get("recordedBy") or "")
             if reporter and reporter.lower() not in rep.lower():
                 continue
             out.append({
