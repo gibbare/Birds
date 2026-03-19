@@ -333,8 +333,15 @@
     .obs-table thead th.col-huvud  { width: 22%; }
     .obs-table thead th.col-rap    { width: 20%; }
     .obs-table thead th.col-tid    { width: 17%; }
-    .obs-table thead th.col-map    { width: 3%;  text-align: center; cursor: default; padding: .65rem .3rem; }
-    .obs-table td.col-map          { text-align: center; padding: .3rem; }
+    .obs-table thead th.col-map    { width: 2.5rem; text-align: center; cursor: default; padding: .65rem .3rem;
+                                     position: sticky; right: 0; background: #1e4e8c; z-index: 2; }
+    .obs-table td.col-map          { text-align: center; padding: .3rem .4rem .3rem .2rem;
+                                     position: sticky; right: 0; background: white; z-index: 1; }
+    .obs-table tbody tr:nth-child(even)  td.col-map { background: #fafcff; }
+    .obs-table tbody tr.group-header     td.col-map { background: #e8f0fb; }
+    .obs-table tbody tr.group-sub        td.col-map { background: #f8faff; }
+    .obs-table tbody tr:hover            td.col-map { background: #f7faff; }
+    .obs-table tbody tr.row-map-active   td.col-map { background: #f0fff4 !important; }
     .btn-obs-map {
       background: none; border: 1px solid #bee3f8; border-radius: 5px;
       color: #2b6cb0; cursor: pointer; font-size: .75rem; padding: .1rem .3rem;
@@ -1642,20 +1649,16 @@ async function enrichRedlist() {
 
 /* Togglar kartpanelen och initialiserar Leaflet vid behov */
 function toggleMap() {
-  // Om vi är i enskild-obs-läge och kartan är öppen → återställ alla obs
-  if (mapVisible && _singleObsActive) {
-    _singleObsActive = false;
-    document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
-    renderMapMarkers();
-    return;
-  }
+  // Återställ alltid enskild-obs-läge och radmarkering
+  _singleObsActive = false;
+  document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
+
   mapVisible = !mapVisible;
   const container = document.getElementById('mapContainer');
   const btn       = document.getElementById('mapToggleBtn');
   if (mapVisible) {
     container.classList.add('visible');
     if (btn) { btn.classList.add('active'); btn.textContent = 'Dölj karta'; }
-    _singleObsActive = false;
     renderMapMarkers();
   } else {
     container.classList.remove('visible');
