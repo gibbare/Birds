@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rapportörer – Fågelobservationer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f7fafc; color: #1a202c; }
+
+    /* ── Header & nav ── */
+    header {
+      background: linear-gradient(135deg, #1a4a7a, #2b6cb0);
+      color: white; padding: .6rem 1.5rem .5rem;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    .page-tabs { display: flex; justify-content: center; gap: 0; background: #163d6a; }
+    .page-tab  { padding: .45rem 1.2rem; font-size: .78rem; font-weight: 700;
+                 color: rgba(255,255,255,.65); text-decoration: none;
+                 border-bottom: 3px solid transparent; letter-spacing: .02em; }
+    .page-tab:hover { color: white; }
+    .page-tab.active { color: white; border-bottom-color: #63b3ed; }
+
+    /* ── Container ── */
+    .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem 3rem; }
+
+    /* ── Sökfält ── */
+    .search-wrap {
+      background: white; border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.08);
+      padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+      display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
+    }
+    .search-wrap label { font-weight: 700; font-size: .9rem; color: #2d3748; white-space: nowrap; }
+    .search-wrap input {
+      flex: 1 1 220px; padding: .5rem .85rem; font-size: .92rem;
+      border: 1px solid #cbd5e0; border-radius: 8px; outline: none;
+      transition: border-color .15s;
+    }
+    .search-wrap input:focus { border-color: #2b6cb0; }
+    .btn-search {
+      background: #2b6cb0; color: white; border: none; border-radius: 8px;
+      padding: .5rem 1.25rem; font-size: .88rem; font-weight: 700; cursor: pointer;
+    }
+    .btn-search:hover { background: #2558a0; }
+
+    /* ── Rapportörskort ── */
+    #reporterCard { display: none; }
+
+    .reporter-hero {
+      background: linear-gradient(135deg, #1a4a7a 0%, #2b6cb0 100%);
+      color: white; border-radius: 14px; padding: 1.5rem 1.75rem;
+      margin-bottom: 1.1rem; display: flex; gap: 1.5rem; align-items: center;
+      flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    }
+    .reporter-avatar {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: rgba(255,255,255,.2); display: flex;
+      align-items: center; justify-content: center; font-size: 2rem;
+      flex-shrink: 0;
+    }
+    .reporter-meta h2 { font-size: 1.5rem; font-weight: 800; margin-bottom: .15rem; }
+    .reporter-meta p  { font-size: .82rem; opacity: .8; }
+
+    .stat-pills { display: flex; gap: .65rem; flex-wrap: wrap; margin-top: .75rem; }
+    .pill {
+      background: rgba(255,255,255,.18); border-radius: 20px;
+      padding: .3rem .85rem; font-size: .8rem; font-weight: 600;
+    }
+    .pill strong { font-size: 1.1rem; margin-right: .2rem; }
+
+    /* ── Sektionsrubriker ── */
+    .section-title {
+      font-size: 1rem; font-weight: 700; color: #2d3748;
+      margin-bottom: .65rem; display: flex; align-items: center; gap: .5rem;
+    }
+    .section-title .badge-count {
+      background: #ebf4ff; color: #2b6cb0; border-radius: 10px;
+      padding: .1rem .55rem; font-size: .75rem; font-weight: 700;
+    }
+
+    /* ── Grid för sektioner ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; margin-bottom: 1.1rem; }
+    .card {
+      background: white; border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.07); padding: 1.1rem 1.25rem;
+    }
+
+    /* ── Månadsdiagram ── */
+    .month-chart {
+      display: grid; grid-template-columns: repeat(12, 1fr);
+      gap: .3rem; align-items: end; height: 120px; margin-bottom: .4rem;
+    }
+    .month-bar-wrap { display: flex; flex-direction: column; align-items: center; gap: .25rem; }
+    .month-bar {
+      width: 100%; background: #bee3f8; border-radius: 4px 4px 0 0;
+      transition: background .15s; cursor: default;
+      position: relative;
+    }
+    .month-bar:hover { background: #2b6cb0; }
+    .month-bar-wrap .month-label { font-size: .6rem; color: #718096; }
+    .month-bar-wrap .month-val   { font-size: .62rem; color: #4a5568; font-weight: 600; }
+
+    /* ── Topplatser ── */
+    .place-list { list-style: none; }
+    .place-row {
+      display: flex; align-items: center; gap: .65rem;
+      padding: .42rem 0; border-bottom: 1px solid #f0f4f8;
+    }
+    .place-row:last-child { border-bottom: none; }
+    .place-rank {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #ebf4ff; color: #2b6cb0; font-size: .7rem;
+      font-weight: 800; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .place-rank.gold   { background: #fef3c7; color: #92400e; }
+    .place-rank.silver { background: #f1f5f9; color: #475569; }
+    .place-rank.bronze { background: #fde8d8; color: #9a3412; }
+    .place-name { flex: 1; font-size: .85rem; font-weight: 600; }
+    .place-num  { font-size: .82rem; color: #718096; }
+    .place-bar-bg { flex: 1; height: 5px; background: #e2e8f0; border-radius: 3px; }
+    .place-bar-fill { height: 100%; background: #63b3ed; border-radius: 3px; }
+
+    /* ── Artlista ── */
+    .sp-search-wrap { margin-bottom: .65rem; }
+    .sp-search-wrap input {
+      width: 100%; padding: .38rem .75rem; font-size: .83rem;
+      border: 1px solid #e2e8f0; border-radius: 7px; outline: none;
+    }
+    .sp-search-wrap input:focus { border-color: #2b6cb0; }
+
+    .sp-table-wrap { max-height: 380px; overflow-y: auto; }
+    table.sp-list { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    table.sp-list th {
+      position: sticky; top: 0; background: #f7fafc;
+      padding: .45rem .75rem; text-align: left;
+      border-bottom: 2px solid #e2e8f0; font-size: .75rem;
+      color: #718096; text-transform: uppercase; letter-spacing: .05em;
+    }
+    table.sp-list th.r { text-align: right; }
+    table.sp-list td { padding: .38rem .75rem; border-bottom: 1px solid #f0f4f8; }
+    table.sp-list tr:last-child td { border-bottom: none; }
+    table.sp-list tr:hover td { background: #f7faff; }
+    .sp-sv  { font-weight: 600; }
+    .sp-sci { font-size: .72rem; color: #a0aec0; font-style: italic; }
+    .sp-link { color: #2b6cb0; text-decoration: none; }
+    .sp-link:hover { text-decoration: underline; }
+    .sp-obs { text-align: right; font-weight: 700; color: #2b6cb0; }
+    .sp-bar-cell { width: 80px; }
+    .sp-mini-bar { height: 5px; background: #bee3f8; border-radius: 3px; }
+
+    /* ── Tomt state / ingen rapportör vald ── */
+    .empty-state {
+      text-align: center; padding: 4rem 1rem;
+      color: #a0aec0; font-size: .95rem;
+    }
+    .empty-state .icon { font-size: 3rem; margin-bottom: .75rem; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center; padding: 1.25rem; font-size: .78rem;
+      color: #a0aec0; border-top: 1px solid #e2e8f0; margin-top: 2rem;
+    }
+
+    /* ── Responsiv ── */
+    @media (max-width: 650px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .month-chart { height: 90px; }
+      .reporter-hero { padding: 1rem 1.1rem; gap: 1rem; }
+      .reporter-avatar { width: 50px; height: 50px; font-size: 1.5rem; }
+      .reporter-meta h2 { font-size: 1.2rem; }
+      .page-tab { padding: .45rem .75rem; font-size: .72rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><img src="eagle_ico.png" style="height:1.3rem;vertical-align:middle;margin-right:.4rem"> Fågelobservationer</h1>
+</header>
+<nav class="page-tabs">
+  <a href="faglar-vasterbotten.html" class="page-tab">📋 Dagslista</a>
+  <a href="faglar-statistik.html"    class="page-tab">📊 Statistik</a>
+  <a href="faglar-hackning.html"     class="page-tab">🥚 Häckning</a>
+  <a href="faglar-rapportor.html"    class="page-tab active">👤 Rapportörer</a>
+</nav>
+
+<div class="container">
+
+  <!-- Sökfält -->
+  <div class="search-wrap">
+    <label for="repSearch">🔍 Sök rapportör</label>
+    <input type="text" id="repSearch" placeholder="Skriv namn…" oninput="filterSuggestions(this.value)" autocomplete="off">
+    <button class="btn-search" onclick="loadReporter()">Hämta</button>
+  </div>
+
+  <!-- Tomt state -->
+  <div class="empty-state" id="emptyState">
+    <div class="icon">🦅</div>
+    <div>Sök på en rapportör ovan för att se deras statistik</div>
+  </div>
+
+  <!-- Rapportörskort (dolt tills sökning gjorts) -->
+  <div id="reporterCard">
+
+    <!-- Hero-banner -->
+    <div class="reporter-hero">
+      <div class="reporter-avatar">👤</div>
+      <div class="reporter-meta" style="flex:1">
+        <h2 id="heroName">–</h2>
+        <p id="heroSub">–</p>
+        <div class="stat-pills">
+          <div class="pill"><strong id="pillObs">–</strong> observationer</div>
+          <div class="pill"><strong id="pillArter">–</strong> arter</div>
+          <div class="pill"><strong id="pillDagar">–</strong> aktiva dagar</div>
+          <div class="pill">Sedan <strong id="pillSince">–</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Månadsaktivitet + Topplatser -->
+    <div class="grid-2">
+
+      <!-- Månadsaktivitet -->
+      <div class="card">
+        <div class="section-title">📅 Aktivitet per månad (alla år)</div>
+        <div class="month-chart" id="monthChart"></div>
+        <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:.3rem;text-align:center">
+          <span style="font-size:.6rem;color:#718096">Jan</span>
+          <span style="font-size:.6rem;color:#718096">Feb</span>
+          <span style="font-size:.6rem;color:#718096">Mar</span>
+          <span style="font-size:.6rem;color:#718096">Apr</span>
+          <span style="font-size:.6rem;color:#718096">Maj</span>
+          <span style="font-size:.6rem;color:#718096">Jun</span>
+          <span style="font-size:.6rem;color:#718096">Jul</span>
+          <span style="font-size:.6rem;color:#718096">Aug</span>
+          <span style="font-size:.6rem;color:#718096">Sep</span>
+          <span style="font-size:.6rem;color:#718096">Okt</span>
+          <span style="font-size:.6rem;color:#718096">Nov</span>
+          <span style="font-size:.6rem;color:#718096">Dec</span>
+        </div>
+      </div>
+
+      <!-- Topplatser -->
+      <div class="card">
+        <div class="section-title">📍 Mest besökta platser <span class="badge-count" id="placeCount">5</span></div>
+        <ul class="place-list" id="placeList"></ul>
+      </div>
+
+    </div>
+
+    <!-- Artlista (full bredd) -->
+    <div class="card">
+      <div class="section-title">
+        🦜 Observerade arter
+        <span class="badge-count" id="spCount">0</span>
+      </div>
+      <div class="sp-search-wrap">
+        <input type="text" id="spFilter" placeholder="Filtrera arter…" oninput="filterArter(this.value)">
+      </div>
+      <div class="sp-table-wrap">
+        <table class="sp-list" id="spTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Art</th>
+              <th class="r">Obs</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="spTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /reporterCard -->
+</div>
+
+<footer>Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026</footer>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   Exempeldata (hårdkodad – ersätts med API-anrop senare)
+══════════════════════════════════════════════════════ */
+const MOCK_REPORTERS = {
+  'Jonas Karlsson': {
+    name:      'Jonas Karlsson',
+    obs:       1247,
+    arter:     89,
+    dagar:     143,
+    since:     '2019',
+    lastObs:   '2026-03-18',
+    county:    'Västerbottens län',
+    // Obs per månad (jan–dec, summerat alla år)
+    monthly: [45, 78, 123, 98, 156, 134, 89, 67, 112, 98, 67, 34],
+    // Top platser
+    places: [
+      { name: 'Umeå',          obs: 234 },
+      { name: 'Skellefteå',    obs: 123 },
+      { name: 'Lycksele',      obs:  89 },
+      { name: 'Vindeln',       obs:  45 },
+      { name: 'Norsjö',        obs:  34 },
+    ],
+    // Arter (sv, sci, taxonId, obs)
+    species: [
+      { sv: 'Talgoxe',       sci: 'Parus major',           taxon: '102940', obs: 89 },
+      { sv: 'Blåmes',        sci: 'Cyanistes caeruleus',   taxon: '102939', obs: 76 },
+      { sv: 'Bofink',        sci: 'Fringilla coelebs',     taxon: '102985', obs: 65 },
+      { sv: 'Tofsvipa',      sci: 'Vanellus vanellus',     taxon: '102706', obs: 54 },
+      { sv: 'Sånglärka',     sci: 'Alauda arvensis',       taxon: '102860', obs: 48 },
+      { sv: 'Stare',         sci: 'Sturnus vulgaris',      taxon: '103031', obs: 43 },
+      { sv: 'Koltrast',      sci: 'Turdus merula',         taxon: '103013', obs: 41 },
+      { sv: 'Gulsparv',      sci: 'Emberiza citrinella',   taxon: '103058', obs: 38 },
+      { sv: 'Råka',          sci: 'Corvus frugilegus',     taxon: '103046', obs: 35 },
+      { sv: 'Hussvala',      sci: 'Delichon urbicum',      taxon: '102875', obs: 32 },
+      { sv: 'Ladusvala',     sci: 'Hirundo rustica',       taxon: '102872', obs: 29 },
+      { sv: 'Rödvingetrast', sci: 'Turdus iliacus',        taxon: '103017', obs: 27 },
+      { sv: 'Lövsångare',    sci: 'Phylloscopus trochilus', taxon: '102955', obs: 25 },
+      { sv: 'Grönfink',      sci: 'Chloris chloris',       taxon: '102988', obs: 23 },
+      { sv: 'Grönsiska',     sci: 'Spinus spinus',         taxon: '102990', obs: 21 },
+      { sv: 'Pilfink',       sci: 'Passer montanus',       taxon: '103027', obs: 19 },
+      { sv: 'Nötkråka',      sci: 'Nucifraga caryocatactes', taxon: '103044', obs: 17 },
+      { sv: 'Orre',          sci: 'Lyrurus tetrix',        taxon: '102642', obs: 15 },
+      { sv: 'Glada',         sci: 'Milvus milvus',         taxon: '102544', obs: 12 },
+      { sv: 'Kungsörn',      sci: 'Aquila chrysaetos',     taxon: '102558', obs:  8 },
+    ],
+  },
+  'Anna Andersson': {
+    name:    'Anna Andersson',
+    obs:     534,
+    arter:   61,
+    dagar:   72,
+    since:   '2021',
+    lastObs: '2026-03-10',
+    county:  'Västerbottens län',
+    monthly: [12, 34, 56, 67, 89, 72, 45, 38, 61, 52, 28, 15],
+    places: [
+      { name: 'Umeå',       obs: 189 },
+      { name: 'Vännäs',     obs:  67 },
+      { name: 'Vindeln',    obs:  43 },
+      { name: 'Bjurholm',   obs:  22 },
+      { name: 'Robertsfors', obs: 15 },
+    ],
+    species: [
+      { sv: 'Talgoxe',   sci: 'Parus major',         taxon: '102940', obs: 54 },
+      { sv: 'Blåmes',    sci: 'Cyanistes caeruleus',  taxon: '102939', obs: 48 },
+      { sv: 'Koltrast',  sci: 'Turdus merula',        taxon: '103013', obs: 39 },
+      { sv: 'Stare',     sci: 'Sturnus vulgaris',     taxon: '103031', obs: 31 },
+      { sv: 'Bofink',    sci: 'Fringilla coelebs',    taxon: '102985', obs: 27 },
+    ],
+  },
+};
+
+/* ── Utility ── */
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Autocomplete-förslag (enkel) ── */
+function filterSuggestions(q) { /* kan byggas ut med datalist senare */ }
+
+/* ── Ladda rapportör ── */
+function loadReporter() {
+  const q = document.getElementById('repSearch').value.trim();
+  // Sök case-insensitivt
+  const key = Object.keys(MOCK_REPORTERS).find(k => k.toLowerCase() === q.toLowerCase());
+  const rep = key ? MOCK_REPORTERS[key] : null;
+
+  if (!rep) {
+    document.getElementById('emptyState').innerHTML =
+      `<div class="icon">🔍</div><div>Ingen rapportör hittades för "<strong>${esc(q)}</strong>"<br><small style="color:#cbd5e0">Prova: Jonas Karlsson eller Anna Andersson</small></div>`;
+    document.getElementById('emptyState').style.display = '';
+    document.getElementById('reporterCard').style.display = 'none';
+    return;
+  }
+
+  renderReporter(rep);
+}
+
+function renderReporter(rep) {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('reporterCard').style.display = '';
+
+  // Hero
+  document.getElementById('heroName').textContent = rep.name;
+  document.getElementById('heroSub').textContent =
+    `${rep.county} · Senaste obs ${rep.lastObs}`;
+  document.getElementById('pillObs').textContent   = rep.obs.toLocaleString('sv');
+  document.getElementById('pillArter').textContent = rep.arter;
+  document.getElementById('pillDagar').textContent = rep.dagar;
+  document.getElementById('pillSince').textContent = rep.since;
+
+  // Månadsdiagram
+  renderMonthChart(rep.monthly);
+
+  // Topplatser
+  renderPlaces(rep.places);
+
+  // Artlista
+  renderSpecies(rep.species);
+}
+
+/* ── Månadsdiagram ── */
+function renderMonthChart(monthly) {
+  const max = Math.max(...monthly, 1);
+  const chart = document.getElementById('monthChart');
+  chart.innerHTML = monthly.map((v, i) => {
+    const pct = Math.round((v / max) * 100);
+    return `<div class="month-bar-wrap">
+      <div style="font-size:.62rem;color:#4a5568;font-weight:600;margin-bottom:.1rem">${v||''}</div>
+      <div class="month-bar" style="height:${Math.max(pct,4)}%" title="${v} obs"></div>
+    </div>`;
+  }).join('');
+}
+
+/* ── Topplatser ── */
+function renderPlaces(places) {
+  const maxObs = places[0]?.obs || 1;
+  const rankClasses = ['gold','silver','bronze','',''];
+  document.getElementById('placeList').innerHTML = places.map((p, i) => {
+    const pct = Math.round((p.obs / maxObs) * 100);
+    return `<li class="place-row">
+      <div class="place-rank ${rankClasses[i]||''}">${i+1}</div>
+      <div class="place-name">${esc(p.name)}</div>
+      <div class="place-bar-bg"><div class="place-bar-fill" style="width:${pct}%"></div></div>
+      <div class="place-num">${p.obs} obs</div>
+    </li>`;
+  }).join('');
+  document.getElementById('placeCount').textContent = places.length;
+}
+
+/* ── Artlista ── */
+let _allSpecies = [];
+
+function renderSpecies(species) {
+  _allSpecies = species;
+  document.getElementById('spCount').textContent = species.length;
+  document.getElementById('spFilter').value = '';
+  buildSpTable(species);
+}
+
+function buildSpTable(species) {
+  const maxObs = Math.max(...species.map(s => s.obs), 1);
+  document.getElementById('spTbody').innerHTML = species.map((s, i) => {
+    const pct = Math.round((s.obs / maxObs) * 100);
+    const url = s.taxon ? `https://artfakta.artdatabanken.se/taxon/${s.taxon}` : null;
+    const nameHtml = url
+      ? `<a class="sp-link" href="${url}" target="_blank">${esc(s.sv)}</a>`
+      : esc(s.sv);
+    return `<tr>
+      <td style="color:#a0aec0;font-size:.78rem">${i+1}</td>
+      <td><div class="sp-sv">${nameHtml}</div><div class="sp-sci">${esc(s.sci)}</div></td>
+      <td class="sp-obs">${s.obs}</td>
+      <td class="sp-bar-cell"><div class="sp-mini-bar" style="width:${pct}%"></div></td>
+    </tr>`;
+  }).join('');
+}
+
+function filterArter(q) {
+  q = q.toLowerCase().trim();
+  const filtered = q
+    ? _allSpecies.filter(s => s.sv.toLowerCase().includes(q))
+    : _allSpecies;
+  buildSpTable(filtered);
+}
+
+/* ── Enter-tangent i sökfältet ── */
+document.getElementById('repSearch').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadReporter();
+});
+</script>
+
+</body>
+</html>
