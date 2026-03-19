@@ -745,16 +745,13 @@ def reporter_list():
     """Returnerar lista på alla rapportörsnamn från statistikcachen (för autocomplete)."""
     county_id = (request.args.get("county_id") or DEFAULT_COUNTY_ID).strip()
     year      = (request.args.get("year") or str(_date_type.today().year)).strip()
-    cache_file = _cache_file_for(county_id, year)
-    if not _os.path.exists(cache_file):
+    cache_key = f"{county_id}_{year}"
+    with _stats_lock:
+        data = _stats_cache.get(cache_key)
+    if not data:
         return jsonify([])
-    try:
-        with open(cache_file, 'r', encoding='utf-8') as f:
-            cache = _json.load(f)
-        reporters = cache.get('payload', {}).get('top_reporters', [])
-        return jsonify([r['name'] for r in reporters])
-    except Exception:
-        return jsonify([])
+    reporters = data.get('top_reporters', [])
+    return jsonify([r['name'] for r in reporters])
 
 
 @app.route("/api/reporter_stats")
@@ -765,13 +762,12 @@ def reporter_stats():
     name      = (request.args.get("name") or "").strip()
     if not name:
         return jsonify({"error": "name krävs"}), 400
-    cache_file = _cache_file_for(county_id, year)
-    if not _os.path.exists(cache_file):
+    cache_key = f"{county_id}_{year}"
+    with _stats_lock:
+        payload = _stats_cache.get(cache_key)
+    if not payload:
         return jsonify({"error": "cache_missing"}), 404
     try:
-        with open(cache_file, 'r', encoding='utf-8') as f:
-            cache = _json.load(f)
-        payload  = cache.get('payload', {})
         details  = payload.get('reporter_details', {})
         # Exakt match, annars case-insensitivt
         match = details.get(name) or next(
@@ -795,6 +791,29 @@ def reporter_stats():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/reporter_debug")
+def reporter_debug():
+    """Debugar statistikcachens innehåll för ett visst county+år."""
+    county_id = (request.args.get("county_id") or DEFAULT_COUNTY_ID).strip()
+    year      = (request.args.get("year") or str(_date_type.today().year)).strip()
+    cache_key = f"{county_id}_{year}"
+    with _stats_lock:
+        payload = _stats_cache.get(cache_key)
+    if not payload:
+        return jsonify({"in_memory": False, "cache_key": cache_key})
+    details = payload.get('reporter_details', {})
+    top_rap = payload.get('top_reporters', [])
+    return jsonify({
+        "in_memory":           True,
+        "cache_key":           cache_key,
+        "has_reporter_details": bool(details),
+        "reporter_details_count": len(details),
+        "top_reporters_count": len(top_rap),
+        "sample_detail_keys":  list(details.keys())[:5],
+        "sample_top_reporters": [r['name'] for r in top_rap[:5]],
+    })
 
 
 @app.route("/api/debug/token")
