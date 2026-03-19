@@ -740,6 +740,63 @@ def breeding_probe():
     })
 
 
+@app.route("/api/reporter_list")
+def reporter_list():
+    """Returnerar lista på alla rapportörsnamn från statistikcachen (för autocomplete)."""
+    county_id = (request.args.get("county_id") or DEFAULT_COUNTY_ID).strip()
+    year      = (request.args.get("year") or str(_date_type.today().year)).strip()
+    cache_file = _cache_file_for(county_id, year)
+    if not _os.path.exists(cache_file):
+        return jsonify([])
+    try:
+        with open(cache_file, 'r', encoding='utf-8') as f:
+            cache = _json.load(f)
+        reporters = cache.get('payload', {}).get('top_reporters', [])
+        return jsonify([r['name'] for r in reporters])
+    except Exception:
+        return jsonify([])
+
+
+@app.route("/api/reporter_stats")
+def reporter_stats():
+    """Returnerar detaljerad statistik för en enskild rapportör från statistikcachen."""
+    county_id = (request.args.get("county_id") or DEFAULT_COUNTY_ID).strip()
+    year      = (request.args.get("year") or str(_date_type.today().year)).strip()
+    name      = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name krävs"}), 400
+    cache_file = _cache_file_for(county_id, year)
+    if not _os.path.exists(cache_file):
+        return jsonify({"error": "cache_missing"}), 404
+    try:
+        with open(cache_file, 'r', encoding='utf-8') as f:
+            cache = _json.load(f)
+        payload  = cache.get('payload', {})
+        details  = payload.get('reporter_details', {})
+        # Exakt match, annars case-insensitivt
+        match = details.get(name) or next(
+            (v for k, v in details.items() if k.lower() == name.lower()), None)
+        match_name = name if name in details else next(
+            (k for k in details if k.lower() == name.lower()), name)
+        if not match:
+            return jsonify({"error": "not_found"}), 404
+        top_rap  = payload.get('top_reporters', [])
+        rap_info = next((r for r in top_rap if r['name'] == match_name), {})
+        return jsonify({
+            'name':    match_name,
+            'obs':     rap_info.get('obs', sum(match['monthly'])),
+            'arter':   len(match['species']),
+            'dagar':   match['dagar'],
+            'since':   match['since'],
+            'lastObs': match['lastObs'],
+            'monthly': match['monthly'],
+            'places':  match['places'],
+            'species': match['species'],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/debug/token")
 def debug_token():
     return jsonify({
@@ -1008,6 +1065,11 @@ def _new_agg_state():
         'muni_month_rep': _defaultdict(lambda: _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'species': set()}))),
         'taxon_ids':      set(),
         'muni_names':     {},   # { featureId: kommunnamn } direkt från SOS API
+        # Per-rapportör detaljdata (byggs upp under aggregeringen)
+        'rep_monthly':    _defaultdict(lambda: [0] * 12),   # name → [12 månader]
+        'rep_species':    _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'sv': '', 'sci': ''})),
+        'rep_places':     _defaultdict(lambda: _defaultdict(int)),  # name → locality → count
+        'rep_days':       _defaultdict(set),                # name → set of date-strings
     }
 
 
@@ -1066,9 +1128,21 @@ def _agg_add_records(state, records):
             sp['last_date'] = start_dt[:10]
             sp['last_rep']  = reporter
 
+        locality = (location.get('locality') or location.get('name') or '').strip()
+
         if reporter:
             reporters[reporter]['obs'] += 1
             reporters[reporter]['species'].add(key)
+            # Per-rapportör detaljdata
+            if month_0 is not None:
+                state['rep_monthly'][reporter][month_0] += 1
+            state['rep_species'][reporter][key]['obs'] += 1
+            if sv_name:  state['rep_species'][reporter][key]['sv']  = sv_name
+            if sci_name: state['rep_species'][reporter][key]['sci'] = sci_name
+            if locality:
+                state['rep_places'][reporter][locality] += 1
+            if start_dt and len(start_dt) >= 10:
+                state['rep_days'][reporter].add(start_dt[:10])
 
         state['total_ind'] += count
 
@@ -1172,6 +1246,28 @@ def _agg_finalize(state):
                 key=lambda x: x['arter'], reverse=True
             )
 
+    # Per-rapportör detaljdata
+    reporter_details = {}
+    for rep_name, rep_sp in state['rep_species'].items():
+        days = state['rep_days'][rep_name]
+        places_sorted = sorted(
+            [{'name': k, 'obs': v} for k, v in state['rep_places'][rep_name].items()],
+            key=lambda x: -x['obs']
+        )[:15]
+        species_sorted = sorted(
+            [{'taxon': str(k), 'sv': v['sv'], 'sci': v['sci'], 'obs': v['obs']}
+             for k, v in rep_sp.items()],
+            key=lambda x: -x['obs']
+        )
+        reporter_details[rep_name] = {
+            'monthly':  state['rep_monthly'][rep_name],
+            'species':  species_sorted,
+            'places':   places_sorted,
+            'dagar':    len(days),
+            'lastObs':  max(days) if days else '',
+            'since':    min(days)[:4] if days else '',
+        }
+
     return {
         'kpi':                  {'arter': len(species),
                                  'obs':   sum(v['obs'] for v in species.values()),
@@ -1187,6 +1283,7 @@ def _agg_finalize(state):
         'muni_reporters':       muni_reporters,
         'muni_month_species':   muni_month_species,
         'muni_month_reporters': muni_month_reporters,
+        'reporter_details':     reporter_details,
     }
 
 

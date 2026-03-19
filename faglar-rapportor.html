@@ -194,18 +194,45 @@
 <div class="container">
 
   <!-- Sökfält -->
+  <datalist id="repSuggestions"></datalist>
   <div class="search-wrap">
-    <label for="repSearch">🔍 Sök rapportör</label>
-    <input type="text" id="repSearch" placeholder="Skriv namn…" oninput="filterSuggestions(this.value)" autocomplete="off">
-    <label for="yearSel" style="font-weight:700;font-size:.9rem;color:#2d3748;white-space:nowrap">År</label>
-    <select id="yearSel" onchange="onYearChange()" style="padding:.48rem .7rem;font-size:.88rem;border:1px solid #cbd5e0;border-radius:8px;outline:none;background:white">
-      <option value="all">Alla år</option>
-      <option value="2026">2026</option>
+    <label for="selCounty">Län</label>
+    <select id="selCounty" onchange="onFilterChange()" style="padding:.38rem .6rem;font-size:.82rem;border:1px solid #cbd5e0;border-radius:7px;outline:none;background:white;flex:1 1 140px;min-width:0">
+      <option value="24">Västerbottens län</option>
+      <option value="25">Norrbottens län</option>
+      <option value="22">Västernorrlands län</option>
+      <option value="23">Jämtlands län</option>
+      <option value="20">Dalarnas län</option>
+      <option value="21">Gävleborgs län</option>
+      <option value="18">Örebro län</option>
+      <option value="19">Västmanlands län</option>
+      <option value="17">Värmlands län</option>
+      <option value="01">Stockholms län</option>
+      <option value="03">Uppsala län</option>
+      <option value="04">Södermanlands län</option>
+      <option value="05">Östergötlands län</option>
+      <option value="06">Jönköpings län</option>
+      <option value="07">Kronobergs län</option>
+      <option value="08">Kalmar län</option>
+      <option value="09">Gotlands län</option>
+      <option value="10">Blekinge län</option>
+      <option value="12">Skåne län</option>
+      <option value="13">Hallands län</option>
+      <option value="14">Västra Götalands län</option>
+    </select>
+    <label for="selYear">År</label>
+    <select id="selYear" onchange="onFilterChange()" style="padding:.38rem .6rem;font-size:.82rem;border:1px solid #cbd5e0;border-radius:7px;outline:none;background:white">
+      <option value="2026" selected>2026</option>
       <option value="2025">2025</option>
       <option value="2024">2024</option>
       <option value="2023">2023</option>
       <option value="2022">2022</option>
     </select>
+    <label for="repSearch">Rapportör</label>
+    <input type="text" id="repSearch" list="repSuggestions" placeholder="Skriv namn…" autocomplete="off"
+      style="flex:2 1 180px;min-width:0;padding:.38rem .7rem;font-size:.88rem;border:1px solid #cbd5e0;border-radius:7px;outline:none"
+      onkeydown="if(event.key==='Enter')loadReporter()">
+    <img id="repSpinner" src="" style="display:none;width:1.4rem;height:1.4rem;vertical-align:middle">
     <button class="btn-search" onclick="loadReporter()">Hämta</button>
   </div>
 
@@ -300,197 +327,72 @@
 </div>
 <footer>Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026</footer>
 
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
 <script>
-/* ══════════════════════════════════════════════════════
-   Exempeldata (hårdkodad – ersätts med API-anrop senare)
-══════════════════════════════════════════════════════ */
-const MOCK_REPORTERS = {
-  'Jonas Karlsson': {
-    name:    'Jonas Karlsson',
-    county:  'Västerbottens län',
-    since:   '2019',
-    lastObs: '2026-03-18',
-    // "all" = alla år summerat
-    years: {
-      all: {
-        obs: 1247, arter: 89, dagar: 143,
-        monthly: [45, 78, 123, 98, 156, 134, 89, 67, 112, 98, 67, 34],
-        places: [
-          { name: 'Umeå', obs: 234 }, { name: 'Skellefteå', obs: 123 },
-          { name: 'Lycksele', obs: 89 }, { name: 'Vindeln', obs: 45 }, { name: 'Norsjö', obs: 34 },
-        ],
-        species: [
-          { sv: 'Talgoxe',       sci: 'Parus major',              taxon: '102940', obs: 89 },
-          { sv: 'Blåmes',        sci: 'Cyanistes caeruleus',      taxon: '102939', obs: 76 },
-          { sv: 'Bofink',        sci: 'Fringilla coelebs',        taxon: '102985', obs: 65 },
-          { sv: 'Tofsvipa',      sci: 'Vanellus vanellus',        taxon: '102706', obs: 54 },
-          { sv: 'Sånglärka',     sci: 'Alauda arvensis',          taxon: '102860', obs: 48 },
-          { sv: 'Stare',         sci: 'Sturnus vulgaris',         taxon: '103031', obs: 43 },
-          { sv: 'Koltrast',      sci: 'Turdus merula',            taxon: '103013', obs: 41 },
-          { sv: 'Gulsparv',      sci: 'Emberiza citrinella',      taxon: '103058', obs: 38 },
-          { sv: 'Råka',          sci: 'Corvus frugilegus',        taxon: '103046', obs: 35 },
-          { sv: 'Hussvala',      sci: 'Delichon urbicum',         taxon: '102875', obs: 32 },
-          { sv: 'Ladusvala',     sci: 'Hirundo rustica',          taxon: '102872', obs: 29 },
-          { sv: 'Rödvingetrast', sci: 'Turdus iliacus',           taxon: '103017', obs: 27 },
-          { sv: 'Lövsångare',    sci: 'Phylloscopus trochilus',   taxon: '102955', obs: 25 },
-          { sv: 'Grönfink',      sci: 'Chloris chloris',          taxon: '102988', obs: 23 },
-          { sv: 'Grönsiska',     sci: 'Spinus spinus',            taxon: '102990', obs: 21 },
-          { sv: 'Pilfink',       sci: 'Passer montanus',          taxon: '103027', obs: 19 },
-          { sv: 'Nötkråka',      sci: 'Nucifraga caryocatactes', taxon: '103044', obs: 17 },
-          { sv: 'Orre',          sci: 'Lyrurus tetrix',           taxon: '102642', obs: 15 },
-          { sv: 'Glada',         sci: 'Milvus milvus',            taxon: '102544', obs: 12 },
-          { sv: 'Kungsörn',      sci: 'Aquila chrysaetos',        taxon: '102558', obs:  8 },
-        ],
-      },
-      '2026': {
-        obs: 87, arter: 34, dagar: 18,
-        monthly: [12, 23, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        places: [
-          { name: 'Umeå', obs: 54 }, { name: 'Skellefteå', obs: 21 },
-          { name: 'Vindeln', obs: 8 }, { name: 'Lycksele', obs: 4 },
-        ],
-        species: [
-          { sv: 'Talgoxe',   sci: 'Parus major',         taxon: '102940', obs: 18 },
-          { sv: 'Blåmes',    sci: 'Cyanistes caeruleus',  taxon: '102939', obs: 14 },
-          { sv: 'Bofink',    sci: 'Fringilla coelebs',    taxon: '102985', obs: 11 },
-          { sv: 'Koltrast',  sci: 'Turdus merula',        taxon: '103013', obs:  9 },
-          { sv: 'Tofsvipa',  sci: 'Vanellus vanellus',    taxon: '102706', obs:  7 },
-          { sv: 'Sånglärka', sci: 'Alauda arvensis',      taxon: '102860', obs:  6 },
-          { sv: 'Kungsörn',  sci: 'Aquila chrysaetos',    taxon: '102558', obs:  3 },
-        ],
-      },
-      '2025': {
-        obs: 342, arter: 71, dagar: 67,
-        monthly: [22, 31, 45, 38, 56, 48, 34, 28, 41, 35, 27, 17],
-        places: [
-          { name: 'Umeå', obs: 98 }, { name: 'Skellefteå', obs: 67 },
-          { name: 'Lycksele', obs: 45 }, { name: 'Vindeln', obs: 23 }, { name: 'Norsjö', obs: 18 },
-        ],
-        species: [
-          { sv: 'Talgoxe',       sci: 'Parus major',         taxon: '102940', obs: 28 },
-          { sv: 'Blåmes',        sci: 'Cyanistes caeruleus',  taxon: '102939', obs: 22 },
-          { sv: 'Bofink',        sci: 'Fringilla coelebs',    taxon: '102985', obs: 19 },
-          { sv: 'Sånglärka',     sci: 'Alauda arvensis',      taxon: '102860', obs: 17 },
-          { sv: 'Stare',         sci: 'Sturnus vulgaris',     taxon: '103031', obs: 15 },
-          { sv: 'Koltrast',      sci: 'Turdus merula',        taxon: '103013', obs: 14 },
-          { sv: 'Rödvingetrast', sci: 'Turdus iliacus',       taxon: '103017', obs: 11 },
-          { sv: 'Ladusvala',     sci: 'Hirundo rustica',      taxon: '102872', obs:  9 },
-          { sv: 'Hussvala',      sci: 'Delichon urbicum',     taxon: '102875', obs:  8 },
-          { sv: 'Kungsörn',      sci: 'Aquila chrysaetos',    taxon: '102558', obs:  3 },
-        ],
-      },
-      '2024': {
-        obs: 389, arter: 76, dagar: 72,
-        monthly: [18, 29, 42, 41, 58, 52, 38, 31, 45, 39, 28, 18],
-        places: [
-          { name: 'Umeå', obs: 112 }, { name: 'Skellefteå', obs: 78 },
-          { name: 'Lycksele', obs: 51 }, { name: 'Vindeln', obs: 31 }, { name: 'Norsjö', obs: 20 },
-        ],
-        species: [
-          { sv: 'Talgoxe',   sci: 'Parus major',         taxon: '102940', obs: 31 },
-          { sv: 'Blåmes',    sci: 'Cyanistes caeruleus',  taxon: '102939', obs: 24 },
-          { sv: 'Bofink',    sci: 'Fringilla coelebs',    taxon: '102985', obs: 20 },
-          { sv: 'Tofsvipa',  sci: 'Vanellus vanellus',    taxon: '102706', obs: 18 },
-          { sv: 'Sånglärka', sci: 'Alauda arvensis',      taxon: '102860', obs: 15 },
-          { sv: 'Stare',     sci: 'Sturnus vulgaris',     taxon: '103031', obs: 14 },
-          { sv: 'Orre',      sci: 'Lyrurus tetrix',       taxon: '102642', obs:  8 },
-          { sv: 'Glada',     sci: 'Milvus milvus',        taxon: '102544', obs:  5 },
-        ],
-      },
-    },
-  },
-  'Anna Andersson': {
-    name:    'Anna Andersson',
-    county:  'Västerbottens län',
-    since:   '2021',
-    lastObs: '2026-03-10',
-    years: {
-      all: {
-        obs: 534, arter: 61, dagar: 72,
-        monthly: [12, 34, 56, 67, 89, 72, 45, 38, 61, 52, 28, 15],
-        places: [
-          { name: 'Umeå', obs: 189 }, { name: 'Vännäs', obs: 67 },
-          { name: 'Vindeln', obs: 43 }, { name: 'Bjurholm', obs: 22 }, { name: 'Robertsfors', obs: 15 },
-        ],
-        species: [
-          { sv: 'Talgoxe',  sci: 'Parus major',         taxon: '102940', obs: 54 },
-          { sv: 'Blåmes',   sci: 'Cyanistes caeruleus',  taxon: '102939', obs: 48 },
-          { sv: 'Koltrast', sci: 'Turdus merula',        taxon: '103013', obs: 39 },
-          { sv: 'Stare',    sci: 'Sturnus vulgaris',     taxon: '103031', obs: 31 },
-          { sv: 'Bofink',   sci: 'Fringilla coelebs',    taxon: '102985', obs: 27 },
-        ],
-      },
-      '2026': {
-        obs: 43, arter: 22, dagar: 9,
-        monthly: [8, 14, 21, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        places: [
-          { name: 'Umeå', obs: 31 }, { name: 'Vännäs', obs: 9 }, { name: 'Vindeln', obs: 3 },
-        ],
-        species: [
-          { sv: 'Talgoxe',  sci: 'Parus major',         taxon: '102940', obs: 12 },
-          { sv: 'Blåmes',   sci: 'Cyanistes caeruleus',  taxon: '102939', obs:  9 },
-          { sv: 'Koltrast', sci: 'Turdus merula',        taxon: '103013', obs:  7 },
-        ],
-      },
-      '2025': {
-        obs: 198, arter: 48, dagar: 34,
-        monthly: [7, 14, 22, 28, 34, 27, 18, 15, 24, 19, 12, 8],
-        places: [
-          { name: 'Umeå', obs: 78 }, { name: 'Vännäs', obs: 34 },
-          { name: 'Vindeln', obs: 21 }, { name: 'Bjurholm', obs: 12 },
-        ],
-        species: [
-          { sv: 'Talgoxe',  sci: 'Parus major',         taxon: '102940', obs: 22 },
-          { sv: 'Blåmes',   sci: 'Cyanistes caeruleus',  taxon: '102939', obs: 18 },
-          { sv: 'Koltrast', sci: 'Turdus merula',        taxon: '103013', obs: 15 },
-          { sv: 'Stare',    sci: 'Sturnus vulgaris',     taxon: '103031', obs: 12 },
-          { sv: 'Bofink',   sci: 'Fringilla coelebs',    taxon: '102985', obs:  9 },
-        ],
-      },
-    },
-  },
-};
 
-/* ── Utility ── */
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* ── Autocomplete: hämta rapportörslista när län/år ändras ── */
+async function onFilterChange() {
+  const county = document.getElementById('selCounty').value;
+  const year   = document.getElementById('selYear').value;
+  try {
+    const r = await fetch(`/api/reporter_list?county_id=${county}&year=${year}`);
+    const names = await r.json();
+    const dl = document.getElementById('repSuggestions');
+    dl.innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+  } catch { /* tyst */ }
 }
 
-/* ── Autocomplete-förslag (enkel) ── */
-function filterSuggestions(q) { /* kan byggas ut med datalist senare */ }
+/* ── Ladda rapportör från API ── */
+async function loadReporter() {
+  const name   = document.getElementById('repSearch').value.trim();
+  const county = document.getElementById('selCounty').value;
+  const year   = document.getElementById('selYear').value;
 
-/* ── Aktiv rapportör ── */
-let _currentReporter = null;
-
-/* ── Ladda rapportör ── */
-function loadReporter() {
-  const q = document.getElementById('repSearch').value.trim();
-  const key = Object.keys(MOCK_REPORTERS).find(k => k.toLowerCase() === q.toLowerCase());
-  const rep = key ? MOCK_REPORTERS[key] : null;
-
-  if (!rep) {
-    document.getElementById('emptyState').innerHTML =
-      `<div class="icon">🔍</div><div>Ingen rapportör hittades för "<strong>${esc(q)}</strong>"<br><small style="color:#cbd5e0">Prova: Jonas Karlsson eller Anna Andersson</small></div>`;
-    document.getElementById('emptyState').style.display = '';
-    document.getElementById('reporterCard').style.display = 'none';
-    _currentReporter = null;
+  if (!name) {
+    showEmpty('<div class="icon">🔍</div><div>Ange ett rapportörnamn och tryck Hämta</div>');
     return;
   }
 
-  _currentReporter = rep;
-  renderReporter(rep);
-}
+  // Visa spinner
+  const spinner = document.getElementById('repSpinner');
+  const btn     = document.querySelector('.btn-search');
+  spinner.src = ''; // tom – CSS-spinner
+  spinner.style.cssText = 'display:inline-block;width:1.2rem;height:1.2rem;border:2px solid #bee3f8;border-top-color:#2b6cb0;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle';
+  btn.disabled = true;
 
-/* ── Ändrat år → rendera om ── */
-function onYearChange() {
-  if (_currentReporter) renderReporter(_currentReporter);
+  try {
+    const r = await fetch(`/api/reporter_stats?county_id=${county}&year=${year}&name=${encodeURIComponent(name)}`);
+    const d = await r.json();
+
+    if (!r.ok) {
+      if (d.error === 'cache_missing') {
+        showEmpty(`<div class="icon">📊</div><div>Statistiken för <strong>${esc(year)}</strong> i valt län är inte cachad ännu.<br>
+          Gå till <a href="faglar-statistik.html">Statistiksidan</a> och hämta data för detta år och län – kom sedan tillbaka.</div>`);
+      } else if (d.error === 'not_found') {
+        showEmpty(`<div class="icon">🔍</div><div>Ingen rapportör hittades för "<strong>${esc(name)}</strong>" i ${esc(year)}.</div>`);
+      } else {
+        showEmpty(`<div class="icon">⚠️</div><div>Fel: ${esc(d.error || 'okänt fel')}</div>`);
+      }
+      return;
+    }
+
+    renderReporter(d);
+
+  } catch (e) {
+    showEmpty(`<div class="icon">⚠️</div><div>Kunde inte hämta data: ${esc(e.message)}</div>`);
+  } finally {
+    spinner.style.display = 'none';
+    btn.disabled = false;
+  }
 }
 
 function renderReporter(rep) {
-  const year = document.getElementById('yearSel').value;
-  // Hämta årsdata, fall tillbaka på "all" om valt år saknas
-  const d = rep.years[year] || rep.years['all'];
-  const yearLabel = year === 'all' ? 'alla år' : year;
+  const year     = document.getElementById('selYear').value;
+  const countyEl = document.getElementById('selCounty');
+  const county   = countyEl.options[countyEl.selectedIndex].text;
 
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('reporterCard').style.display = 'block';
@@ -498,21 +400,19 @@ function renderReporter(rep) {
   // Hero
   document.getElementById('heroName').textContent = rep.name;
   document.getElementById('heroSub').textContent =
-    `${rep.county} · Senaste obs ${rep.lastObs} · Visar ${yearLabel}`;
-  document.getElementById('pillObs').textContent   = d.obs.toLocaleString('sv');
-  document.getElementById('pillArter').textContent = d.arter;
-  document.getElementById('pillDagar').textContent = d.dagar;
-  document.getElementById('pillSince').textContent = year === 'all' ? rep.since : year;
+    `${county} · Senaste obs ${rep.lastObs || '–'} · Visar ${year}`;
+  document.getElementById('pillObs').textContent   = Number(rep.obs).toLocaleString('sv');
+  document.getElementById('pillArter').textContent = rep.arter;
+  document.getElementById('pillDagar').textContent = rep.dagar;
+  document.getElementById('pillSince').textContent = rep.since || year;
 
-  // Månadsdiagram
-  renderMonthChart(d.monthly);
-
-  // Topplatser
-  renderPlaces(d.places);
-
-  // Artlista
-  renderSpecies(d.species);
+  renderMonthChart(rep.monthly || []);
+  renderPlaces(rep.places     || []);
+  renderSpecies(rep.species   || []);
 }
+
+/* ── Init: ladda autocomplete för default-val ── */
+onFilterChange();
 
 /* ── Månadsdiagram ── */
 function renderMonthChart(monthly) {
