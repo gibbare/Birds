@@ -1147,7 +1147,7 @@ def _agg_add_records(state, records):
             sp['last_date'] = start_dt[:10]
             sp['last_rep']  = reporter
 
-        locality = (location.get('locality') or location.get('name') or '').strip()
+        locality = (location.get('locality') or location.get('name') or muni_name or '').strip()
 
         if reporter:
             reporters[reporter]['obs'] += 1

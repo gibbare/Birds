@@ -424,12 +424,20 @@ function renderReporter(rep) {
   renderSpecies(rep.species   || []);
 }
 
-/* ── Init: återställ sparat urval och ladda autocomplete ── */
+/* ── Init: sortera länslistan + återställ sparat urval ── */
 (function() {
+  // Sortera länsdropdown alfabetiskt
+  const sel = document.getElementById('selCounty');
+  const opts = Array.from(sel.options);
+  opts.sort((a, b) => a.text.localeCompare(b.text, 'sv'));
+  sel.innerHTML = '';
+  opts.forEach(o => sel.appendChild(o));
+
+  // Återställ sparade val
   const savedCounty   = localStorage.getItem('bird_county');
   const savedYear     = localStorage.getItem('bird_year');
   const savedReporter = localStorage.getItem('bird_reporter');
-  if (savedCounty) document.getElementById('selCounty').value = savedCounty;
+  if (savedCounty) sel.value = savedCounty;
   if (savedYear)   document.getElementById('selYear').value   = savedYear;
   if (savedReporter) document.getElementById('repSearch').value = savedReporter;
 })();
@@ -461,9 +469,15 @@ function renderMonthChart(monthly) {
 
 /* ── Topplatser ── */
 function renderPlaces(places) {
-  const maxObs = places[0]?.obs || 1;
+  const el = document.getElementById('placeList');
+  document.getElementById('placeCount').textContent = places.length;
+  if (!places.length) {
+    el.innerHTML = '<li style="color:#a0aec0;font-size:.82rem;padding:.4rem 0">Inga platsnamn tillgängliga</li>';
+    return;
+  }
+  const maxObs = places[0].obs || 1;
   const rankClasses = ['gold','silver','bronze','',''];
-  document.getElementById('placeList').innerHTML = places.map((p, i) => {
+  el.innerHTML = places.map((p, i) => {
     const pct = Math.round((p.obs / maxObs) * 100);
     return `<li class="place-row">
       <div class="place-rank ${rankClasses[i]||''}">${i+1}</div>
@@ -472,7 +486,6 @@ function renderPlaces(places) {
       <div class="place-num">${p.obs} obs</div>
     </li>`;
   }).join('');
-  document.getElementById('placeCount').textContent = places.length;
 }
 
 /* ── Artlista ── */
