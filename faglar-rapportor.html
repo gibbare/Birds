@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rapportörer – Fågelobservationer</title>
+  <title>Rapportör – Fågelobservationer</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; background: #f7fafc; color: #1a202c; }
@@ -135,7 +135,7 @@
     }
     .sp-search-wrap input:focus { border-color: #2b6cb0; }
 
-    .sp-table-wrap { max-height: 380px; overflow-y: auto; }
+    .sp-table-wrap { }
     table.sp-list { width: 100%; border-collapse: collapse; font-size: .83rem; }
     table.sp-list th {
       position: sticky; top: 0; background: #f7fafc;
@@ -188,7 +188,7 @@
   <a href="faglar-vasterbotten.html" class="page-tab">📋 Dagslista</a>
   <a href="faglar-statistik.html"    class="page-tab">📊 Statistik</a>
   <a href="faglar-hackning.html"     class="page-tab">🥚 Häckning</a>
-  <a href="faglar-rapportor.html"    class="page-tab active">👤 Rapportörer</a>
+  <a href="faglar-rapportor.html"    class="page-tab active">👤 Rapportör</a>
 </nav>
 
 <div class="container">
@@ -291,6 +291,13 @@
   </div><!-- /reporterCard -->
 </div>
 
+<div style="padding:.75rem 1rem 0;max-width:1200px;margin:0 auto">
+  <button onclick="window.scrollTo({top:0,behavior:'smooth'})"
+    style="background:none;border:1px solid #cbd5e0;border-radius:8px;padding:.38rem .9rem;
+           font-size:.8rem;color:#4a5568;cursor:pointer;display:flex;align-items:center;gap:.4rem">
+    ↑ Gå till toppen
+  </button>
+</div>
 <footer>Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026</footer>
 
 <script>
