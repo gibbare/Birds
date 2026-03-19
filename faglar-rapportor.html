@@ -348,6 +348,8 @@ function showEmpty(html) {
 async function onFilterChange() {
   const county = document.getElementById('selCounty').value;
   const year   = document.getElementById('selYear').value;
+  localStorage.setItem('bird_county', county);
+  localStorage.setItem('bird_year',   year);
   try {
     const r = await fetch(`/api/reporter_list?county_id=${county}&year=${year}`);
     const names = await r.json();
@@ -422,8 +424,23 @@ function renderReporter(rep) {
   renderSpecies(rep.species   || []);
 }
 
-/* ── Init: ladda autocomplete för default-val ── */
+/* ── Init: återställ sparat urval och ladda autocomplete ── */
+(function() {
+  const savedCounty   = localStorage.getItem('bird_county');
+  const savedYear     = localStorage.getItem('bird_year');
+  const savedReporter = localStorage.getItem('bird_reporter');
+  if (savedCounty) document.getElementById('selCounty').value = savedCounty;
+  if (savedYear)   document.getElementById('selYear').value   = savedYear;
+  if (savedReporter) document.getElementById('repSearch').value = savedReporter;
+})();
 onFilterChange();
+
+/* ── Spara rapportörnamn när användaren skriver ── */
+document.getElementById('repSearch').addEventListener('input', () => {
+  const v = document.getElementById('repSearch').value.trim();
+  if (v) localStorage.setItem('bird_reporter', v);
+  else   localStorage.removeItem('bird_reporter');
+});
 
 /* ── Månadsdiagram ── */
 function renderMonthChart(monthly) {

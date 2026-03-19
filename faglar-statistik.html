@@ -1226,6 +1226,7 @@ function updateCounty() {
   const newCounty = document.getElementById('selCounty').value;
   if (newCounty === selectedCountyId) return;
   selectedCountyId = newCounty;
+  localStorage.setItem('bird_county', newCounty);
   selectedMonth    = 0;
   document.getElementById('selMonth').value = 0;
   populateRegionDropdown(selectedCountyId);
@@ -1236,6 +1237,7 @@ function updateCounty() {
 function updatePeriod() {
   selectedYear  = +document.getElementById('selYear').value;
   selectedMonth = +document.getElementById('selMonth').value;
+  localStorage.setItem('bird_year', String(selectedYear));
 
   const hasMonth = !!selectedMonth;
   document.getElementById('clearMonthBtn').style.display  = hasMonth ? '' : 'none';
@@ -1271,6 +1273,12 @@ async function tryAutoLogin() {
 
 /* ── Init: bygg länsdropdown och ladda default-data ── */
 async function initPage() {
+  /* Återställ sparat urval */
+  const _savedCounty = localStorage.getItem('bird_county');
+  const _savedYear   = localStorage.getItem('bird_year');
+  if (_savedCounty) selectedCountyId = _savedCounty;
+  if (_savedYear)   selectedYear = +_savedYear;
+
   /* Bygg länsdropdown */
   const countySel = document.getElementById('selCounty');
   const sortedCounties = [...COUNTIES].sort((a, b) => a.name.localeCompare(b.name, 'sv'));
@@ -1291,14 +1299,14 @@ async function initPage() {
           { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
   ]);
 
-  /* Välj senaste cachade år för valt county */
+  /* Välj år: sparat urval om det finns i cachen, annars senaste cachade år */
   if (yearsResp.status === 'fulfilled') {
     const years  = yearsResp.value;
     const cached = Object.keys(years).map(Number).sort((a, b) => b - a);
     if (cached.length > 0) {
-      const best = cached[0];
-      document.getElementById('selYear').value = best;
-      selectedYear = best;
+      const preferred = cached.includes(selectedYear) ? selectedYear : cached[0];
+      document.getElementById('selYear').value = preferred;
+      selectedYear = preferred;
     }
   }
 

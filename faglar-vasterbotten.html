@@ -977,6 +977,7 @@ function updateRegionTitle() {
 function onLanChange(lanId) {
   selectedLanId    = lanId;
   selectedKommunId = '';
+  localStorage.setItem('bird_county', lanId);
   populateKommuner(lanId);
   updateRegionTitle();
   fetchAll();
@@ -2026,6 +2027,11 @@ function escHtml(s) {
 /* ═══════════════════════════════════════════════════════════════════
    Init
 ═══════════════════════════════════════════════════════════════════ */
+// Återställ sparat länsval
+(function() {
+  const saved = localStorage.getItem('bird_county');
+  if (saved) selectedLanId = saved;
+})();
 initRegionBar();
 updateRegionTitle();
 syncDateUI();

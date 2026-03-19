@@ -540,6 +540,7 @@ function _clearKpi() {
 }
 
 function onFilterChange() {
+  localStorage.setItem('bird_year', document.getElementById('selYear').value);
   _clearKpi();
   markerLayer.clearLayers();
   document.getElementById('truncWarn').style.display = 'none';
@@ -549,6 +550,7 @@ function onFilterChange() {
 }
 
 function onCountyChange() {
+  localStorage.setItem('bird_county', document.getElementById('selCounty').value);
   populateMuni();
   onFilterChange();
 }
@@ -572,14 +574,18 @@ function initPage() {
   }
 
   // Länsväljare – alfabetisk, Västerbotten förvalt
+  const _savedCounty = localStorage.getItem('bird_county');
+  const _savedYear   = localStorage.getItem('bird_year');
   const selC   = document.getElementById('selCounty');
   const sorted = [...COUNTIES].sort((a,b) => a.name.localeCompare(b.name, 'sv'));
   sorted.forEach(c => {
     const opt = document.createElement('option');
     opt.value = c.id; opt.textContent = c.name;
-    if (c.id === DEFAULT_COUNTY) opt.selected = true;
+    const isDefault = _savedCounty ? c.id === _savedCounty : c.id === DEFAULT_COUNTY;
+    if (isDefault) opt.selected = true;
     selC.appendChild(opt);
   });
+  if (_savedYear) selY.value = _savedYear;
   populateMuni();
 
   // Footer version
