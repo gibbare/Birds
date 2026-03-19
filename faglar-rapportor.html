@@ -28,21 +28,21 @@
 
     /* ── Sökfält ── */
     .search-wrap {
-      background: white; border-radius: 12px;
-      box-shadow: 0 1px 6px rgba(0,0,0,.08);
-      padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
-      display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
+      background: white; border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      padding: .55rem 1rem; margin-bottom: .85rem;
+      display: flex; gap: .55rem; align-items: center; flex-wrap: wrap;
     }
-    .search-wrap label { font-weight: 700; font-size: .9rem; color: #2d3748; white-space: nowrap; }
+    .search-wrap label { font-weight: 700; font-size: .8rem; color: #718096; white-space: nowrap; letter-spacing: .03em; text-transform: uppercase; }
     .search-wrap input {
-      flex: 1 1 220px; padding: .5rem .85rem; font-size: .92rem;
-      border: 1px solid #cbd5e0; border-radius: 8px; outline: none;
+      flex: 1 1 180px; padding: .38rem .7rem; font-size: .88rem;
+      border: 1px solid #cbd5e0; border-radius: 7px; outline: none;
       transition: border-color .15s;
     }
     .search-wrap input:focus { border-color: #2b6cb0; }
     .btn-search {
-      background: #2b6cb0; color: white; border: none; border-radius: 8px;
-      padding: .5rem 1.25rem; font-size: .88rem; font-weight: 700; cursor: pointer;
+      background: #2b6cb0; color: white; border: none; border-radius: 7px;
+      padding: .38rem 1rem; font-size: .82rem; font-weight: 700; cursor: pointer;
     }
     .btn-search:hover { background: #2558a0; }
 
@@ -51,25 +51,25 @@
 
     .reporter-hero {
       background: linear-gradient(135deg, #1a4a7a 0%, #2b6cb0 100%);
-      color: white; border-radius: 14px; padding: 1.5rem 1.75rem;
-      margin-bottom: 1.1rem; display: flex; gap: 1.5rem; align-items: center;
-      flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,.15);
+      color: white; border-radius: 12px; padding: .75rem 1.1rem;
+      margin-bottom: .85rem; display: flex; gap: .9rem; align-items: center;
+      flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,.15);
     }
     .reporter-avatar {
-      width: 64px; height: 64px; border-radius: 50%;
+      width: 42px; height: 42px; border-radius: 50%;
       background: rgba(255,255,255,.2); display: flex;
-      align-items: center; justify-content: center; font-size: 2rem;
+      align-items: center; justify-content: center; font-size: 1.35rem;
       flex-shrink: 0;
     }
-    .reporter-meta h2 { font-size: 1.5rem; font-weight: 800; margin-bottom: .15rem; }
-    .reporter-meta p  { font-size: .82rem; opacity: .8; }
+    .reporter-meta h2 { font-size: 1.05rem; font-weight: 800; margin-bottom: .1rem; }
+    .reporter-meta p  { font-size: .75rem; opacity: .8; }
 
-    .stat-pills { display: flex; gap: .65rem; flex-wrap: wrap; margin-top: .75rem; }
+    .stat-pills { display: flex; gap: .45rem; flex-wrap: wrap; margin-top: .4rem; }
     .pill {
       background: rgba(255,255,255,.18); border-radius: 20px;
-      padding: .3rem .85rem; font-size: .8rem; font-weight: 600;
+      padding: .18rem .65rem; font-size: .72rem; font-weight: 600;
     }
-    .pill strong { font-size: 1.1rem; margin-right: .2rem; }
+    .pill strong { font-size: .88rem; margin-right: .15rem; }
 
     /* ── Sektionsrubriker ── */
     .section-title {
@@ -91,17 +91,20 @@
     /* ── Månadsdiagram ── */
     .month-chart {
       display: grid; grid-template-columns: repeat(12, 1fr);
-      gap: .3rem; align-items: end; height: 120px; margin-bottom: .4rem;
+      gap: .25rem; height: 108px; margin-bottom: .4rem;
     }
-    .month-bar-wrap { display: flex; flex-direction: column; align-items: center; gap: .25rem; }
+    .month-bar-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      height: 100%;
+    }
+    .month-val   { font-size: .58rem; color: #4a5568; font-weight: 600; height: 14px; line-height: 14px; }
+    .month-spacer { flex: 1; }
     .month-bar {
-      width: 100%; background: #bee3f8; border-radius: 4px 4px 0 0;
-      transition: background .15s; cursor: default;
-      position: relative;
+      width: 100%; background: #bee3f8; border-radius: 3px 3px 0 0;
+      transition: background .15s; cursor: default; min-height: 2px;
     }
     .month-bar:hover { background: #2b6cb0; }
-    .month-bar-wrap .month-label { font-size: .6rem; color: #718096; }
-    .month-bar-wrap .month-val   { font-size: .62rem; color: #4a5568; font-weight: 600; }
+    .month-label { font-size: .58rem; color: #718096; margin-top: .12rem; height: 12px; }
 
     /* ── Topplatser ── */
     .place-list { list-style: none; }
@@ -169,9 +172,9 @@
     @media (max-width: 650px) {
       .grid-2 { grid-template-columns: 1fr; }
       .month-chart { height: 90px; }
-      .reporter-hero { padding: 1rem 1.1rem; gap: 1rem; }
-      .reporter-avatar { width: 50px; height: 50px; font-size: 1.5rem; }
-      .reporter-meta h2 { font-size: 1.2rem; }
+      .reporter-hero { padding: .6rem .8rem; gap: .65rem; }
+      .reporter-avatar { width: 36px; height: 36px; font-size: 1.1rem; }
+      .reporter-meta h2 { font-size: .95rem; }
       .page-tab { padding: .45rem .75rem; font-size: .72rem; }
     }
   </style>
@@ -506,13 +509,17 @@ function renderReporter(rep) {
 
 /* ── Månadsdiagram ── */
 function renderMonthChart(monthly) {
+  const MONTHS = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
+  const BAR_MAX_PX = 68; // max stapelhöjd i px (108px - 14px val - 12px label - 14px marginal)
   const max = Math.max(...monthly, 1);
   const chart = document.getElementById('monthChart');
   chart.innerHTML = monthly.map((v, i) => {
-    const pct = Math.round((v / max) * 100);
+    const barH = v > 0 ? Math.max(Math.round((v / max) * BAR_MAX_PX), 3) : 2;
     return `<div class="month-bar-wrap">
-      <div style="font-size:.62rem;color:#4a5568;font-weight:600;margin-bottom:.1rem">${v||''}</div>
-      <div class="month-bar" style="height:${Math.max(pct,4)}%" title="${v} obs"></div>
+      <div class="month-val">${v || ''}</div>
+      <div class="month-spacer"></div>
+      <div class="month-bar" style="height:${barH}px" title="${v} obs"></div>
+      <div class="month-label">${MONTHS[i]}</div>
     </div>`;
   }).join('');
 }
