@@ -331,7 +331,15 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 <script>
-
+/* ── Utility ── */
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function showEmpty(html) {
+  document.getElementById('emptyState').innerHTML = html;
+  document.getElementById('emptyState').style.display = '';
+  document.getElementById('reporterCard').style.display = 'none';
+}
 
 /* ── Autocomplete: hämta rapportörslista när län/år ändras ── */
 async function onFilterChange() {
