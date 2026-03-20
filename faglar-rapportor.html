@@ -310,7 +310,7 @@
               <th>#</th>
               <th>Art</th>
               <th class="r">Obs</th>
-              <th></th>
+              <th style="font-size:.68rem;color:#a0aec0;font-weight:400" title="Relativ andel jämfört med mest observerade arten">rel.</th>
             </tr>
           </thead>
           <tbody id="spTbody"></tbody>
@@ -510,7 +510,7 @@ function buildSpTable(species) {
       <td style="color:#a0aec0;font-size:.78rem">${i+1}</td>
       <td><div class="sp-sv">${nameHtml}</div><div class="sp-sci">${esc(s.sci)}</div></td>
       <td class="sp-obs">${s.obs}</td>
-      <td class="sp-bar-cell"><div class="sp-mini-bar" style="width:${pct}%"></div></td>
+      <td class="sp-bar-cell"><div class="sp-mini-bar" style="width:${pct}%" title="${pct}% av mest observerade arten"></div></td>
     </tr>`;
   }).join('');
 }

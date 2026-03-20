@@ -841,6 +841,10 @@ async function fetchStats(year, countyId) {
 
   _kpiPending();
   setSourceBar('building', `Hämtar ${year}…`);
+  // Rensa månadsdiagrammet direkt – visa inte gammal data under laddning
+  document.getElementById('monthChart').innerHTML =
+    '<div style="width:100%;text-align:center;color:#a0aec0;font-size:.8rem;padding:1.5rem 0">⏳ Bygger statistik…</div>';
+  document.getElementById('monthChartYear').textContent = year;
 
   try {
     const resp = await fetch(`${PROXY}/api/statistics?year=${year}&county=${countyId}`,
