@@ -1072,6 +1072,56 @@ function updateFetchTime() {
   el.textContent = `· Hämtad ${now}`;
 }
 
+/* ── Auto-refresh (endast idag, var 60:e sekund) ── */
+const AUTO_REFRESH_SEC = 60;
+let _arInterval  = null;   // setInterval-handtag
+let _arCountdown = 0;      // sekunder kvar till nästa refresh
+let _arTick      = null;   // setInterval för nedräkningsvisning
+
+function _isToday() {
+  return currentDate.getTime() === today().getTime();
+}
+
+function _arUpdateLabel() {
+  const el = document.getElementById('fetchTime');
+  if (!el) return;
+  const now = new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  if (_isToday() && _arCountdown > 0) {
+    el.textContent = `· Hämtad ${now} · Uppdateras om ${_arCountdown}s`;
+  } else {
+    el.textContent = `· Hämtad ${now}`;
+  }
+}
+
+function _arStart() {
+  _arStop();
+  if (!_isToday()) return;            // bara vid dagens datum
+  _arCountdown = AUTO_REFRESH_SEC;
+  // Nedräknings-tick varje sekund
+  _arTick = setInterval(() => {
+    if (document.hidden) return;      // pausar när fliken är gömd
+    _arCountdown--;
+    _arUpdateLabel();
+    if (_arCountdown <= 0) {
+      _arCountdown = AUTO_REFRESH_SEC;
+      fetchAll();                     // hämta om
+    }
+  }, 1000);
+}
+
+function _arStop() {
+  if (_arTick)     { clearInterval(_arTick);     _arTick     = null; }
+  if (_arInterval) { clearInterval(_arInterval); _arInterval = null; }
+}
+
+// Starta om timern vid sidåterkomst
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && _isToday()) {
+    // Om fliken var gömd länge, hämta direkt
+    if (_arCountdown <= 0) { fetchAll(); _arStart(); }
+  }
+});
+
 async function loadUmamiStats() {
   try {
     const r = await fetch('/api/umami_stats');
@@ -1254,6 +1304,7 @@ async function findLatestGbifDate() {
    Huvud-hämtningsfunktion
 ═══════════════════════════════════════════════════════════════════ */
 async function fetchAll() {
+  _arStop();                          // nollställ ev. pågående timer
   const content = document.getElementById('content');
   content.innerHTML = '<div class="status">Hämtar observationer…<div class="spinner"></div></div>';
   allResults   = [];
@@ -1817,6 +1868,9 @@ function render(gbifTotal) {
     if (mapVisible) renderMapMarkers();
     // Berika tabellen med rödlistestatus i bakgrunden (async)
     enrichRedlist();
+    // Starta auto-refresh (bara vid dagens datum)
+    _arStart();
+    _arUpdateLabel();
   } else {
     renderCards(content, jumpNotice, gbifTotal);
   }
