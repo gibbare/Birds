@@ -1233,6 +1233,11 @@ function updateCounty() {
   localStorage.setItem('bird_county', newCounty);
   selectedMonth    = 0;
   document.getElementById('selMonth').value = 0;
+  // Töm diagrammet och listorna DIREKT – visa aldrig gammal data under laddning
+  document.getElementById('monthChart').innerHTML = '';
+  document.getElementById('topArtList').innerHTML = '';
+  document.getElementById('topRapList').innerHTML = '';
+  _kpiPending();
   populateRegionDropdown(selectedCountyId);
   if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
   fetchStats(selectedYear, selectedCountyId);
@@ -1386,6 +1391,7 @@ function toggleMap() {
   if (!_mapVisible) {
     _mapSelection = null;
     document.querySelectorAll('.map-selected').forEach(el => el.classList.remove('map-selected'));
+    _resetSpeciesListToCounty();  // Återställ artlistan till hela länets data
   } else if (!_mapSelection) {
     // Initialisera kartan utan att hämta data
     _initMap();
@@ -1415,7 +1421,36 @@ function onReporterClick(name) {
     if (el.dataset.name === name) el.classList.add('map-selected');
   });
   document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Visa rapportörens egna arter i artlistan (från lokal statistikcache)
+  const cacheKey = `${selectedCountyId}_${selectedYear}`;
+  const d = statsData[cacheKey];
+  const repDetail = d && d.reporter_details && d.reporter_details[name];
+  if (repDetail && repDetail.species && repDetail.species.length) {
+    // Konvertera till renderTopArter-format (obs per art, ind saknas → 0)
+    const spForRender = repDetail.species.map(s => ({
+      sv: s.sv, sci: s.sci, key: s.taxon, obs: s.obs, ind: 0
+    }));
+    document.getElementById('topArterPeriod').textContent = `${selectedYear} · ${name}`;
+    renderTopArter(spForRender);
+  }
+
   _doLoadMap();
+}
+
+function _resetSpeciesListToCounty() {
+  const cacheKey = `${selectedCountyId}_${selectedYear}`;
+  const d = statsData[cacheKey];
+  if (!d) return;
+  updateLabels();
+  const rawFeid = document.getElementById('selRegion').value || null;
+  const feid = rawFeid ? String(parseInt(rawFeid, 10)) : null;
+  let sp;
+  if (feid && selectedMonth) sp = d.muni_month_species?.[feid]?.[selectedMonth] || d.muni_species?.[feid] || d.top_species;
+  else if (feid)             sp = d.muni_species?.[feid] || d.top_species;
+  else if (selectedMonth)    sp = d.month_species?.[selectedMonth] || d.top_species;
+  else                       sp = d.top_species;
+  renderTopArter(sp);
 }
 
 async function _doLoadMap() {

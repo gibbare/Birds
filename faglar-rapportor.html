@@ -152,8 +152,7 @@
     .sp-link { color: #2b6cb0; text-decoration: none; }
     .sp-link:hover { text-decoration: underline; }
     .sp-obs { text-align: right; font-weight: 700; color: #2b6cb0; }
-    .sp-bar-cell { width: 80px; }
-    .sp-mini-bar { height: 5px; background: #bee3f8; border-radius: 3px; }
+    .sp-obs-pct { font-size:.72rem; color:#a0aec0; }
 
     /* ── Tomt state / ingen rapportör vald ── */
     .empty-state {
@@ -510,7 +509,7 @@ function buildSpTable(species) {
       <td style="color:#a0aec0;font-size:.78rem">${i+1}</td>
       <td><div class="sp-sv">${nameHtml}</div><div class="sp-sci">${esc(s.sci)}</div></td>
       <td class="sp-obs">${s.obs}</td>
-      <td class="sp-bar-cell"><div class="sp-mini-bar" style="width:${pct}%" title="${pct}% av mest observerade arten"></div></td>
+      <td class="sp-obs-pct">${pct}%</td>
     </tr>`;
   }).join('');
 }
