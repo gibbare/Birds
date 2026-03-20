@@ -1795,6 +1795,13 @@ function showSingleObsOnMap(el) {
 function render(gbifTotal) {
   const content = document.getElementById('content');
   if (!allResults.length) {
+    // Stäng kartan automatiskt om den är öppen – ingen data, ingen karta
+    if (mapVisible) {
+      mapVisible = false;
+      _singleObsActive = false;
+      document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
+      document.getElementById('mapContainer').classList.remove('visible');
+    }
     content.innerHTML = '<div class="status">Inga fågelobservationer hittades för detta datum.</div>';
     return;
   }
