@@ -221,6 +221,8 @@
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.1);
       transition: background 0.2s, color 0.2s;
+      cursor: pointer;
+      font-family: inherit;
     }
 
     .nav-tab:hover { background: rgba(255,255,255,0.1); }
@@ -306,8 +308,8 @@
 </header>
 
 <nav id="app-nav">
-  <a href="index.html" class="nav-tab">🌤 Väder</a>
-  <a href="lightning.html" class="nav-tab active">⚡ Blixt</a>
+  <button class="nav-tab" onclick="window.location.href='index.html'">🌤 Väder</button>
+  <button class="nav-tab active" onclick="window.location.href='lightning.html'">⚡ Blixt</button>
 </nav>
 
 <div id="status-bar">
