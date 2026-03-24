@@ -172,16 +172,25 @@
       position: absolute;
       top: 10px; right: 10px;
       z-index: 900;
-      background: rgba(245,197,24,0.15);
-      border: 1px solid rgba(245,197,24,0.5);
+      background: rgba(126,184,247,0.12);
+      border: 1px solid rgba(126,184,247,0.35);
       border-radius: 20px;
       padding: 4px 12px;
       font-size: 0.68rem;
-      font-weight: 700;
+      font-weight: 600;
+      color: #a0c8f0;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+      transition: background 0.3s, color 0.3s, border-color 0.3s;
+    }
+
+    #demo-badge.demo {
+      background: rgba(245,197,24,0.15);
+      border-color: rgba(245,197,24,0.5);
       color: #f5c518;
+      font-weight: 700;
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      pointer-events: none;
     }
 
     #demo-badge.hidden { display: none; }
@@ -268,7 +277,7 @@
 <div id="map-wrap">
   <div id="map"></div>
 
-  <div id="demo-badge">Demo-data</div>
+  <div id="demo-badge">Hämtar position och data...</div>
 
   <div id="predict-panel" class="panel">
     <div class="panel-title">⟶ Rörelseprognos</div>
@@ -496,6 +505,9 @@ function startDemo() {
   document.getElementById('conn-dot').className = 'demo';
   document.getElementById('conn-label').textContent = 'Demo (simulerad storm)';
   document.getElementById('source-label').textContent = 'Demo';
+  const badge = document.getElementById('demo-badge');
+  badge.textContent = 'DEMO-DATA';
+  badge.classList.add('demo');
 
   const offLat = (Math.random() - 0.5) * 1.2;
   const offLon = (Math.random() - 0.5) * 1.2;
