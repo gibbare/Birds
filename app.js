@@ -41,7 +41,9 @@ async function reverseGeocode(lat, lon) {
     );
     const data = await res.json();
     const addr = data.address;
-    return addr.city || addr.town || addr.village || addr.municipality || addr.county || 'Okänd plats';
+    return addr.city || addr.town || addr.village || addr.hamlet ||
+           addr.suburb || addr.quarter || addr.locality ||
+           addr.municipality || addr.county || 'Okänd plats';
   } catch {
     return `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
   }
@@ -350,10 +352,17 @@ function renderSearchResults(results) {
     list.innerHTML = '<li class="search-empty">Inga orter hittades</li>';
     return;
   }
+  function placeName(r) {
+    const addr = r.address || {};
+    return addr.city || addr.town || addr.village || addr.hamlet ||
+           addr.suburb || addr.quarter || addr.locality ||
+           r.display_name.split(',')[0];
+  }
+
   list.innerHTML = results.map((r, i) => {
     const addr = r.address || {};
-    const name = addr.city || addr.town || addr.village || addr.municipality || r.display_name.split(',')[0];
-    const detail = [addr.county, addr.state, addr.country].filter(Boolean).join(', ');
+    const name = placeName(r);
+    const detail = [addr.municipality, addr.county, addr.country].filter(Boolean).join(', ');
     return `<li data-index="${i}">
       <div class="result-name">${name}</div>
       <div class="result-detail">${detail}</div>
@@ -363,8 +372,7 @@ function renderSearchResults(results) {
   list.querySelectorAll('li[data-index]').forEach(el => {
     el.addEventListener('click', () => {
       const r = results[+el.dataset.index];
-      const addr = r.address || {};
-      const name = addr.city || addr.town || addr.village || addr.municipality || r.display_name.split(',')[0];
+      const name = placeName(r);
       closeSearch();
       loadWeatherForCoords(parseFloat(r.lat), parseFloat(r.lon), name);
     });
