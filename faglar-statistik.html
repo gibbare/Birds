@@ -637,6 +637,13 @@ const PROXY = (window.location.origin === 'null' || window.location.origin === '
   ? 'http://localhost:5050'
   : window.location.origin;
 
+// abortAfter() stöds inte på äldre iOS Safari – använd denna hjälpfunktion istället
+function abortAfter(ms) {
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+}
+
 const MÅNADER = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 const MÅNADER_FULL = ['Januari','Februari','Mars','April','Maj','Juni',
                       'Juli','Augusti','September','Oktober','November','December'];
@@ -848,7 +855,7 @@ async function fetchStats(year, countyId) {
 
   try {
     const resp = await fetch(`${PROXY}/api/statistics?year=${year}&county=${countyId}`,
-                             { signal: AbortSignal.timeout(15000) });
+                             { signal: abortAfter(15000) });
     const json = await resp.json();
 
     if (json.status === 'ready') {
@@ -1273,7 +1280,7 @@ async function tryAutoLogin() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: email, password: pass, subscriptionKey: '' }),
-      signal: AbortSignal.timeout(70000),
+      signal: abortAfter(70000),
     });
     const data = await resp.json();
     return resp.ok && data.success;
@@ -1303,9 +1310,9 @@ async function initPage() {
   /* Hämta versioninfo och cacheöversikt parallellt */
   const [yearsResp, verResp] = await Promise.allSettled([
     fetch(`${PROXY}/api/statistics/years?county=${selectedCountyId}`,
-          { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
+          { signal: abortAfter(5000) }).then(r => r.json()),
     fetch(`${PROXY}/api/version`,
-          { signal: AbortSignal.timeout(5000) }).then(r => r.json()),
+          { signal: abortAfter(5000) }).then(r => r.json()),
   ]);
 
   /* Välj år: sparat urval om det finns i cachen, annars senaste cachade år */
@@ -1485,7 +1492,7 @@ async function _doLoadMap() {
   const overlay = document.getElementById('mapLoadingOverlay');
   overlay.classList.add('active');
   try {
-    const resp = await fetch(`${PROXY}/api/obs_map?${params}`, { signal: AbortSignal.timeout(60000) });
+    const resp = await fetch(`${PROXY}/api/obs_map?${params}`, { signal: abortAfter(60000) });
     const json = await resp.json();
     if (json.error) { infoBar.textContent = `Fel: ${json.error}`; return; }
     const obs = json.observations || [];

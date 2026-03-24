@@ -754,6 +754,7 @@
 ═══════════════════════════════════════════════════════════════════ */
 const PROXY = 'https://birds.up.railway.app';
 const GBIF    = 'https://api.gbif.org/v1';
+function abortAfter(ms) { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
 const CLASS_AVES = 212;
 const PAGE_SIZE  = 300;
 
@@ -1037,7 +1038,7 @@ function onDatePicked() {
 ═══════════════════════════════════════════════════════════════════ */
 async function checkProxy() {
   try {
-    const resp = await fetch(`${PROXY}/api/status`, { signal: AbortSignal.timeout(70000) });
+    const resp = await fetch(`${PROXY}/api/status`, { signal: abortAfter(70000) });
     if (!resp.ok) return false;
     const s = await resp.json();
     proxyLoggedIn = s.logged_in;
@@ -1155,7 +1156,7 @@ async function fetchFromProxy(dateStr) {
   const areaType  = selectedKommunId ? 'Municipality' : 'County';
   const featureId = selectedKommunId || selectedLanId;
   const url = `${PROXY}/api/observations?date=${dateStr}&featureId=${encodeURIComponent(featureId)}&areaType=${areaType}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(35000) });
+  const resp = await fetch(url, { signal: abortAfter(35000) });
 
   if (resp.status === 401) {
     proxyLoggedIn = false;
@@ -1679,7 +1680,7 @@ async function enrichRedlist() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(uncached),
-        signal:  AbortSignal.timeout(40000),
+        signal:  abortAfter(40000),
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -2099,7 +2100,7 @@ syncDateUI();
 checkProxy().then(() => fetchAll());
 
 /* ── Versionsinfo i footer ── */
-fetch(`${PROXY}/api/version`, { signal: AbortSignal.timeout(5000) })
+fetch(`${PROXY}/api/version`, { signal: abortAfter(5000) })
   .then(r => r.json())
   .then(v => {
     const started = v.started_at

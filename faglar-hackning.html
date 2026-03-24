@@ -333,6 +333,7 @@
 ══════════════════════════════════════════════════════ */
 const PROXY         = location.hostname === 'localhost' ? 'http://localhost:5000' : '';
 const THIS_YEAR     = new Date().getFullYear();
+function abortAfter(ms) { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
 const DEFAULT_COUNTY = '24';   // Västerbottens län
 
 /* ══════════════════════════════════════════════════════
@@ -634,7 +635,7 @@ async function fetchBreeding() {
 
   try {
     const resp = await fetch(`${PROXY}/api/breeding?${params}`,
-                             { signal: AbortSignal.timeout(90000) });
+                             { signal: abortAfter(90000) });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
     renderBreeding(json, areaLabel, year);
