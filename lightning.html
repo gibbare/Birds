@@ -385,6 +385,12 @@ function initMap(lat, lon) {
   L.marker([lat, lon], { icon }).addTo(map).bindPopup('📍 Din position');
 
   predLayer = L.layerGroup().addTo(map);
+
+  // Recalculate on every zoom/pan
+  map.on('moveend zoomend', () => {
+    document.getElementById('strike-count').textContent = getVisibleStrikes().length;
+    updatePrediction();
+  });
 }
 
 // ── GEOLOCATION ───────────────────────────────────────────────────────────────
@@ -532,6 +538,13 @@ function strikeIcon(ageMs) {
   });
 }
 
+// Returns only strikes currently visible in the map viewport
+function getVisibleStrikes() {
+  if (!map) return strikes;
+  const bounds = map.getBounds();
+  return strikes.filter(s => bounds.contains([s.lat, s.lon]));
+}
+
 function distKmToUser(lat, lon) {
   const cosLat = Math.cos(userLat * Math.PI / 180);
   return Math.sqrt(
@@ -565,89 +578,94 @@ function updateDisplay() {
     s.marker.setIcon(strikeIcon(now - s.time));
     return true;
   });
-  document.getElementById('strike-count').textContent = strikes.length;
+  // Show count of visible strikes only
+  document.getElementById('strike-count').textContent = getVisibleStrikes().length;
 }
 
-// ── PREDICTION (every 30s – based on last 20 visible strikes) ────────────────
+// ── PREDICTION (every 30s + on map move/zoom – based on visible strikes) ──────
 function updatePrediction() {
   predLayer.clearLayers();
 
-  if (strikes.length < MIN_STRIKES_FOR_PRED) {
+  const visible = getVisibleStrikes();
+
+  if (visible.length < MIN_STRIKES_FOR_PRED) {
+    const hint = map.getZoom() < 7
+      ? 'Zooma in på storm'
+      : visible.length > 0 ? `(${visible.length}/${MIN_STRIKES_FOR_PRED} slag)` : '–';
     document.getElementById('pred-dir').textContent   = '–';
-    document.getElementById('pred-speed').textContent = '–';
+    document.getElementById('pred-speed').textContent = hint;
     document.getElementById('pred-dist').textContent  = '–';
-    // Keep any active 30 km warning; don't overwrite it here
+    document.getElementById('pred-trend').textContent = '–';
     return;
   }
 
-  // Use the last 20 strikes sorted by time (they are already in insertion order)
-  const last20 = strikes.slice(-20);
+  // Last 20 visible strikes (sorted by insertion = time order)
+  const last20 = visible.slice(-20);
   const half   = 10;
   const group1 = last20.slice(0, half);
   const group2 = last20.slice(half);
 
-  const c1 = {
-    lat:  group1.reduce((a,s) => a + s.lat, 0) / half,
-    lon:  group1.reduce((a,s) => a + s.lon, 0) / half,
-    time: group1.reduce((a,s) => a + s.time, 0) / half
-  };
-  const c2 = {
-    lat:  group2.reduce((a,s) => a + s.lat, 0) / half,
-    lon:  group2.reduce((a,s) => a + s.lon, 0) / half,
-    time: group2.reduce((a,s) => a + s.time, 0) / half
-  };
+  const avg = (arr, key) => arr.reduce((a, s) => a + s[key], 0) / arr.length;
+  const c1 = { lat: avg(group1,'lat'), lon: avg(group1,'lon'), time: avg(group1,'time') };
+  const c2 = { lat: avg(group2,'lat'), lon: avg(group2,'lon'), time: avg(group2,'time') };
 
   const dtMin = (c2.time - c1.time) / 60000;
-  if (dtMin < 0.1) return;   // groups too close in time
+
+  // Need at least 15 seconds spread between groups
+  if (dtMin < 0.25) {
+    const hint = map.getZoom() < 7 ? 'Zooma in på storm' : 'Beräknar...';
+    document.getElementById('pred-dir').textContent   = '–';
+    document.getElementById('pred-speed').textContent = hint;
+    document.getElementById('pred-dist').textContent  = '–';
+    document.getElementById('pred-trend').textContent = '–';
+    return;
+  }
 
   const dLat = c2.lat - c1.lat;
   const dLon = c2.lon - c1.lon;
 
-  const cosLat = Math.cos(c2.lat * Math.PI / 180);
-  const distKm  = Math.sqrt((dLat * 111) ** 2 + (dLon * 111 * cosLat) ** 2);
+  const cosLat   = Math.cos(c2.lat * Math.PI / 180);
+  const distKm   = Math.sqrt((dLat * 111) ** 2 + (dLon * 111 * cosLat) ** 2);
   const speedKmh = (distKm / dtMin) * 60;
   const bear     = ((Math.atan2(dLon, dLat) * 180 / Math.PI) + 360) % 360;
 
   // Predicted centroid PRED_MINUTES ahead
-  const scale  = PRED_MINUTES / dtMin;
+  const scale   = PRED_MINUTES / dtMin;
   const predLat = c2.lat + dLat * scale;
   const predLon = c2.lon + dLon * scale;
 
-  // Distance of current centroid from user
   const distFromUser = distKmToUser(c2.lat, c2.lon);
   const prevDist     = distKmToUser(c1.lat, c1.lon);
 
-  // Only update trend if no active per-strike warning
-  const trendEl = document.getElementById('pred-trend');
-  if (!trendEl.textContent.includes('Blixt inom')) {
-    trendEl.textContent = distFromUser < prevDist ? '⚠️ Närmar sig' : '✅ Rör sig bort';
-  }
+  // Trend: warning if any visible strike within 30 km, else centroid direction
+  const closeStrike = visible.some(s => distKmToUser(s.lat, s.lon) <= 30);
+  document.getElementById('pred-trend').textContent = closeStrike
+    ? '⚠️ Blixt inom 30 km!'
+    : distFromUser < prevDist ? '⚠️ Närmar sig' : '✅ Rör sig bort';
 
-  // Draw dashed history line (c1 → c2)
+  // Draw dashed track (c1 → c2)
   L.polyline([[c1.lat, c1.lon], [c2.lat, c2.lon]], {
     color: '#7eb8f7', weight: 2, opacity: 0.45, dashArray: '5 5'
   }).addTo(predLayer);
 
-  // Draw prediction line
+  // Prediction arrow (c2 → predicted)
   L.polyline([[c2.lat, c2.lon], [predLat, predLon]], {
     color: '#7eb8f7', weight: 3, opacity: 0.9
   }).addTo(predLayer);
 
-  // Arrowhead
   L.circleMarker([predLat, predLon], {
     radius: 5, color: '#7eb8f7', fillColor: '#7eb8f7', fillOpacity: 0.5, weight: 2
   }).addTo(predLayer).bindPopup(`⟶ Prognos +${PRED_MINUTES} min`);
 
   // Current centroid ring
   L.circleMarker([c2.lat, c2.lon], {
-    radius: 16,
-    color: 'rgba(255,160,0,0.55)',
-    fillColor: 'rgba(255,160,0,0.06)',
-    weight: 1.5, dashArray: '4 3'
+    radius: 16, color: 'rgba(255,160,0,0.55)',
+    fillColor: 'rgba(255,160,0,0.06)', weight: 1.5, dashArray: '4 3'
   }).addTo(predLayer);
 
   document.getElementById('pred-dir').textContent   = `${bearingLabel(bear)} (${Math.round(bear)}°)`;
-  document.getElementById('pred-speed').textContent = `${Math.round(speedKmh)} km/h`;
+  document.getElementById('pred-speed').textContent = speedKmh > 250
+    ? `~${Math.round(speedKmh)} km/h ⚠️` : `${Math.round(speedKmh)} km/h`;
   document.getElementById('pred-dist').textContent  = `${Math.round(distFromUser)} km`;
 }
 
