@@ -94,7 +94,7 @@ function buildDaySummaries(timeSeries) {
     if (s != null) days[key].symbols.push(s);
   });
 
-  return Object.values(days).slice(0, 10).map(day => {
+  return Object.values(days).slice(0, 3).map(day => {
     const tMin = Math.round(Math.min(...day.temps));
     const tMax = Math.round(Math.max(...day.temps));
     // Most common symbol
