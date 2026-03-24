@@ -82,12 +82,10 @@ function smoothPath(ctx, pts) {
 // Groups timeSeries into days and returns [{date, label, emoji, tMin, tMax}]
 function buildDaySummaries(timeSeries) {
   const now    = new Date(timeSeries[0].validTime);
-  const cutoff = new Date(now.getTime() + 72 * 3600 * 1000);
-  const days   = {};
+  const days = {};
 
   timeSeries.forEach(ts => {
     const d = new Date(ts.validTime);
-    if (d > cutoff) return;
     const key = d.toDateString();
     if (!days[key]) days[key] = { date: d, temps: [], symbols: [] };
     const t = getParam(ts, 't');
@@ -96,7 +94,7 @@ function buildDaySummaries(timeSeries) {
     if (s != null) days[key].symbols.push(s);
   });
 
-  return Object.values(days).slice(0, 3).map(day => {
+  return Object.values(days).slice(0, 10).map(day => {
     const tMin = Math.round(Math.min(...day.temps));
     const tMax = Math.round(Math.max(...day.temps));
     // Most common symbol
@@ -122,13 +120,8 @@ function drawDaySummary(summaries) {
 function drawForecastChart(timeSeries) {
   const canvas = document.getElementById('forecast-chart');
 
-  // ── filter: every 4 hours, up to 72 h ──────────────────────────────────────
-  const now    = new Date(timeSeries[0].validTime);
-  const cutoff = new Date(now.getTime() + 72 * 3600 * 1000);
-  const points4h = timeSeries.filter(ts => {
-    const d = new Date(ts.validTime);
-    return d <= cutoff && d.getHours() % 4 === 0;
-  });
+  // ── filter: every 4 hours, full ~10-day forecast ────────────────────────────
+  const points4h = timeSeries.filter(ts => new Date(ts.validTime).getHours() % 4 === 0);
   if (points4h.length < 2) return;
 
   // ── canvas dimensions ───────────────────────────────────────────────────────
