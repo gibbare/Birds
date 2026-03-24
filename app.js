@@ -324,6 +324,93 @@ function drawForecastChart(timeSeries) {
   });
 }
 
+// ─── Search ───────────────────────────────────────────────────────────────────
+
+async function searchPlaces(query) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&addressdetails=1&accept-language=sv`;
+  const res = await fetch(url, { headers: { 'Accept-Language': 'sv' } });
+  return res.json();
+}
+
+function openSearch() {
+  document.getElementById('search-modal').classList.remove('hidden');
+  const input = document.getElementById('search-input');
+  input.value = '';
+  document.getElementById('search-results').innerHTML = '';
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeSearch() {
+  document.getElementById('search-modal').classList.add('hidden');
+}
+
+function renderSearchResults(results) {
+  const list = document.getElementById('search-results');
+  if (!results.length) {
+    list.innerHTML = '<li class="search-empty">Inga orter hittades</li>';
+    return;
+  }
+  list.innerHTML = results.map((r, i) => {
+    const addr = r.address || {};
+    const name = addr.city || addr.town || addr.village || addr.municipality || r.display_name.split(',')[0];
+    const detail = [addr.county, addr.state, addr.country].filter(Boolean).join(', ');
+    return `<li data-index="${i}">
+      <div class="result-name">${name}</div>
+      <div class="result-detail">${detail}</div>
+    </li>`;
+  }).join('');
+
+  list.querySelectorAll('li[data-index]').forEach(el => {
+    el.addEventListener('click', () => {
+      const r = results[+el.dataset.index];
+      const addr = r.address || {};
+      const name = addr.city || addr.town || addr.village || addr.municipality || r.display_name.split(',')[0];
+      closeSearch();
+      loadWeatherForCoords(parseFloat(r.lat), parseFloat(r.lon), name);
+    });
+  });
+}
+
+async function loadWeatherForCoords(lat, lon, placeName) {
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('weather').classList.add('hidden');
+  document.getElementById('error').classList.add('hidden');
+  document.getElementById('location-name').textContent = placeName;
+  try {
+    const weatherData = await fetchWeather(lat, lon);
+    renderWeather(weatherData);
+    showWeather();
+  } catch (err) {
+    showError('Kunde inte hämta väderdata: ' + err.message);
+  }
+}
+
+function initSearch() {
+  let debounceTimer;
+  const input = document.getElementById('search-input');
+
+  document.getElementById('app-title').addEventListener('click', openSearch);
+  document.getElementById('search-close').addEventListener('click', closeSearch);
+  document.getElementById('search-backdrop').addEventListener('click', closeSearch);
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const q = input.value.trim();
+    if (q.length < 2) {
+      document.getElementById('search-results').innerHTML = '';
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      const results = await searchPlaces(q);
+      renderSearchResults(results);
+    }, 300);
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeSearch();
+  });
+}
+
 // ─── Render ───────────────────────────────────────────────────────────────────
 
 function renderWeather(data) {
@@ -396,4 +483,5 @@ async function init() {
   );
 }
 
+initSearch();
 init();

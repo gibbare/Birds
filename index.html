@@ -9,9 +9,21 @@
 <body>
   <div id="app">
     <header>
-      <h1>Väder</h1>
+      <h1 id="app-title">Väder 🔍</h1>
       <p id="location-name">Hämtar din position...</p>
     </header>
+
+    <!-- Search modal -->
+    <div id="search-modal" class="hidden">
+      <div id="search-backdrop"></div>
+      <div id="search-box">
+        <div id="search-input-row">
+          <input id="search-input" type="text" placeholder="Sök stad eller ort..." autocomplete="off" />
+          <button id="search-close">✕</button>
+        </div>
+        <ul id="search-results"></ul>
+      </div>
+    </div>
 
     <main>
       <div id="loading" class="status">
