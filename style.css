@@ -14,7 +14,7 @@ body {
 #app {
   max-width: 480px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 10px 12px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -22,11 +22,11 @@ body {
 
 header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 10px;
 }
 
 header h1 {
-  font-size: 2rem;
+  font-size: 1.3rem;
   font-weight: 700;
   letter-spacing: 2px;
   text-transform: uppercase;
@@ -34,8 +34,8 @@ header h1 {
 }
 
 #location-name {
-  margin-top: 6px;
-  font-size: 0.95rem;
+  margin-top: 3px;
+  font-size: 0.8rem;
   color: #a0b0d0;
 }
 
@@ -46,18 +46,18 @@ main {
 /* Status (loading / error) */
 .status {
   text-align: center;
-  margin-top: 80px;
+  margin-top: 60px;
 }
 
 .status p {
   color: #a0b0d0;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid rgba(255,255,255,0.2);
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255,255,255,0.2);
   border-top-color: #7eb8f7;
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
@@ -69,13 +69,13 @@ main {
 }
 
 #error button {
-  margin-top: 16px;
-  padding: 10px 24px;
+  margin-top: 12px;
+  padding: 8px 20px;
   background: #7eb8f7;
   color: #1a1a2e;
   border: none;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.95rem;
   cursor: pointer;
   font-weight: 600;
 }
@@ -84,115 +84,127 @@ main {
   display: none !important;
 }
 
-/* Main temperature card */
+/* Cards */
 .card {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  padding: 24px;
+  border-radius: 16px;
+  padding: 12px 14px;
   backdrop-filter: blur(10px);
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
+/* Main temperature card */
 .main-temp {
-  text-align: center;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.temp-row {
+  display: flex;
+  align-items: flex-start;
+  line-height: 1;
 }
 
 .temp-value {
-  font-size: 6rem;
+  font-size: 3.8rem;
   font-weight: 700;
   line-height: 1;
   color: #7eb8f7;
 }
 
 .temp-label {
-  font-size: 2rem;
+  font-size: 1.4rem;
   color: #7eb8f7;
-  margin-top: -8px;
+  margin-top: 6px;
 }
 
 .weather-desc {
-  margin-top: 12px;
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   color: #c0d0f0;
+  max-width: 100px;
 }
 
-/* Small cards grid */
+/* Small cards grid — single row of 4 */
 .cards-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .card.small {
   text-align: center;
-  padding: 18px 12px;
+  padding: 8px 4px;
   margin-bottom: 0;
 }
 
 .card-icon {
-  font-size: 1.6rem;
-  margin-bottom: 6px;
+  font-size: 1.1rem;
+  margin-bottom: 2px;
 }
 
 .card-value {
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #7eb8f7;
 }
 
 .card-label {
-  font-size: 0.75rem;
+  font-size: 0.6rem;
   color: #a0b0d0;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 /* Forecast chart */
+.forecast-card {
+  padding: 10px 12px;
+}
+
 .forecast-card h2 {
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: #a0b0d0;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 /* Day summary strip */
 #day-summary {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .day-card {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
-  padding: 10px 6px;
+  border-radius: 10px;
+  padding: 6px 4px;
   text-align: center;
 }
 
 .day-card .dc-name {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
   color: #a0b0d0;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .day-card .dc-emoji {
-  font-size: 1.6rem;
+  font-size: 1.3rem;
   line-height: 1;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .day-card .dc-temps {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #e0eaff;
 }
@@ -213,8 +225,8 @@ main {
 
 footer {
   text-align: center;
-  padding: 24px 0 8px;
-  font-size: 0.8rem;
+  padding: 8px 0 4px;
+  font-size: 0.7rem;
   color: #607090;
 }
 

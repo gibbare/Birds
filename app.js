@@ -130,11 +130,11 @@ function drawForecastChart(timeSeries) {
   if (points4h.length < 2) return;
 
   // ── canvas dimensions ───────────────────────────────────────────────────────
-  const PT_SPACING = 64;
-  const PAD = { top: 90, right: 24, bottom: 52, left: 44 };
+  const PT_SPACING = 56;
+  const PAD = { top: 72, right: 16, bottom: 42, left: 38 };
   const chartW = PT_SPACING * (points4h.length - 1);
   const totalW = chartW + PAD.left + PAD.right;
-  const totalH = 340;
+  const totalH = 220;
   const chartH = totalH - PAD.top - PAD.bottom;
 
   canvas.width  = totalW;
@@ -300,26 +300,26 @@ function drawForecastChart(timeSeries) {
 
     // temp label
     ctx.fillStyle  = '#e8f0ff';
-    ctx.font       = 'bold 12px system-ui';
+    ctx.font       = 'bold 10px system-ui';
     ctx.textAlign  = 'center';
-    ctx.fillText(Math.round(temps[i]) + '°', pt.x, pt.y - 13);
+    ctx.fillText(Math.round(temps[i]) + '°', pt.x, pt.y - 11);
 
     // emoji
-    ctx.font = '18px serif';
-    ctx.fillText(WEATHER_EMOJI[symbols[i]] || '🌡️', pt.x, pt.y - 30);
+    ctx.font = '15px serif';
+    ctx.fillText(WEATHER_EMOJI[symbols[i]] || '🌡️', pt.x, pt.y - 25);
 
     // time label
     const h = times[i].getHours().toString().padStart(2, '0');
     ctx.fillStyle = 'rgba(160,176,208,0.9)';
-    ctx.font      = '11px system-ui';
-    ctx.fillText(h + ':00', pt.x, PAD.top + chartH + 16);
+    ctx.font      = '10px system-ui';
+    ctx.fillText(h + ':00', pt.x, PAD.top + chartH + 14);
 
     // date label on midnight
     if (times[i].getHours() === 0) {
       const dateStr = times[i].toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
       ctx.fillStyle = 'rgba(180,210,255,0.6)';
-      ctx.font      = '10px system-ui';
-      ctx.fillText(dateStr, pt.x, PAD.top + chartH + 30);
+      ctx.font      = '9px system-ui';
+      ctx.fillText(dateStr, pt.x, PAD.top + chartH + 26);
     }
   });
 }
