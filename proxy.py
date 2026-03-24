@@ -414,6 +414,13 @@ def get_observations():
 @app.route("/api/obs_map")
 def obs_map():
     """Observationer med koordinater för kartvisning – filtrerar på art eller rapportör."""
+    try:
+        return _obs_map_impl()
+    except Exception as e:
+        _log_error(f"obs_map oväntat fel: {e}")
+        return jsonify({"error": f"Serverfel: {e}"}), 500
+
+def _obs_map_impl():
     if not _session["access_token"] and not _session["subscription_key"]:
         return jsonify({"error": "Inte inloggad."}), 401
 
@@ -458,7 +465,8 @@ def obs_map():
 
     out  = []
     take = 1000
-    max_pages = 5 if area_overview else 60  # översikt: max 5 000 obs, annars 60 000
+    # översikt: max 5 000 obs | rapportör: max 15 000 (undviker Railway-timeout) | art: max 60 000
+    max_pages = 5 if area_overview else (15 if reporter else 60)
     for page in range(max_pages):
         try:
             resp = requests.post(

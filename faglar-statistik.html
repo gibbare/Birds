@@ -1492,7 +1492,11 @@ async function _doLoadMap() {
   const overlay = document.getElementById('mapLoadingOverlay');
   overlay.classList.add('active');
   try {
-    const resp = await fetch(`${PROXY}/api/obs_map?${params}`, { signal: abortAfter(60000) });
+    const resp = await fetch(`${PROXY}/api/obs_map?${params}`, { signal: abortAfter(50000) });
+    if (!resp.ok) {
+      infoBar.textContent = `Kunde inte hämta kartdata (HTTP ${resp.status} – prova ett kortare tidsintervall)`;
+      return;
+    }
     const json = await resp.json();
     if (json.error) { infoBar.textContent = `Fel: ${json.error}`; return; }
     const obs = json.observations || [];
