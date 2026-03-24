@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>BLIXT – Åskväderspårning</title>
-  <link rel="apple-touch-icon" href="weather_ico.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="weather_ico.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="weather_ico.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Blixt" />
@@ -625,7 +626,7 @@ function buildPopup(lat, lon, now, data) {
     const pol = data.pol === 1 ? '＋ Positiv' : '－ Negativ';
     rows.push(`<div class="strike-popup-row"><span>Polaritet</span><span class="strike-popup-val">${pol}</span></div>`);
     if (data.alt != null && data.alt > 0)
-      rows.push(`<div class="strike-popup-row"><span>Höjd</span><span class="strike-popup-val">${data.alt} m</span></div>`);
+      rows.push(`<div class="strike-popup-row"><span>Höjd ö.h.</span><span class="strike-popup-val">${data.alt} m</span></div>`);
     if (data.delay != null)
       rows.push(`<div class="strike-popup-row"><span>Fördröjning</span><span class="strike-popup-val">${data.delay.toFixed(1)} s</span></div>`);
     if (data.sig && data.sig.length)
