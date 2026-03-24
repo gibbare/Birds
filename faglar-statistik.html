@@ -1450,7 +1450,7 @@ function onReporterClick(name) {
     infoBar.textContent = `${coords.length} platser · ${name} · ${selectedYear}`;
     const obs = coords.map(c => ({
       lat: c.lat, lon: c.lon, cnt: c.cnt,
-      sv: `${c.cnt} obs`, sci: '', date: '', reporter: name,
+      sv: c.sv || '', sci: c.sci || '', date: '', reporter: name,
     }));
     _renderMapMarkers(obs);
   } else {

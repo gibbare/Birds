@@ -33,7 +33,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "3.2"          # Uppdatera vid varje deploy
+APP_VERSION   = "3.3"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
 
 # ── Fellogg (cirkulär buffer, max 500 poster) ────────────────────────────────
@@ -1097,7 +1097,7 @@ def _new_agg_state():
         'rep_species':    _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'sv': '', 'sci': ''})),
         'rep_places':     _defaultdict(lambda: _defaultdict(int)),  # name → locality → count
         'rep_days':       _defaultdict(set),                # name → set of date-strings
-        'rep_coords':     _defaultdict(lambda: _defaultdict(int)),  # name → (lat3,lon3) → count
+        'rep_coords':     _defaultdict(lambda: _defaultdict(lambda: {'cnt':0,'sv':'','sci':''})),  # name → (lat3,lon3) → {cnt,sv,sci}
     }
 
 
@@ -1175,7 +1175,11 @@ def _agg_add_records(state, records):
             lon = location.get('decimalLongitude')
             if lat is not None and lon is not None:
                 coord_key = (round(float(lat), 3), round(float(lon), 3))
-                state['rep_coords'][reporter][coord_key] += 1
+                entry = state['rep_coords'][reporter][coord_key]
+                entry['cnt'] += 1
+                if sv_name and not entry['sv']:
+                    entry['sv']  = sv_name
+                    entry['sci'] = sci_name
 
         state['total_ind'] += count
 
@@ -1294,9 +1298,10 @@ def _agg_finalize(state):
         )
         coords_sorted = sorted(
             state['rep_coords'][rep_name].items(),
-            key=lambda x: -x[1]
+            key=lambda x: -x[1]['cnt']
         )
-        coords = [{'lat': k[0], 'lon': k[1], 'cnt': v} for k, v in coords_sorted]
+        coords = [{'lat': k[0], 'lon': k[1], 'cnt': v['cnt'], 'sv': v['sv'], 'sci': v['sci']}
+                  for k, v in coords_sorted]
         reporter_details[rep_name] = {
             'monthly':  state['rep_monthly'][rep_name],
             'species':  species_sorted,
