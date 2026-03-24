@@ -157,7 +157,48 @@ main {
   text-transform: uppercase;
   letter-spacing: 1px;
   color: #a0b0d0;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+/* Day summary strip */
+#day-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.day-card {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.day-card .dc-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #a0b0d0;
+  margin-bottom: 4px;
+}
+
+.day-card .dc-emoji {
+  font-size: 1.6rem;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.day-card .dc-temps {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e0eaff;
+}
+
+.day-card .dc-temps span {
+  color: #7eb8f7;
 }
 
 .chart-wrap {
