@@ -316,13 +316,32 @@ const MIN_STRIKES_FOR_PRED = 20;             // require this many visible strike
 const PRED_MINUTES         = 15;
 const WARNING_RADIUS_M     = 30000;          // 30 km
 
-// Blitzortung WebSocket candidates (tries in order, falls back to demo)
+// Blitzortung WebSocket servers (port 443, tested working)
 const WS_SERVERS = [
-  'wss://ws1.blitzortung.org:8080',
-  'wss://ws2.blitzortung.org:8080',
-  'wss://ws3.blitzortung.org:8080',
-  'wss://ws4.blitzortung.org:8080',
+  'wss://ws1.blitzortung.org/',
+  'wss://ws3.blitzortung.org/',
+  'wss://ws7.blitzortung.org/',
+  'wss://ws8.blitzortung.org/',
 ];
+
+// LZW decompression – ported from Blitzortung's own client
+function blitzDecode(data) {
+  const e = {};
+  const d = [...data];
+  let c = d[0], f = c;
+  const g = [c];
+  const h = 256;
+  let o = h;
+  for (let i = 1; i < d.length; i++) {
+    const code = d[i].charCodeAt(0);
+    const a = code < h ? d[i] : (e.hasOwnProperty(code) ? e[code] : (f + c));
+    g.push(a);
+    c = a[0];
+    e[o++] = f + c;
+    f = a;
+  }
+  return g.join('');
+}
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let map, predLayer, radiusCircle;
@@ -426,14 +445,7 @@ function connectBlitzortung() {
   }, 6000);
 
   ws.onopen = () => {
-    // Subscribe to a bounding box ±15° around user
-    const bbox = {
-      west:  Math.max(-180, userLon - 15),
-      east:  Math.min(180,  userLon + 15),
-      north: Math.min(90,   userLat + 15),
-      south: Math.max(-90,  userLat - 15)
-    };
-    ws.send(JSON.stringify(bbox));
+    ws.send(JSON.stringify({"a": 111}));
   };
 
   ws.onmessage = e => {
@@ -447,7 +459,8 @@ function connectBlitzortung() {
       document.getElementById('demo-badge').classList.add('hidden');
     }
     try {
-      const d = JSON.parse(e.data);
+      const raw = blitzDecode(e.data);
+      const d = JSON.parse(raw);
       if (d.lat && d.lon) {
         addStrike(d.lat, d.lon);
         updateDisplay();
