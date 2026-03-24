@@ -430,7 +430,11 @@ function renderWeather(data) {
   const symbol  = getParam(now, 'Wsymb2');
 
   document.getElementById('temperature').textContent  = Math.round(temp);
+  document.getElementById('temperature').style.color  = temp > 0 ? '#7dde8a' : '#7eb8f7';
+
   document.getElementById('wind').textContent         = wind != null ? wind.toFixed(1) : '--';
+  document.getElementById('wind').closest('.card').style.background =
+    wind != null && wind > 15 ? 'rgba(220, 80, 80, 0.25)' : '';
   document.getElementById('humidity').textContent     = humidity != null ? Math.round(humidity) : '--';
   document.getElementById('precip').textContent       = precip != null ? precip.toFixed(1) : '--';
   document.getElementById('feels-like').textContent   = wind != null ? feelsLike(temp, wind) : Math.round(temp);
