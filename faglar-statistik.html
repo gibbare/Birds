@@ -1429,12 +1429,13 @@ function onReporterClick(name) {
   });
   document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
-  // Visa rapportörens egna arter i artlistan (från lokal statistikcache)
+  // Läs rapportörens data direkt från statistikcachen (inga extra API-anrop)
   const cacheKey = `${selectedCountyId}_${selectedYear}`;
   const d = statsData[cacheKey];
   const repDetail = d && d.reporter_details && d.reporter_details[name];
+
+  // Visa rapportörens egna arter i artlistan
   if (repDetail && repDetail.species && repDetail.species.length) {
-    // Konvertera till renderTopArter-format (obs per art, ind saknas → 0)
     const spForRender = repDetail.species.map(s => ({
       sv: s.sv, sci: s.sci, key: s.taxon, obs: s.obs, ind: 0
     }));
@@ -1442,7 +1443,19 @@ function onReporterClick(name) {
     renderTopArter(spForRender);
   }
 
-  _doLoadMap();
+  // Visa rapportörens platser på kartan direkt från cachen – inga API-anrop
+  const coords = repDetail && repDetail.coords;
+  if (coords && coords.length) {
+    const infoBar = document.getElementById('mapInfoBar');
+    infoBar.textContent = `${coords.length} platser · ${name} · ${selectedYear}`;
+    const obs = coords.map(c => ({
+      lat: c.lat, lon: c.lon, cnt: c.cnt,
+      sv: `${c.cnt} obs`, sci: '', date: '', reporter: name,
+    }));
+    _renderMapMarkers(obs);
+  } else {
+    _doLoadMap();  // fallback om cachen saknar koordinater (gammal cache)
+  }
 }
 
 function _resetSpeciesListToCounty() {

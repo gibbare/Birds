@@ -1097,6 +1097,7 @@ def _new_agg_state():
         'rep_species':    _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'sv': '', 'sci': ''})),
         'rep_places':     _defaultdict(lambda: _defaultdict(int)),  # name → locality → count
         'rep_days':       _defaultdict(set),                # name → set of date-strings
+        'rep_coords':     _defaultdict(lambda: _defaultdict(int)),  # name → (lat3,lon3) → count
     }
 
 
@@ -1170,6 +1171,11 @@ def _agg_add_records(state, records):
                 state['rep_places'][reporter][locality] += 1
             if start_dt and len(start_dt) >= 10:
                 state['rep_days'][reporter].add(start_dt[:10])
+            lat = location.get('decimalLatitude')
+            lon = location.get('decimalLongitude')
+            if lat is not None and lon is not None:
+                coord_key = (round(float(lat), 3), round(float(lon), 3))
+                state['rep_coords'][reporter][coord_key] += 1
 
         state['total_ind'] += count
 
@@ -1286,10 +1292,16 @@ def _agg_finalize(state):
              for k, v in rep_sp.items()],
             key=lambda x: -x['obs']
         )
+        coords_sorted = sorted(
+            state['rep_coords'][rep_name].items(),
+            key=lambda x: -x[1]
+        )
+        coords = [{'lat': k[0], 'lon': k[1], 'cnt': v} for k, v in coords_sorted]
         reporter_details[rep_name] = {
             'monthly':  state['rep_monthly'][rep_name],
             'species':  species_sorted,
             'places':   places_sorted,
+            'coords':   coords,
             'dagar':    len(days),
             'lastObs':  max(days) if days else '',
             'since':    min(days)[:4] if days else '',
