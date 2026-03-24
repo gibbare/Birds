@@ -226,6 +226,53 @@
       color: #7eb8f7;
     }
 
+    /* ── Leaflet popup dark theme ── */
+    .leaflet-popup-content-wrapper {
+      background: rgba(22, 33, 62, 0.97) !important;
+      border: 1px solid rgba(126,184,247,0.25) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+      backdrop-filter: blur(10px);
+      color: #e0eaff !important;
+      padding: 0 !important;
+    }
+    .leaflet-popup-content {
+      margin: 0 !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .leaflet-popup-tip { background: rgba(22,33,62,0.97) !important; }
+    .leaflet-popup-close-button {
+      color: #7090b0 !important;
+      font-size: 1rem !important;
+      top: 6px !important; right: 8px !important;
+    }
+
+    .strike-popup {
+      padding: 12px 14px;
+      min-width: 190px;
+    }
+    .strike-popup-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #7eb8f7;
+      margin-bottom: 9px;
+    }
+    .strike-popup-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 5px;
+      font-size: 0.78rem;
+      color: #a0b0d0;
+    }
+    .strike-popup-val {
+      color: #e0eaff;
+      font-weight: 600;
+      text-align: right;
+    }
+
     /* Leaflet overrides to match dark theme */
     .leaflet-control-attribution {
       background: rgba(22,33,62,0.75) !important;
@@ -477,7 +524,7 @@ function connectBlitzortung() {
       const raw = blitzDecode(e.data);
       const d = JSON.parse(raw);
       if (d.lat && d.lon) {
-        addStrike(d.lat, d.lon);
+        addStrike(d.lat, d.lon, d);
         updateDisplay();
       }
     } catch { /* ignore malformed */ }
@@ -565,16 +612,34 @@ function distKmToUser(lat, lon) {
   );
 }
 
-function addStrike(lat, lon) {
+function buildPopup(lat, lon, now, data) {
+  const timeStr = new Date(now).toLocaleTimeString('sv-SE');
+  const dist    = Math.round(distKmToUser(lat, lon));
+  const rows = [`<div class="strike-popup-row"><span>Tid</span><span class="strike-popup-val">${timeStr}</span></div>`];
+  rows.push(`<div class="strike-popup-row"><span>Avstånd</span><span class="strike-popup-val">${dist} km</span></div>`);
+  if (data) {
+    const pol = data.pol === 1 ? '＋ Positiv' : '－ Negativ';
+    rows.push(`<div class="strike-popup-row"><span>Polaritet</span><span class="strike-popup-val">${pol}</span></div>`);
+    if (data.alt != null && data.alt > 0)
+      rows.push(`<div class="strike-popup-row"><span>Höjd</span><span class="strike-popup-val">${data.alt} m</span></div>`);
+    if (data.delay != null)
+      rows.push(`<div class="strike-popup-row"><span>Fördröjning</span><span class="strike-popup-val">${data.delay.toFixed(1)} s</span></div>`);
+    if (data.sig && data.sig.length)
+      rows.push(`<div class="strike-popup-row"><span>Stationer</span><span class="strike-popup-val">${data.sig.length}</span></div>`);
+  }
+  return `<div class="strike-popup"><div class="strike-popup-title">⚡ Blixtnedslag</div>${rows.join('')}</div>`;
+}
+
+function addStrike(lat, lon, data) {
+  const now = Date.now();
   const s = {
-    lat, lon,
-    time: Date.now(),
-    marker: L.marker([lat,lon], { icon: strikeIcon(0) })
+    lat, lon, time: now, data,
+    marker: L.marker([lat, lon], { icon: strikeIcon(0) })
       .addTo(map)
-      .bindPopup(`⚡ ${new Date().toLocaleTimeString('sv-SE')}`)
+      .bindPopup(buildPopup(lat, lon, now, data), { maxWidth: 260 })
   };
   strikes.push(s);
-  document.getElementById('last-strike').textContent = new Date().toLocaleTimeString('sv-SE');
+  document.getElementById('last-strike').textContent = new Date(now).toLocaleTimeString('sv-SE');
 
   // Warning if strike within 30 km
   if (distKmToUser(lat, lon) <= 30) {
