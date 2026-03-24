@@ -418,7 +418,11 @@ let stormLat, stormLon, stormVelLat, stormVelLon;
 
 // ── MAP ───────────────────────────────────────────────────────────────────────
 function initMap(lat, lon) {
-  map = L.map('map', { zoomControl: true, closePopupOnClick: true }).setView([lat, lon], 9);
+  map = L.map('map', { zoomControl: true, closePopupOnClick: true });
+  const km = 40;
+  const latD = km / 111;
+  const lonD = km / (111 * Math.cos(lat * Math.PI / 180));
+  map.fitBounds([[lat - latD, lon - lonD], [lat + latD, lon + lonD]]);
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap © CARTO',
