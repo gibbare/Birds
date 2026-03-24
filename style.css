@@ -358,6 +358,38 @@ main {
   display: block;
 }
 
+/* ── App nav ── */
+#app-nav {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  padding: 0 12px 10px;
+}
+
+.nav-tab {
+  flex: 1;
+  max-width: 150px;
+  text-align: center;
+  padding: 7px 10px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-decoration: none;
+  color: #a0b0d0;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: background 0.2s, color 0.2s;
+}
+
+.nav-tab:hover { background: rgba(255,255,255,0.1); }
+
+.nav-tab.active {
+  background: rgba(126,184,247,0.18);
+  border-color: rgba(126,184,247,0.35);
+  color: #7eb8f7;
+}
+
 footer {
   text-align: center;
   padding: 8px 0 4px;

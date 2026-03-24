@@ -358,7 +358,12 @@ function renderSearchResults(results) {
   });
 }
 
+function saveLocation(lat, lon, name) {
+  try { localStorage.setItem('wx_location', JSON.stringify({ lat, lon, name })); } catch {}
+}
+
 async function loadWeatherForCoords(lat, lon, placeName) {
+  saveLocation(lat, lon, placeName);
   document.getElementById('loading').classList.remove('hidden');
   document.getElementById('weather').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
@@ -440,6 +445,17 @@ async function init() {
   document.getElementById('loading').classList.remove('hidden');
   document.getElementById('weather').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
+
+  // Restore last used location if available
+  try {
+    const saved = localStorage.getItem('wx_location');
+    if (saved) {
+      const { lat, lon, name } = JSON.parse(saved);
+      loadWeatherForCoords(lat, lon, name);
+      return;
+    }
+  } catch {}
+
   document.getElementById('location-name').textContent = 'Hämtar din position...';
 
   if (!navigator.geolocation) {
@@ -456,6 +472,7 @@ async function init() {
           fetchWeather(lat, lon),
         ]);
         document.getElementById('location-name').textContent = placeName;
+        saveLocation(lat, lon, placeName);
         renderWeather(weatherData);
         showWeather();
       } catch (err) {
