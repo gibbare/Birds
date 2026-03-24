@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Väder</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Väder</h1>
+      <p id="location-name">Hämtar din position...</p>
+    </header>
+
+    <main>
+      <div id="loading" class="status">
+        <div class="spinner"></div>
+        <p>Hämtar väderdata...</p>
+      </div>
+
+      <div id="error" class="status hidden">
+        <p id="error-msg"></p>
+        <button onclick="init()">Försök igen</button>
+      </div>
+
+      <div id="weather" class="hidden">
+        <div class="card main-temp">
+          <div class="temp-value" id="temperature">--</div>
+          <div class="temp-label">°C</div>
+          <div class="weather-desc" id="weather-desc">--</div>
+        </div>
+
+        <div class="cards-grid">
+          <div class="card small">
+            <div class="card-icon">💨</div>
+            <div class="card-value" id="wind">--</div>
+            <div class="card-label">Vind (m/s)</div>
+          </div>
+          <div class="card small">
+            <div class="card-icon">💧</div>
+            <div class="card-value" id="humidity">--</div>
+            <div class="card-label">Luftfuktighet (%)</div>
+          </div>
+          <div class="card small">
+            <div class="card-icon">🌧️</div>
+            <div class="card-value" id="precip">--</div>
+            <div class="card-label">Nederbörd (mm/h)</div>
+          </div>
+          <div class="card small">
+            <div class="card-icon">🌡️</div>
+            <div class="card-value" id="feels-like">--</div>
+            <div class="card-label">Känns som (°C)</div>
+          </div>
+        </div>
+
+        <div class="card forecast-card">
+          <h2>3 dygns prognos</h2>
+          <div class="chart-wrap">
+            <canvas id="forecast-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>Data från <a href="https://opendata.smhi.se" target="_blank">SMHI Open Data</a></p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
