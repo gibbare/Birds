@@ -120,14 +120,29 @@ function drawDaySummary(summaries) {
 function drawForecastChart(timeSeries) {
   const canvas = document.getElementById('forecast-chart');
 
-  // ── filter: every 4 hours, full ~10-day forecast ────────────────────────────
-  const points4h = timeSeries.filter(ts => new Date(ts.validTime).getHours() % 4 === 0);
-  if (points4h.length < 2) return;
+  // ── 2 punkter per dag: UTC 06+18 (morgon/kväll) eller UTC 00+12 som fallback ─
+  const byDay = {};
+  timeSeries.forEach(ts => {
+    const key = new Date(ts.validTime).toDateString();
+    if (!byDay[key]) byDay[key] = [];
+    byDay[key].push(ts);
+  });
+  const pts3h = [];
+  Object.values(byDay).forEach(dayPts => {
+    const utcHours = new Set(dayPts.map(ts => new Date(ts.validTime).getUTCHours()));
+    const targets  = (utcHours.has(6) || utcHours.has(18)) ? [6, 18] : [0, 12];
+    targets.forEach(t => {
+      const match = dayPts.find(ts => new Date(ts.validTime).getUTCHours() === t);
+      if (match) pts3h.push(match);
+    });
+  });
+  pts3h.sort((a, b) => new Date(a.validTime) - new Date(b.validTime));
+  if (pts3h.length < 2) return;
 
   // ── canvas dimensions ───────────────────────────────────────────────────────
-  const PT_SPACING = 56;
-  const PAD = { top: 72, right: 16, bottom: 42, left: 38 };
-  const chartW = PT_SPACING * (points4h.length - 1);
+  const PT_SPACING = 64;
+  const PAD = { top: 72, right: 70, bottom: 42, left: 38 };
+  const chartW = PT_SPACING * (pts3h.length - 1);
   const totalW = chartW + PAD.left + PAD.right;
   const totalH = 220;
   const chartH = totalH - PAD.top - PAD.bottom;
@@ -141,10 +156,10 @@ function drawForecastChart(timeSeries) {
   ctx.clearRect(0, 0, totalW, totalH);
 
   // ── data ────────────────────────────────────────────────────────────────────
-  const temps   = points4h.map(ts => getParam(ts, 't')     ?? 0);
-  const precips = points4h.map(ts => getParam(ts, 'pmean') ?? 0);
-  const symbols = points4h.map(ts => getParam(ts, 'Wsymb2') ?? 1);
-  const times   = points4h.map(ts => new Date(ts.validTime));
+  const temps   = pts3h.map(ts => getParam(ts, 't')      ?? 0);
+  const precips = pts3h.map(ts => getParam(ts, 'pmean')  ?? 0);
+  const symbols = pts3h.map(ts => getParam(ts, 'Wsymb2') ?? 1);
+  const times   = pts3h.map(ts => new Date(ts.validTime));
 
   const tMin   = Math.floor(Math.min(...temps)) - 2;
   const tMax   = Math.ceil(Math.max(...temps))  + 3;
@@ -152,54 +167,41 @@ function drawForecastChart(timeSeries) {
 
   const xOf = i => PAD.left + i * PT_SPACING;
   const yOf = t => PAD.top + chartH - ((t - tMin) / tRange) * chartH;
-  const pts = temps.map((t, i) => ({ x: xOf(i), y: yOf(t) }));
+  const points = temps.map((t, i) => ({ x: xOf(i), y: yOf(t) }));
+
+  // ── pre-compute day groups ───────────────────────────────────────────────────
+  const dayGroups = [];
+  let gStart = 0;
+  for (let i = 1; i <= times.length; i++) {
+    if (i === times.length || times[i].toDateString() !== times[gStart].toDateString()) {
+      dayGroups.push({ startI: gStart, endI: i - 1, date: times[gStart] });
+      gStart = i;
+    }
+  }
 
   // ── day background bands ─────────────────────────────────────────────────────
-  const DAY_COLORS = [
-    'rgba(100,140,200,0.07)',
-    'rgba(80,120,180,0.03)',
-    'rgba(100,140,200,0.07)',
-  ];
-  let bandDay = times[0].getDate();
-  let bandStart = 0;
-  let dayIndex = 0;
-  const bands = [];
-  times.forEach((d, i) => {
-    if (d.getDate() !== bandDay || i === times.length - 1) {
-      const endI = d.getDate() !== bandDay ? i : i + 1;
-      bands.push({ from: xOf(bandStart) - PT_SPACING / 2, to: xOf(endI - 1) + PT_SPACING / 2, colorIdx: dayIndex });
-      bandDay = d.getDate();
-      bandStart = i;
-      dayIndex++;
-    }
-  });
-  bands.forEach(b => {
-    ctx.fillStyle = DAY_COLORS[b.colorIdx % DAY_COLORS.length];
-    ctx.fillRect(Math.max(b.from, PAD.left), PAD.top, b.to - Math.max(b.from, PAD.left), chartH);
+  const DAY_COLORS = ['rgba(100,140,200,0.07)', 'rgba(80,120,180,0.03)'];
+  dayGroups.forEach((g, di) => {
+    const x1 = Math.max(xOf(g.startI) - PT_SPACING / 2, PAD.left);
+    const x2 = xOf(g.endI) + PT_SPACING / 2;
+    ctx.fillStyle = DAY_COLORS[di % 2];
+    ctx.fillRect(x1, PAD.top, x2 - x1, chartH);
   });
 
   // ── horizontal grid + temp axis ──────────────────────────────────────────────
   for (let t = Math.ceil(tMin); t <= tMax; t += 2) {
     const y = yOf(t);
-    // zero line gets special treatment
-    if (t === 0) {
-      ctx.strokeStyle = 'rgba(126,184,247,0.3)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([6, 3]);
-    } else {
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([]);
-    }
+    ctx.strokeStyle = t === 0 ? 'rgba(126,184,247,0.3)' : 'rgba(255,255,255,0.06)';
+    ctx.lineWidth   = 1;
+    ctx.setLineDash(t === 0 ? [6, 3] : []);
     ctx.beginPath();
     ctx.moveTo(PAD.left, y);
     ctx.lineTo(PAD.left + chartW, y);
     ctx.stroke();
     ctx.setLineDash([]);
-
-    ctx.fillStyle  = t === 0 ? 'rgba(126,184,247,0.9)' : 'rgba(160,176,208,0.7)';
-    ctx.font       = `${t === 0 ? 'bold ' : ''}11px system-ui`;
-    ctx.textAlign  = 'right';
+    ctx.fillStyle = t === 0 ? 'rgba(126,184,247,0.9)' : 'rgba(160,176,208,0.7)';
+    ctx.font      = `${t === 0 ? 'bold ' : ''}11px system-ui`;
+    ctx.textAlign = 'right';
     ctx.fillText(t + '°', PAD.left - 6, y + 4);
   }
 
@@ -214,57 +216,48 @@ function drawForecastChart(timeSeries) {
     ctx.beginPath();
     ctx.roundRect(xOf(i) - bw / 2, PAD.top + chartH - bh, bw, bh, 3);
     ctx.fill();
-    // mm label if significant
-    if (p >= 0.5) {
-      ctx.fillStyle = 'rgba(130,190,255,0.9)';
-      ctx.font      = '9px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText(p.toFixed(1), xOf(i), PAD.top + chartH - bh - 3);
-    }
   });
 
-  // ── day separator + header ───────────────────────────────────────────────────
-  let lastDay = times[0].getDate();
-  times.forEach((d, i) => {
-    if (i === 0) return;
-    if (d.getDate() !== lastDay) {
-      lastDay = d.getDate();
-      const x = xOf(i) - PT_SPACING / 2;
+  // ── day separators + centered labels with date ───────────────────────────────
+  dayGroups.forEach((g, di) => {
+    const cx = (xOf(g.startI) + xOf(g.endI)) / 2;
+    const dayName  = g.date.toLocaleDateString('sv-SE', { weekday: 'short' }).toUpperCase();
+    const dateStr  = g.date.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+
+    // separator before each day except the first
+    if (di > 0) {
+      const sepX = xOf(g.startI) - PT_SPACING / 2;
       ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth   = 1.5;
       ctx.setLineDash([5, 4]);
       ctx.beginPath();
-      ctx.moveTo(x, PAD.top);
-      ctx.lineTo(x, PAD.top + chartH);
+      ctx.moveTo(sepX, PAD.top);
+      ctx.lineTo(sepX, PAD.top + chartH);
       ctx.stroke();
       ctx.setLineDash([]);
-
-      // Day name banner
-      const dayName = d.toLocaleDateString('sv-SE', { weekday: 'long' });
-      const x2 = xOf(i);
-      ctx.fillStyle = 'rgba(180,210,255,0.75)';
-      ctx.font      = 'bold 11px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText(dayName.toUpperCase(), x2 + PT_SPACING * 1.5, PAD.top - 10);
     }
+
+    // day name
+    ctx.fillStyle = 'rgba(180,210,255,0.85)';
+    ctx.font      = 'bold 11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(dayName, cx, PAD.top - 22);
+
+    // date below day name
+    ctx.fillStyle = 'rgba(140,170,220,0.65)';
+    ctx.font      = '10px system-ui';
+    ctx.fillText(dateStr, cx, PAD.top - 10);
   });
 
-  // Label first day
-  const firstName = times[0].toLocaleDateString('sv-SE', { weekday: 'long' });
-  ctx.fillStyle = 'rgba(180,210,255,0.75)';
-  ctx.font      = 'bold 11px system-ui';
-  ctx.textAlign = 'center';
-  ctx.fillText(firstName.toUpperCase(), xOf(0) + PT_SPACING * 1.5, PAD.top - 10);
-
-  // ── gradient fill under curve ────────────────────────────────────────────────
+  // ── gradient fill ─────────────────────────────────────────────────────────────
   const fillGrad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + chartH);
   fillGrad.addColorStop(0,   'rgba(126,184,247,0.4)');
   fillGrad.addColorStop(0.6, 'rgba(126,184,247,0.1)');
   fillGrad.addColorStop(1,   'rgba(126,184,247,0)');
   ctx.beginPath();
-  smoothPath(ctx, pts);
-  ctx.lineTo(pts[pts.length - 1].x, PAD.top + chartH);
-  ctx.lineTo(pts[0].x, PAD.top + chartH);
+  smoothPath(ctx, points);
+  ctx.lineTo(points[points.length - 1].x, PAD.top + chartH);
+  ctx.lineTo(points[0].x, PAD.top + chartH);
   ctx.closePath();
   ctx.fillStyle = fillGrad;
   ctx.fill();
@@ -273,49 +266,42 @@ function drawForecastChart(timeSeries) {
   const lineGrad = ctx.createLinearGradient(PAD.left, 0, PAD.left + chartW, 0);
   temps.forEach((t, i) => lineGrad.addColorStop(i / (temps.length - 1), tempColor(t)));
   ctx.beginPath();
-  smoothPath(ctx, pts);
+  smoothPath(ctx, points);
   ctx.strokeStyle = lineGrad;
   ctx.lineWidth   = 3;
   ctx.lineJoin    = 'round';
   ctx.stroke();
 
   // ── dots + labels ────────────────────────────────────────────────────────────
-  pts.forEach((pt, i) => {
-    // glow
+  points.forEach((pt, i) => {
+    const h = times[i].getHours();
+
+    // dot with glow
     ctx.shadowColor = tempColor(temps[i]);
-    ctx.shadowBlur  = 8;
+    ctx.shadowBlur  = 6;
     ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+    ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
     ctx.fillStyle   = tempColor(temps[i]);
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-    ctx.lineWidth   = 2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth   = 1.5;
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
 
     // temp label
-    ctx.fillStyle  = '#e8f0ff';
-    ctx.font       = 'bold 10px system-ui';
-    ctx.textAlign  = 'center';
-    ctx.fillText(Math.round(temps[i]) + '°', pt.x, pt.y - 11);
+    ctx.fillStyle = '#e8f0ff';
+    ctx.font      = 'bold 10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.round(temps[i]) + '°', pt.x, pt.y - 9);
 
     // emoji
     ctx.font = '15px serif';
-    ctx.fillText(WEATHER_EMOJI[symbols[i]] || '🌡️', pt.x, pt.y - 25);
+    ctx.fillText(WEATHER_EMOJI[symbols[i]] || '🌡️', pt.x, pt.y - 23);
 
     // time label
-    const h = times[i].getHours().toString().padStart(2, '0');
     ctx.fillStyle = 'rgba(160,176,208,0.9)';
     ctx.font      = '10px system-ui';
-    ctx.fillText(h + ':00', pt.x, PAD.top + chartH + 14);
-
-    // date label on midnight
-    if (times[i].getHours() === 0) {
-      const dateStr = times[i].toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
-      ctx.fillStyle = 'rgba(180,210,255,0.6)';
-      ctx.font      = '9px system-ui';
-      ctx.fillText(dateStr, pt.x, PAD.top + chartH + 26);
-    }
+    ctx.fillText(h.toString().padStart(2,'0') + ':00', pt.x, PAD.top + chartH + 14);
   });
 }
 
