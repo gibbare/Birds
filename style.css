@@ -489,7 +489,13 @@ body {
   color: #a0b0d0;
 }
 
-#predict-panel { top: 10px; left: 10px; min-width: 165px; }
+#predict-panel {
+  position: relative;
+  align-self: flex-end;
+  margin: 6px 10px;
+  min-width: 165px;
+  flex-shrink: 0;
+}
 
 .panel-header {
   display: flex;

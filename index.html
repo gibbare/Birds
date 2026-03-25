@@ -126,19 +126,6 @@
 
       <div id="demo-badge">Hämtar position och data...</div>
 
-      <div id="predict-panel" class="panel">
-        <div class="panel-header" onclick="togglePredict()">
-          <span class="panel-title">⟶ Rörelseprognos</span>
-          <span id="predict-arrow">▾</span>
-        </div>
-        <div id="predict-body">
-          <div class="panel-row"><span>Riktning</span><span class="panel-val" id="pred-dir">–</span></div>
-          <div class="panel-row"><span>Hastighet</span><span class="panel-val" id="pred-speed">–</span></div>
-          <div class="panel-row"><span>Avstånd</span><span class="panel-val" id="pred-dist">–</span></div>
-          <div class="panel-row"><span>Trend</span><span class="panel-val" id="pred-trend">–</span></div>
-        </div>
-      </div>
-
       <div id="legend" class="panel">
         <div class="legend-header" onclick="toggleLegend()">
           <span class="legend-title">Förklaring</span>
@@ -169,6 +156,19 @@
       </div>
 
       <button id="map-style-btn" onclick="toggleMapStyle()">☀️ Ljus</button>
+    </div>
+
+    <div id="predict-panel" class="panel">
+      <div class="panel-header" onclick="togglePredict()">
+        <span class="panel-title">⟶ Rörelseprognos</span>
+        <span id="predict-arrow">▾</span>
+      </div>
+      <div id="predict-body">
+        <div class="panel-row"><span>Riktning</span><span class="panel-val" id="pred-dir">–</span></div>
+        <div class="panel-row"><span>Hastighet</span><span class="panel-val" id="pred-speed">–</span></div>
+        <div class="panel-row"><span>Avstånd</span><span class="panel-val" id="pred-dist">–</span></div>
+        <div class="panel-row"><span>Trend</span><span class="panel-val" id="pred-trend">–</span></div>
+      </div>
     </div>
 
     <footer>
