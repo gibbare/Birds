@@ -2,17 +2,26 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>Väder</title>
   <link rel="apple-touch-icon" sizes="180x180" href="weather_ico.png" />
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="weather_ico.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Väder" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="app">
+
+  <!-- ── Shared nav ── -->
+  <nav id="app-nav">
+    <button class="nav-tab active" id="tab-weather" onclick="switchView('weather')">🌤 Väder</button>
+    <button class="nav-tab" id="tab-lightning" onclick="switchView('lightning')">⚡ Blixt</button>
+  </nav>
+
+  <!-- ══════════════ WEATHER VIEW ══════════════ -->
+  <div id="view-weather">
     <header>
       <p id="app-label">Väder</p>
       <div id="location-row">
@@ -20,12 +29,6 @@
         <span id="app-title">🔍</span>
       </div>
     </header>
-
-    <!-- App nav -->
-    <nav id="app-nav">
-      <button class="nav-tab active" onclick="window.location.href='index.html'">🌤 Väder</button>
-      <button class="nav-tab" onclick="window.location.href='lightning.html'">⚡ Blixt</button>
-    </nav>
 
     <!-- Search modal -->
     <div id="search-modal" class="hidden">
@@ -44,12 +47,10 @@
         <div class="spinner"></div>
         <p>Hämtar väderdata...</p>
       </div>
-
       <div id="error" class="status hidden">
         <p id="error-msg"></p>
         <button onclick="init()">Försök igen</button>
       </div>
-
       <div id="weather" class="hidden">
         <div class="card main-temp">
           <div class="temp-row">
@@ -58,7 +59,6 @@
           </div>
           <div class="weather-desc" id="weather-desc">--</div>
         </div>
-
         <div class="cards-grid">
           <div class="card small">
             <div class="card-icon">💨</div>
@@ -81,7 +81,6 @@
             <div class="card-label">Känns som (°C)</div>
           </div>
         </div>
-
         <div class="card forecast-card">
           <h2>Dygnsprognos</h2>
           <div id="day-summary"></div>
@@ -98,6 +97,422 @@
     </footer>
   </div>
 
+  <!-- ══════════════ LIGHTNING VIEW ══════════════ -->
+  <div id="view-lightning" class="hidden">
+    <header>
+      <p class="app-sublabel">Åskväderspårning</p>
+      <div id="blixt-location-row">
+        <span class="lightning-icon">⚡</span>
+        <h1 id="blixt-location-name">Hämtar position...</h1>
+      </div>
+    </header>
+
+    <div id="status-bar">
+      <div class="stat">
+        <div id="conn-dot" class="demo"></div>
+        <span id="conn-label">Ansluter...</span>
+      </div>
+      <div class="stat">
+        ⚡ <span class="stat-value" id="strike-count">0</span>&nbsp;slag (30 min)
+      </div>
+      <div class="stat">
+        🕐 <span class="stat-value" id="last-strike">–</span>
+      </div>
+      <div class="stat">
+        📡 <span class="stat-value" id="source-label">Blitzortung</span>
+      </div>
+    </div>
+
+    <div id="map-wrap">
+      <div id="map"></div>
+
+      <div id="demo-badge">Hämtar position och data...</div>
+
+      <div id="predict-panel" class="panel">
+        <div class="panel-title">⟶ Rörelseprognos</div>
+        <div class="panel-row"><span>Riktning</span><span class="panel-val" id="pred-dir">–</span></div>
+        <div class="panel-row"><span>Hastighet</span><span class="panel-val" id="pred-speed">–</span></div>
+        <div class="panel-row"><span>Avstånd</span><span class="panel-val" id="pred-dist">–</span></div>
+        <div class="panel-row"><span>Trend</span><span class="panel-val" id="pred-trend">–</span></div>
+      </div>
+
+      <div id="legend" class="panel">
+        <div class="legend-title">Förklaring</div>
+        <div class="leg-row">
+          <div class="leg-dot" style="background:#ffe066;box-shadow:0 0 7px #ffe066"></div>
+          <span>Nytt slag (&lt;5 min)</span>
+        </div>
+        <div class="leg-row">
+          <div class="leg-dot" style="background:#ff9933"></div>
+          <span>5–15 min</span>
+        </div>
+        <div class="leg-row">
+          <div class="leg-dot" style="background:#ff4444;opacity:0.6"></div>
+          <span>15–30 min</span>
+        </div>
+        <div class="leg-row">
+          <div class="leg-line" style="background:#7eb8f7"></div>
+          <span>Prognos (15 min)</span>
+        </div>
+        <div class="leg-row">
+          <div class="leg-dot" style="border:2px solid rgba(126,184,247,0.6);background:transparent"></div>
+          <span>30 km-radie</span>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p>Data från <a href="https://www.blitzortung.org" target="_blank">Blitzortung.org</a></p>
+      <p>Utvecklad av Jonas Karlsson &middot; v3.1</p>
+    </footer>
+  </div>
+
   <script src="app.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+  // ── VIEW SWITCHER ─────────────────────────────────────────────────────────────
+  let lightningInitialized = false;
+
+  function switchView(view) {
+    const toLightning = view === 'lightning';
+    document.getElementById('view-weather').classList.toggle('hidden', toLightning);
+    document.getElementById('view-lightning').classList.toggle('hidden', !toLightning);
+    document.getElementById('tab-weather').classList.toggle('active', !toLightning);
+    document.getElementById('tab-lightning').classList.toggle('active', toLightning);
+
+    if (toLightning) {
+      if (!lightningInitialized) {
+        lightningInitialized = true;
+        blitzInit();
+      } else if (blitzMap) {
+        setTimeout(() => blitzMap.invalidateSize(), 50);
+      }
+    }
+  }
+
+  // ── LIGHTNING APP ─────────────────────────────────────────────────────────────
+  const STRIKE_TTL_MS        = 30 * 60 * 1000;
+  const MIN_STRIKES_FOR_PRED = 20;
+  const PRED_MINUTES         = 15;
+  const WARNING_RADIUS_M     = 30000;
+  const WS_SERVERS = [
+    'wss://ws1.blitzortung.org/',
+    'wss://ws3.blitzortung.org/',
+    'wss://ws7.blitzortung.org/',
+    'wss://ws8.blitzortung.org/',
+  ];
+
+  function blitzDecode(data) {
+    const e = {};
+    const d = [...data];
+    let c = d[0], f = c;
+    const g = [c];
+    const h = 256;
+    let o = h;
+    for (let i = 1; i < d.length; i++) {
+      const code = d[i].charCodeAt(0);
+      const a = code < h ? d[i] : (e.hasOwnProperty(code) ? e[code] : (f + c));
+      g.push(a);
+      c = a[0];
+      e[o++] = f + c;
+      f = a;
+    }
+    return g.join('');
+  }
+
+  let blitzMap, predLayer, radiusCircle;
+  let blitzLat = null, blitzLon = null;
+  let strikes = [];
+  let blitzWs = null;
+  let blitzWsIndex = 0;
+  let blitzDemoTimer = null;
+  let blitzLive = false;
+  let blitzStormLat, blitzStormLon, blitzStormVLat, blitzStormVLon;
+
+  function blitzInitMap(lat, lon) {
+    blitzMap = L.map('map', { zoomControl: true, closePopupOnClick: true });
+    const km = 35;
+    const latD = km / 111;
+    const lonD = km / (111 * Math.cos(lat * Math.PI / 180));
+    blitzMap.fitBounds([[lat - latD, lon - lonD], [lat + latD, lon + lonD]]);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap © CARTO',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(blitzMap);
+
+    radiusCircle = L.circle([lat, lon], {
+      radius: WARNING_RADIUS_M,
+      color: 'rgba(126,184,247,0.5)',
+      fillColor: 'rgba(126,184,247,0.04)',
+      weight: 1.5,
+      dashArray: '6 4'
+    }).addTo(blitzMap);
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:13px;height:13px;border-radius:50%;
+        border:3px solid #7eb8f7;background:rgba(126,184,247,0.25);
+        box-shadow:0 0 10px #7eb8f7"></div>`,
+      iconSize: [13, 13], iconAnchor: [6, 6]
+    });
+    L.marker([lat, lon], { icon }).addTo(blitzMap).bindPopup('📍 Din position');
+
+    predLayer = L.layerGroup().addTo(blitzMap);
+
+    blitzMap.on('moveend zoomend', () => {
+      document.getElementById('strike-count').textContent = blitzVisibleStrikes().length;
+      blitzUpdatePrediction();
+    });
+  }
+
+  function blitzGetLocation() {
+    if (!navigator.geolocation) { blitzFallback(); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        blitzLat = pos.coords.latitude;
+        blitzLon = pos.coords.longitude;
+        blitzInitMap(blitzLat, blitzLon);
+        blitzGeocode(blitzLat, blitzLon);
+        blitzConnect();
+      },
+      () => blitzFallback(),
+      { timeout: 8000 }
+    );
+  }
+
+  function blitzFallback() {
+    blitzLat = 59.33; blitzLon = 18.07;
+    document.getElementById('blixt-location-name').textContent = 'Stockholm (standard)';
+    blitzInitMap(blitzLat, blitzLon);
+    blitzConnect();
+  }
+
+  async function blitzGeocode(lat, lon) {
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+        { headers: { 'Accept-Language': 'sv' } }
+      );
+      const d = await r.json();
+      const a = d.address;
+      document.getElementById('blixt-location-name').textContent =
+        a.city || a.town || a.village || a.municipality || a.county || 'Okänd plats';
+    } catch {
+      document.getElementById('blixt-location-name').textContent =
+        `${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`;
+    }
+  }
+
+  function blitzConnect() {
+    if (blitzWsIndex >= WS_SERVERS.length) { blitzStartDemo(); return; }
+    const url = WS_SERVERS[blitzWsIndex];
+    let connected = false;
+    try { blitzWs = new WebSocket(url); } catch { blitzNextServer(); return; }
+
+    const timeout = setTimeout(() => {
+      if (!connected) { blitzWs.close(); blitzNextServer(); }
+    }, 6000);
+
+    blitzWs.onopen = () => { blitzWs.send(JSON.stringify({ "a": 111 })); };
+    blitzWs.onmessage = e => {
+      clearTimeout(timeout);
+      if (!connected) {
+        connected = true;
+        blitzLive = true;
+        document.getElementById('conn-dot').className = 'live';
+        document.getElementById('conn-label').textContent = 'Live – Blitzortung';
+        document.getElementById('source-label').textContent = 'Blitzortung.org';
+        document.getElementById('demo-badge').classList.add('hidden');
+      }
+      try {
+        const raw = blitzDecode(e.data);
+        const d = JSON.parse(raw);
+        if (d.lat && d.lon) { blitzAddStrike(d.lat, d.lon, d); blitzUpdateDisplay(); }
+      } catch {}
+    };
+    blitzWs.onerror = () => { if (!connected) { clearTimeout(timeout); blitzNextServer(); } };
+    blitzWs.onclose = () => {
+      if (blitzLive) {
+        setTimeout(() => { blitzWsIndex = 0; blitzConnect(); }, 5000);
+        document.getElementById('conn-dot').className = '';
+        document.getElementById('conn-label').textContent = 'Återansluter...';
+        blitzLive = false;
+      }
+    };
+  }
+
+  function blitzNextServer() { blitzWsIndex++; blitzConnect(); }
+
+  function blitzStartDemo() {
+    document.getElementById('conn-dot').className = 'demo';
+    document.getElementById('conn-label').textContent = 'Demo (simulerad storm)';
+    document.getElementById('source-label').textContent = 'Demo';
+    const badge = document.getElementById('demo-badge');
+    badge.textContent = 'DEMO-DATA';
+    badge.classList.add('demo');
+    const offLat = (Math.random() - 0.5) * 1.2;
+    const offLon = (Math.random() - 0.5) * 1.2;
+    blitzStormLat = blitzLat + offLat;
+    blitzStormLon = blitzLon + offLon;
+    blitzStormVLat = (-offLat * 0.003) + (Math.random() - 0.5) * 0.001;
+    blitzStormVLon = (-offLon * 0.003) + (Math.random() - 0.5) * 0.001;
+    blitzDemoTimer = setInterval(blitzDemoTick, 2500);
+  }
+
+  function blitzDemoTick() {
+    blitzStormLat += blitzStormVLat;
+    blitzStormLon += blitzStormVLon;
+    blitzStormVLat += (Math.random() - 0.5) * 0.0002;
+    blitzStormVLon += (Math.random() - 0.5) * 0.0002;
+    const n = Math.floor(Math.random() * 3) + 1;
+    for (let i = 0; i < n; i++) {
+      blitzAddStrike(
+        blitzStormLat + (Math.random() - 0.5) * 0.18,
+        blitzStormLon + (Math.random() - 0.5) * 0.18
+      );
+    }
+    blitzUpdateDisplay();
+  }
+
+  function blitzStrikeIcon(ageMs) {
+    const mins = ageMs / 60000;
+    let color, glow, size;
+    if (mins < 5)       { color = '#ffe066'; glow = `0 0 9px #ffe066`; size = 10; }
+    else if (mins < 15) { color = '#ff9933'; glow = `0 0 5px #ff9933`; size = 8;  }
+    else                { color = '#ff4444'; glow = 'none';             size = 6;  }
+    return L.divIcon({
+      className: '',
+      html: `<div style="width:${size}px;height:${size}px;border-radius:50%;
+        background:${color};box-shadow:${glow};opacity:${mins < 15 ? 1 : 0.55}"></div>`,
+      iconSize: [size, size], iconAnchor: [size / 2, size / 2]
+    });
+  }
+
+  function blitzVisibleStrikes() {
+    if (!blitzMap) return strikes;
+    const bounds = blitzMap.getBounds();
+    return strikes.filter(s => bounds.contains([s.lat, s.lon]));
+  }
+
+  function blitzDistKm(lat, lon) {
+    const cosLat = Math.cos(blitzLat * Math.PI / 180);
+    return Math.sqrt(((lat - blitzLat) * 111) ** 2 + ((lon - blitzLon) * 111 * cosLat) ** 2);
+  }
+
+  function blitzBuildPopup(lat, lon, now, data) {
+    const timeStr = new Date(now).toLocaleTimeString('sv-SE');
+    const dist = Math.round(blitzDistKm(lat, lon));
+    const rows = [`<div class="strike-popup-row"><span>Tid</span><span class="strike-popup-val">${timeStr}</span></div>`];
+    rows.push(`<div class="strike-popup-row"><span>Avstånd</span><span class="strike-popup-val">${dist} km</span></div>`);
+    if (data) {
+      const pol = data.pol === 1 ? '＋ Positiv' : '－ Negativ';
+      rows.push(`<div class="strike-popup-row"><span>Polaritet</span><span class="strike-popup-val">${pol}</span></div>`);
+      if (data.alt != null && data.alt > 0)
+        rows.push(`<div class="strike-popup-row"><span>Höjd ö.h.</span><span class="strike-popup-val">${data.alt} m</span></div>`);
+      if (data.delay != null)
+        rows.push(`<div class="strike-popup-row"><span>Fördröjning</span><span class="strike-popup-val">${data.delay.toFixed(1)} s</span></div>`);
+      if (data.sig && data.sig.length)
+        rows.push(`<div class="strike-popup-row"><span>Stationer</span><span class="strike-popup-val">${data.sig.length}</span></div>`);
+    }
+    return `<div class="strike-popup"><div class="strike-popup-title">⚡ Blixtnedslag</div>${rows.join('')}</div>`;
+  }
+
+  function blitzAddStrike(lat, lon, data) {
+    const now = Date.now();
+    const s = {
+      lat, lon, time: now, data,
+      marker: L.marker([lat, lon], { icon: blitzStrikeIcon(0) })
+        .addTo(blitzMap)
+        .bindPopup(blitzBuildPopup(lat, lon, now, data), { maxWidth: 260 })
+    };
+    strikes.push(s);
+    document.getElementById('last-strike').textContent = new Date(now).toLocaleTimeString('sv-SE');
+    if (blitzDistKm(lat, lon) <= 30) {
+      document.getElementById('pred-trend').textContent = '⚠️ Blixt inom 30 km!';
+    }
+  }
+
+  function blitzUpdateDisplay() {
+    const now = Date.now();
+    strikes = strikes.filter(s => {
+      if (now - s.time > STRIKE_TTL_MS) { blitzMap.removeLayer(s.marker); return false; }
+      s.marker.setIcon(blitzStrikeIcon(now - s.time));
+      return true;
+    });
+    document.getElementById('strike-count').textContent = blitzVisibleStrikes().length;
+  }
+
+  function blitzUpdatePrediction() {
+    predLayer.clearLayers();
+    const visible = blitzVisibleStrikes();
+    if (visible.length < MIN_STRIKES_FOR_PRED) {
+      const hint = blitzMap.getZoom() < 7
+        ? 'Zooma in på storm'
+        : visible.length > 0 ? `(${visible.length}/${MIN_STRIKES_FOR_PRED} slag)` : '–';
+      document.getElementById('pred-dir').textContent   = '–';
+      document.getElementById('pred-speed').textContent = hint;
+      document.getElementById('pred-dist').textContent  = '–';
+      document.getElementById('pred-trend').textContent = '–';
+      return;
+    }
+    const last20 = visible.slice(-20);
+    const group1 = last20.slice(0, 10);
+    const group2 = last20.slice(10);
+    const avg = (arr, key) => arr.reduce((a, s) => a + s[key], 0) / arr.length;
+    const c1 = { lat: avg(group1, 'lat'), lon: avg(group1, 'lon'), time: avg(group1, 'time') };
+    const c2 = { lat: avg(group2, 'lat'), lon: avg(group2, 'lon'), time: avg(group2, 'time') };
+    const dtMin = (c2.time - c1.time) / 60000;
+    if (dtMin < 0.25) {
+      const hint = blitzMap.getZoom() < 7 ? 'Zooma in på storm' : 'Beräknar...';
+      document.getElementById('pred-dir').textContent   = '–';
+      document.getElementById('pred-speed').textContent = hint;
+      document.getElementById('pred-dist').textContent  = '–';
+      document.getElementById('pred-trend').textContent = '–';
+      return;
+    }
+    const dLat = c2.lat - c1.lat;
+    const dLon = c2.lon - c1.lon;
+    const cosLat   = Math.cos(c2.lat * Math.PI / 180);
+    const distKm   = Math.sqrt((dLat * 111) ** 2 + (dLon * 111 * cosLat) ** 2);
+    const speedKmh = (distKm / dtMin) * 60;
+    const bear     = ((Math.atan2(dLon, dLat) * 180 / Math.PI) + 360) % 360;
+    const scale    = PRED_MINUTES / dtMin;
+    const predLat  = c2.lat + dLat * scale;
+    const predLon  = c2.lon + dLon * scale;
+    const distFromUser = blitzDistKm(c2.lat, c2.lon);
+    const prevDist     = blitzDistKm(c1.lat, c1.lon);
+    const closeStrike  = visible.some(s => blitzDistKm(s.lat, s.lon) <= 30);
+    document.getElementById('pred-trend').textContent = closeStrike
+      ? '⚠️ Blixt inom 30 km!'
+      : distFromUser < prevDist ? '⚠️ Närmar sig' : '✅ Rör sig bort';
+    L.polyline([[c1.lat, c1.lon], [c2.lat, c2.lon]], {
+      color: '#7eb8f7', weight: 2, opacity: 0.45, dashArray: '5 5'
+    }).addTo(predLayer);
+    L.polyline([[c2.lat, c2.lon], [predLat, predLon]], {
+      color: '#7eb8f7', weight: 3, opacity: 0.9
+    }).addTo(predLayer);
+    L.circleMarker([predLat, predLon], {
+      radius: 5, color: '#7eb8f7', fillColor: '#7eb8f7', fillOpacity: 0.5, weight: 2
+    }).addTo(predLayer).bindPopup(`⟶ Prognos +${PRED_MINUTES} min`);
+    L.circleMarker([c2.lat, c2.lon], {
+      radius: 16, color: 'rgba(255,160,0,0.55)',
+      fillColor: 'rgba(255,160,0,0.06)', weight: 1.5, dashArray: '4 3'
+    }).addTo(predLayer);
+    const dirs = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSV','SV','VSV','V','VNV','NV','NNV'];
+    const bearLabel = dirs[Math.round(bear / 22.5) % 16];
+    document.getElementById('pred-dir').textContent   = `${bearLabel} (${Math.round(bear)}°)`;
+    document.getElementById('pred-speed').textContent = speedKmh > 250
+      ? `~${Math.round(speedKmh)} km/h ⚠️` : `${Math.round(speedKmh)} km/h`;
+    document.getElementById('pred-dist').textContent  = `${Math.round(distFromUser)} km`;
+  }
+
+  function blitzInit() {
+    setInterval(blitzUpdateDisplay,    10000);
+    setInterval(blitzUpdatePrediction, 30000);
+    blitzGetLocation();
+  }
+  </script>
 </body>
 </html>
