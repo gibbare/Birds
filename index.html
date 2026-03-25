@@ -285,6 +285,7 @@
         blitzLat = pos.coords.latitude;
         blitzLon = pos.coords.longitude;
         blitzInitMap(blitzLat, blitzLon);
+        blitzRestoreHistory();
         blitzGeocode(blitzLat, blitzLon);
         blitzConnect();
       },
@@ -297,6 +298,7 @@
     blitzLat = 59.33; blitzLon = 18.07;
     document.getElementById('blixt-location-name').textContent = 'Stockholm (standard)';
     blitzInitMap(blitzLat, blitzLon);
+    blitzRestoreHistory();
     blitzConnect();
   }
 
@@ -430,16 +432,43 @@
     return `<div class="strike-popup"><div class="strike-popup-title">⚡ Blixtnedslag</div>${rows.join('')}</div>`;
   }
 
-  function blitzAddStrike(lat, lon, data) {
+  // ── HISTORY (localStorage) ───────────────────────────────────────────────────
+  const BLITZ_HISTORY_KEY = 'blitz_strike_history';
+
+  function blitzSaveHistory() {
     const now = Date.now();
+    const payload = strikes
+      .filter(s => now - s.time < STRIKE_TTL_MS)
+      .map(s => ({ lat: s.lat, lon: s.lon, time: s.time, data: s.data }));
+    try { localStorage.setItem(BLITZ_HISTORY_KEY, JSON.stringify(payload)); } catch {}
+  }
+
+  function blitzLoadHistory() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(BLITZ_HISTORY_KEY) || '[]');
+      const now = Date.now();
+      return saved.filter(s => now - s.time < STRIKE_TTL_MS);
+    } catch { return []; }
+  }
+
+  function blitzRestoreHistory() {
+    const history = blitzLoadHistory();
+    for (const h of history) blitzAddStrike(h.lat, h.lon, h.data, h.time);
+    if (history.length > 0) { blitzUpdateDisplay(); blitzUpdatePrediction(); }
+  }
+
+  // ── STRIKES ───────────────────────────────────────────────────────────────────
+  // timestamp is optional – omit for live strikes, pass stored time for history
+  function blitzAddStrike(lat, lon, data, timestamp) {
+    const now = timestamp || Date.now();
     const s = {
       lat, lon, time: now, data,
-      marker: L.marker([lat, lon], { icon: blitzStrikeIcon(0) })
+      marker: L.marker([lat, lon], { icon: blitzStrikeIcon(Date.now() - now) })
         .addTo(blitzMap)
         .bindPopup(blitzBuildPopup(lat, lon, now, data), { maxWidth: 260 })
     };
     strikes.push(s);
-    if (blitzDistKm(lat, lon) <= 30) {
+    if (!timestamp && blitzDistKm(lat, lon) <= 30) {
       document.getElementById('pred-trend').textContent = '⚠️ Blixt inom 30 km!';
     }
   }
@@ -452,11 +481,14 @@
       return true;
     });
     document.getElementById('strike-count').textContent = blitzVisibleStrikes().length;
+    blitzSaveHistory();
   }
 
+  // ── PREDICTION (linear regression over last 40 visible strikes) ───────────────
   function blitzUpdatePrediction() {
     predLayer.clearLayers();
     const visible = blitzVisibleStrikes();
+
     if (visible.length < MIN_STRIKES_FOR_PRED) {
       const hint = blitzMap.getZoom() < 7
         ? 'Zooma in på storm'
@@ -467,14 +499,31 @@
       document.getElementById('pred-trend').textContent = '–';
       return;
     }
-    const last20 = visible.slice(-20);
-    const group1 = last20.slice(0, 10);
-    const group2 = last20.slice(10);
-    const avg = (arr, key) => arr.reduce((a, s) => a + s[key], 0) / arr.length;
-    const c1 = { lat: avg(group1, 'lat'), lon: avg(group1, 'lon'), time: avg(group1, 'time') };
-    const c2 = { lat: avg(group2, 'lat'), lon: avg(group2, 'lon'), time: avg(group2, 'time') };
-    const dtMin = (c2.time - c1.time) / 60000;
-    if (dtMin < 0.25) {
+
+    // Sort by time, cap at 40 strikes for regression
+    const sorted = [...visible].sort((a, b) => a.time - b.time).slice(-40);
+    const n  = sorted.length;
+    const t0 = sorted[0].time;
+
+    // Times in minutes from oldest strike
+    const times = sorted.map(s => (s.time - t0) / 60000);
+    const lats  = sorted.map(s => s.lat);
+    const lons  = sorted.map(s => s.lon);
+
+    const tMean   = times.reduce((a, b) => a + b) / n;
+    const latMean = lats.reduce((a, b) => a + b) / n;
+    const lonMean = lons.reduce((a, b) => a + b) / n;
+
+    let tVar = 0, latCov = 0, lonCov = 0;
+    for (let i = 0; i < n; i++) {
+      const dt = times[i] - tMean;
+      tVar   += dt * dt;
+      latCov += dt * (lats[i] - latMean);
+      lonCov += dt * (lons[i] - lonMean);
+    }
+
+    // Need at least 2 minutes of time spread for a meaningful regression
+    if (tVar < 1.0) {
       const hint = blitzMap.getZoom() < 7 ? 'Zooma in på storm' : 'Beräknar...';
       document.getElementById('pred-dir').textContent   = '–';
       document.getElementById('pred-speed').textContent = hint;
@@ -482,39 +531,65 @@
       document.getElementById('pred-trend').textContent = '–';
       return;
     }
-    const dLat = c2.lat - c1.lat;
-    const dLon = c2.lon - c1.lon;
-    const cosLat   = Math.cos(c2.lat * Math.PI / 180);
-    const distKm   = Math.sqrt((dLat * 111) ** 2 + (dLon * 111 * cosLat) ** 2);
-    const speedKmh = (distKm / dtMin) * 60;
-    const bear     = ((Math.atan2(dLon, dLat) * 180 / Math.PI) + 360) % 360;
-    const scale    = PRED_MINUTES / dtMin;
-    const predLat  = c2.lat + dLat * scale;
-    const predLon  = c2.lon + dLon * scale;
-    const distFromUser = blitzDistKm(c2.lat, c2.lon);
-    const prevDist     = blitzDistKm(c1.lat, c1.lon);
-    const closeStrike  = visible.some(s => blitzDistKm(s.lat, s.lon) <= 30);
+
+    // Velocity: degrees per minute
+    const dLatPerMin = latCov / tVar;
+    const dLonPerMin = lonCov / tVar;
+
+    const cosLat   = Math.cos(latMean * Math.PI / 180);
+    const speedKmh = Math.sqrt((dLatPerMin * 111) ** 2 + (dLonPerMin * 111 * cosLat) ** 2) * 60;
+    const bear     = ((Math.atan2(dLonPerMin, dLatPerMin) * 180 / Math.PI) + 360) % 360;
+
+    // Current storm centre = average of 5 most recent visible strikes
+    const recent = sorted.slice(-5);
+    const curLat = recent.reduce((a, s) => a + s.lat, 0) / recent.length;
+    const curLon = recent.reduce((a, s) => a + s.lon, 0) / recent.length;
+
+    // Previous centre (5 strikes before recent) for trend direction
+    const prevGroup = sorted.slice(-10, -5);
+    const prevLat = prevGroup.length ? prevGroup.reduce((a, s) => a + s.lat, 0) / prevGroup.length : latMean;
+    const prevLon = prevGroup.length ? prevGroup.reduce((a, s) => a + s.lon, 0) / prevGroup.length : lonMean;
+
+    const distFromUser = blitzDistKm(curLat, curLon);
+    const prevDist     = blitzDistKm(prevLat, prevLon);
+
+    // Predicted position PRED_MINUTES ahead
+    const predLat = curLat + dLatPerMin * PRED_MINUTES;
+    const predLon = curLon + dLonPerMin * PRED_MINUTES;
+
+    // Speed sanity check – thunderstorm cells rarely exceed 120 km/h
+    if (speedKmh > 250) {
+      document.getElementById('pred-dir').textContent   = '–';
+      document.getElementById('pred-speed').textContent = 'Otillräcklig data';
+      document.getElementById('pred-dist').textContent  = `${Math.round(distFromUser)} km`;
+      document.getElementById('pred-trend').textContent = '–';
+      return;
+    }
+
+    const closeStrike = visible.some(s => blitzDistKm(s.lat, s.lon) <= 30);
     document.getElementById('pred-trend').textContent = closeStrike
       ? '⚠️ Blixt inom 30 km!'
       : distFromUser < prevDist ? '⚠️ Närmar sig' : '✅ Rör sig bort';
-    L.polyline([[c1.lat, c1.lon], [c2.lat, c2.lon]], {
+
+    // Track line (prev → current)
+    L.polyline([[prevLat, prevLon], [curLat, curLon]], {
       color: '#7eb8f7', weight: 2, opacity: 0.45, dashArray: '5 5'
     }).addTo(predLayer);
-    L.polyline([[c2.lat, c2.lon], [predLat, predLon]], {
+    // Prediction arrow (current → forecast)
+    L.polyline([[curLat, curLon], [predLat, predLon]], {
       color: '#7eb8f7', weight: 3, opacity: 0.9
     }).addTo(predLayer);
     L.circleMarker([predLat, predLon], {
       radius: 5, color: '#7eb8f7', fillColor: '#7eb8f7', fillOpacity: 0.5, weight: 2
     }).addTo(predLayer).bindPopup(`⟶ Prognos +${PRED_MINUTES} min`);
-    L.circleMarker([c2.lat, c2.lon], {
+    L.circleMarker([curLat, curLon], {
       radius: 16, color: 'rgba(255,160,0,0.55)',
       fillColor: 'rgba(255,160,0,0.06)', weight: 1.5, dashArray: '4 3'
     }).addTo(predLayer);
+
     const dirs = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSV','SV','VSV','V','VNV','NV','NNV'];
-    const bearLabel = dirs[Math.round(bear / 22.5) % 16];
-    document.getElementById('pred-dir').textContent   = `${bearLabel} (${Math.round(bear)}°)`;
-    document.getElementById('pred-speed').textContent = speedKmh > 250
-      ? `~${Math.round(speedKmh)} km/h ⚠️` : `${Math.round(speedKmh)} km/h`;
+    document.getElementById('pred-dir').textContent   = `${dirs[Math.round(bear / 22.5) % 16]} (${Math.round(bear)}°)`;
+    document.getElementById('pred-speed').textContent = `${Math.round(speedKmh)} km/h`;
     document.getElementById('pred-dist').textContent  = `${Math.round(distFromUser)} km`;
   }
 
