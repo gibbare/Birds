@@ -492,7 +492,7 @@
     if (visible.length < MIN_STRIKES_FOR_PRED) {
       const hint = blitzMap.getZoom() < 7
         ? 'Zooma in på storm'
-        : visible.length > 0 ? `(${visible.length}/${MIN_STRIKES_FOR_PRED} slag)` : '–';
+        : visible.length > 0 ? 'Väntar på data...' : '–';
       document.getElementById('pred-dir').textContent   = '–';
       document.getElementById('pred-speed').textContent = hint;
       document.getElementById('pred-dist').textContent  = '–';
