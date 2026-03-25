@@ -20,40 +20,66 @@ const STRIKE_TTL = 30 * 60;          // 30 minutes in seconds
 const REDIS_KEY  = 'blitz:strikes';  // sorted set – score = timestamp ms
 
 // ── Redis ─────────────────────────────────────────────────────────────────────
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-  maxRetriesPerRequest: 3,
-  lazyConnect: false,
-});
+const REDIS_URL = process.env.REDIS_URL || process.env.REDIS_PRIVATE_URL;
+if (!REDIS_URL) console.warn('[Redis] No REDIS_URL env var – strikes will not persist across restarts');
 
-redis.on('connect', () => console.log('[Redis] Connected'));
+const redisOptions = {
+  maxRetriesPerRequest: 1,
+  retryStrategy: times => Math.min(times * 1000, 10_000),
+  lazyConnect: true,
+};
+// Railway Redis may require TLS (rediss://)
+if (REDIS_URL && REDIS_URL.startsWith('rediss://')) {
+  redisOptions.tls = { rejectUnauthorized: false };
+}
+
+const redis = REDIS_URL
+  ? new Redis(REDIS_URL, redisOptions)
+  : new Redis('redis://localhost:6379', { ...redisOptions, lazyConnect: true });
+
+redis.on('connect', () => console.log('[Redis] Connected to', REDIS_URL ? REDIS_URL.replace(/:\/\/.*@/, '://***@') : 'localhost'));
 redis.on('error',   e  => console.error('[Redis] Error:', e.message));
 
+// Fallback in-memory buffer used when Redis is unavailable
+let memBuffer = [];
+let redisReady = false;
+redis.connect().then(() => { redisReady = true; }).catch(() => {
+  console.warn('[Redis] Could not connect – using in-memory fallback');
+});
+
 // Remove strikes older than 30 minutes
-async function pruneRedis() {
+async function pruneOld() {
   const cutoff = Date.now() - STRIKE_TTL * 1000;
-  await redis.zremrangebyscore(REDIS_KEY, '-inf', cutoff);
+  if (redisReady) {
+    await redis.zremrangebyscore(REDIS_KEY, '-inf', cutoff).catch(() => {});
+  } else {
+    memBuffer = memBuffer.filter(s => s.time > cutoff);
+  }
 }
 
-// Add one strike to Redis (fire-and-forget)
+// Add one strike (fire-and-forget)
 async function saveStrike(strike) {
-  const score = strike.time;
-  const value = JSON.stringify(strike);
-  await redis.zadd(REDIS_KEY, score, value);
-  // Set TTL on the key so Redis cleans up automatically if server is idle
-  await redis.expire(REDIS_KEY, STRIKE_TTL * 2);
+  if (redisReady) {
+    redis.zadd(REDIS_KEY, strike.time, JSON.stringify(strike)).catch(() => {});
+    redis.expire(REDIS_KEY, STRIKE_TTL * 2).catch(() => {});
+  } else {
+    memBuffer.push(strike);
+    if (memBuffer.length > 30000) memBuffer = memBuffer.slice(-25000);
+  }
 }
 
-// Get all strikes from the last 30 minutes
+// Get strikes from the last 30 minutes (or since a timestamp)
 async function getStrikes(since = 0) {
   const cutoff = since > 0 ? since : Date.now() - STRIKE_TTL * 1000;
-  const raw    = await redis.zrangebyscore(REDIS_KEY, cutoff, '+inf');
-  return raw.map(r => {
-    try { return JSON.parse(r); } catch { return null; }
-  }).filter(Boolean);
+  if (redisReady) {
+    const raw = await redis.zrangebyscore(REDIS_KEY, cutoff, '+inf').catch(() => []);
+    return raw.map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
+  }
+  return memBuffer.filter(s => s.time > cutoff);
 }
 
-// Prune Redis every 5 minutes
-setInterval(pruneRedis, 5 * 60 * 1000);
+// Prune every 5 minutes
+setInterval(pruneOld, 5 * 60 * 1000);
 
 // ── LZW decompression (identical to client-side blitzDecode) ─────────────────
 function blitzDecode(data) {
@@ -179,14 +205,23 @@ app.get('/api/strikes', async (req, res) => {
  */
 app.get('/api/status', async (req, res) => {
   try {
-    const count  = await redis.zcount(REDIS_KEY, Date.now() - STRIKE_TTL * 1000, '+inf');
-    const oldest = await redis.zrangebyscore(REDIS_KEY, '-inf', '+inf', 'LIMIT', 0, 1);
+    const cutoff = Date.now() - STRIKE_TTL * 1000;
+    let count = 0, oldestTime = null;
+    if (redisReady) {
+      count = await redis.zcount(REDIS_KEY, cutoff, '+inf').catch(() => 0);
+      const oldest = await redis.zrangebyscore(REDIS_KEY, '-inf', '+inf', 'LIMIT', 0, 1).catch(() => []);
+      oldestTime = oldest[0] ? JSON.parse(oldest[0]).time : null;
+    } else {
+      count = memBuffer.filter(s => s.time > cutoff).length;
+      oldestTime = memBuffer[0]?.time ?? null;
+    }
     res.json({
       blitzortung:  blitzWs?.readyState === WebSocket.OPEN ? 'connected' : 'disconnected',
       server:       WS_SERVERS[wsIdx % WS_SERVERS.length],
-      redis:        redis.status,
+      redis:        redisReady ? 'connected' : 'unavailable (in-memory fallback)',
       buffered:     count,
-      oldestStrike: oldest[0] ? JSON.parse(oldest[0]).time : null,
+      oldestStrike: oldestTime,
+      cacheMinutes: oldestTime ? Math.floor((Date.now() - oldestTime) / 60000) : 0,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
