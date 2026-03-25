@@ -727,17 +727,28 @@
       ? '⚠️ Blixt inom 30 km!'
       : distFromUser < prevDist ? '⚠️ Närmar sig' : '✅ Rör sig bort';
 
-    // Track line (prev → current)
+    // Dashed trail: where storm came from → current position
     L.polyline([[prevLat, prevLon], [curLat, curLon]], {
-      color: '#7eb8f7', weight: 2, opacity: 0.45, dashArray: '5 5'
+      color: '#7eb8f7', weight: 2, opacity: 0.4, dashArray: '5 5'
     }).addTo(predLayer);
-    // Prediction arrow (current → forecast)
+
+    // Solid line: current → predicted position
     L.polyline([[curLat, curLon], [predLat, predLon]], {
       color: '#7eb8f7', weight: 3, opacity: 0.9
     }).addTo(predLayer);
-    L.circleMarker([predLat, predLon], {
-      radius: 5, color: '#7eb8f7', fillColor: '#7eb8f7', fillOpacity: 0.5, weight: 2
+
+    // Arrow marker at predicted position – rotated to bear (degrees from North CW)
+    const arrowSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <polygon points="14,2 22,24 14,18 6,24"
+               fill="#7eb8f7" opacity="0.95"
+               transform="rotate(${Math.round(bear)},14,14)"/>
+    </svg>`;
+    L.marker([predLat, predLon], {
+      icon: L.divIcon({ className: '', html: arrowSvg, iconSize: [28, 28], iconAnchor: [14, 14] }),
+      interactive: true
     }).addTo(predLayer).bindPopup(`⟶ Prognos +${PRED_MINUTES} min`);
+
+    // Dashed ring at current storm centroid
     L.circleMarker([curLat, curLon], {
       radius: 16, color: 'rgba(255,160,0,0.55)',
       fillColor: 'rgba(255,160,0,0.06)', weight: 1.5, dashArray: '4 3'
