@@ -127,11 +127,16 @@
       <div id="demo-badge">Hämtar position och data...</div>
 
       <div id="predict-panel" class="panel">
-        <div class="panel-title">⟶ Rörelseprognos</div>
-        <div class="panel-row"><span>Riktning</span><span class="panel-val" id="pred-dir">–</span></div>
-        <div class="panel-row"><span>Hastighet</span><span class="panel-val" id="pred-speed">–</span></div>
-        <div class="panel-row"><span>Avstånd</span><span class="panel-val" id="pred-dist">–</span></div>
-        <div class="panel-row"><span>Trend</span><span class="panel-val" id="pred-trend">–</span></div>
+        <div class="panel-header" onclick="togglePredict()">
+          <span class="panel-title">⟶ Rörelseprognos</span>
+          <span id="predict-arrow">▾</span>
+        </div>
+        <div id="predict-body">
+          <div class="panel-row"><span>Riktning</span><span class="panel-val" id="pred-dir">–</span></div>
+          <div class="panel-row"><span>Hastighet</span><span class="panel-val" id="pred-speed">–</span></div>
+          <div class="panel-row"><span>Avstånd</span><span class="panel-val" id="pred-dist">–</span></div>
+          <div class="panel-row"><span>Trend</span><span class="panel-val" id="pred-trend">–</span></div>
+        </div>
       </div>
 
       <div id="legend" class="panel">
@@ -516,6 +521,13 @@
   function toggleLegend() {
     const body = document.getElementById('legend-body');
     const arrow = document.getElementById('legend-arrow');
+    const collapsed = body.classList.toggle('hidden');
+    arrow.textContent = collapsed ? '▸' : '▾';
+  }
+
+  function togglePredict() {
+    const body = document.getElementById('predict-body');
+    const arrow = document.getElementById('predict-arrow');
     const collapsed = body.classList.toggle('hidden');
     arrow.textContent = collapsed ? '▸' : '▾';
   }

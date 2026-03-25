@@ -491,6 +491,22 @@ body {
 
 #predict-panel { top: 10px; left: 10px; min-width: 165px; }
 
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+#predict-arrow {
+  font-size: 0.7rem;
+  color: #7eb8f7;
+}
+
+#predict-body { margin-top: 8px; }
+
 .panel-title {
   font-size: 0.65rem;
   font-weight: 700;
