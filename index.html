@@ -137,28 +137,35 @@
       </div>
 
       <div id="legend" class="panel">
-        <div class="legend-title">Förklaring</div>
-        <div class="leg-row">
-          <div class="leg-dot" style="background:#ffe066;box-shadow:0 0 7px #ffe066"></div>
-          <span>Nytt slag (&lt;5 min)</span>
+        <div class="legend-header" onclick="toggleLegend()">
+          <span class="legend-title">Förklaring</span>
+          <span id="legend-arrow">▸</span>
         </div>
-        <div class="leg-row">
-          <div class="leg-dot" style="background:#ff9933"></div>
-          <span>5–15 min</span>
-        </div>
-        <div class="leg-row">
-          <div class="leg-dot" style="background:#ff4444;opacity:0.6"></div>
-          <span>15–30 min</span>
-        </div>
-        <div class="leg-row">
-          <div class="leg-line" style="background:#7eb8f7"></div>
-          <span>Prognos (15 min)</span>
-        </div>
-        <div class="leg-row">
-          <div class="leg-dot" style="border:2px solid rgba(126,184,247,0.6);background:transparent"></div>
-          <span>30 km-radie</span>
+        <div id="legend-body" class="hidden">
+          <div class="leg-row">
+            <div class="leg-dot" style="background:#ffe066;box-shadow:0 0 7px #ffe066"></div>
+            <span>&lt;5 min</span>
+          </div>
+          <div class="leg-row">
+            <div class="leg-dot" style="background:#ff9933"></div>
+            <span>5–15 min</span>
+          </div>
+          <div class="leg-row">
+            <div class="leg-dot" style="background:#ff4444;opacity:0.6"></div>
+            <span>15–30 min</span>
+          </div>
+          <div class="leg-row">
+            <div class="leg-line" style="background:#7eb8f7"></div>
+            <span>Prognos</span>
+          </div>
+          <div class="leg-row">
+            <div class="leg-dot" style="border:2px solid rgba(126,184,247,0.6);background:transparent"></div>
+            <span>30 km-radie</span>
+          </div>
         </div>
       </div>
+
+      <button id="map-style-btn" onclick="toggleMapStyle()">☀️ Normal</button>
     </div>
 
     <footer>
@@ -220,7 +227,8 @@
     return g.join('');
   }
 
-  let blitzMap, predLayer, radiusCircle;
+  let blitzMap, predLayer, radiusCircle, blitzTileLayer;
+  let blitzDarkMode = true;
   let blitzLat = null, blitzLon = null;
   let strikes = [];
   let blitzWs = null;
@@ -236,7 +244,7 @@
     const lonD = km / (111 * Math.cos(lat * Math.PI / 180));
     blitzMap.fitBounds([[lat - latD, lon - lonD], [lat + latD, lon + lonD]]);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    blitzTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '© OpenStreetMap © CARTO',
       subdomains: 'abcd',
       maxZoom: 19
@@ -506,6 +514,27 @@
     document.getElementById('pred-speed').textContent = speedKmh > 250
       ? `~${Math.round(speedKmh)} km/h ⚠️` : `${Math.round(speedKmh)} km/h`;
     document.getElementById('pred-dist').textContent  = `${Math.round(distFromUser)} km`;
+  }
+
+  function toggleLegend() {
+    const body = document.getElementById('legend-body');
+    const arrow = document.getElementById('legend-arrow');
+    const collapsed = body.classList.toggle('hidden');
+    arrow.textContent = collapsed ? '▸' : '▾';
+  }
+
+  function toggleMapStyle() {
+    blitzDarkMode = !blitzDarkMode;
+    blitzMap.removeLayer(blitzTileLayer);
+    const url = blitzDarkMode
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    blitzTileLayer = L.tileLayer(url, {
+      attribution: '© OpenStreetMap © CARTO',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(blitzMap);
+    document.getElementById('map-style-btn').textContent = blitzDarkMode ? '☀️ Normal' : '🌙 Mörk';
   }
 
   function blitzInit() {

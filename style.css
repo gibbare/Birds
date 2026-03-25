@@ -511,14 +511,49 @@ body {
 
 #legend { bottom: 16px; right: 10px; }
 
+.legend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
 .legend-title {
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: #a0b0d0;
-  margin-bottom: 7px;
 }
+
+#legend-arrow {
+  font-size: 0.7rem;
+  color: #a0b0d0;
+}
+
+#legend-body { margin-top: 7px; }
+
+#map-style-btn {
+  position: absolute;
+  bottom: 16px; left: 10px;
+  z-index: 900;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #a0c8f0;
+  cursor: pointer;
+  font-family: inherit;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.2s;
+}
+
+#map-style-btn:hover { background: rgba(255,255,255,0.14); }
 
 .leg-row {
   display: flex;
