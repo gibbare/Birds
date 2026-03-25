@@ -386,6 +386,158 @@ body {
   text-decoration: none;
 }
 
+/* ── Install banner (browser only) ── */
+.browser-only { display: flex; }
+
+@media (display-mode: standalone) {
+  .browser-only { display: none !important; }
+}
+
+#install-banner {
+  align-items: center;
+  gap: 8px;
+  background: rgba(126,184,247,0.1);
+  border: 1px solid rgba(126,184,247,0.25);
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 0.78rem;
+  color: #a0c8f0;
+}
+
+#install-banner span { flex: 1; }
+
+#install-btn {
+  background: rgba(126,184,247,0.2);
+  border: 1px solid rgba(126,184,247,0.4);
+  color: #7eb8f7;
+  border-radius: 10px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+#install-dismiss {
+  background: none;
+  border: none;
+  color: #607090;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+/* Install modal */
+#install-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+#install-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10,15,35,0.85);
+  backdrop-filter: blur(6px);
+}
+
+#install-box {
+  position: relative;
+  background: #1e2a45;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px;
+  padding: 28px 24px 24px;
+  max-width: 340px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+
+.install-close {
+  position: absolute;
+  top: 12px; right: 14px;
+  background: rgba(255,255,255,0.08);
+  border: none;
+  color: #a0b0d0;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.install-icon {
+  font-size: 2.4rem;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+#install-box h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e0eaff;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+#install-box ol {
+  padding-left: 20px;
+  color: #a0b0d0;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  margin-bottom: 14px;
+}
+
+#install-box ol strong { color: #e0eaff; }
+
+#install-box p {
+  color: #a0b0d0;
+  font-size: 0.88rem;
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.install-share-icon {
+  display: inline-block;
+  background: rgba(126,184,247,0.15);
+  border: 1px solid rgba(126,184,247,0.3);
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: 1rem;
+  vertical-align: middle;
+}
+
+.install-note {
+  font-size: 0.75rem !important;
+  color: #607090 !important;
+  font-style: italic;
+  margin-top: 4px !important;
+}
+
+#install-android-btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #7eb8f7, #5090d0);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: 12px;
+}
+
 /* ══════════════ LIGHTNING VIEW ══════════════ */
 
 #view-lightning {

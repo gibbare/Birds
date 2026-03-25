@@ -30,6 +30,43 @@
       </div>
     </header>
 
+    <!-- Install banner (browser only – hidden in PWA/standalone mode) -->
+    <div id="install-banner" class="browser-only hidden">
+      <span>📲 Lägg till på hemskärmen för bästa upplevelse</span>
+      <button id="install-btn" onclick="showInstallModal()">Hur?</button>
+      <button id="install-dismiss" onclick="dismissInstallBanner()" aria-label="Stäng">✕</button>
+    </div>
+
+    <!-- Install instructions modal -->
+    <div id="install-modal" class="hidden">
+      <div id="install-backdrop" onclick="closeInstallModal()"></div>
+      <div id="install-box">
+        <button class="install-close" onclick="closeInstallModal()">✕</button>
+        <div id="install-ios" class="hidden">
+          <div class="install-icon">📱</div>
+          <h2>Lägg till på hemskärmen</h2>
+          <ol>
+            <li>Tryck på <strong>dela-ikonen</strong> <span class="install-share-icon">⬆</span> längst ned i Safari</li>
+            <li>Scrolla ned i menyn och tryck <strong>"Lägg till på hemskärmen"</strong></li>
+            <li>Tryck <strong>"Lägg till"</strong> uppe till höger</li>
+          </ol>
+          <p class="install-note">Appen öppnas då i helskärm utan adressfält.</p>
+        </div>
+        <div id="install-android" class="hidden">
+          <div class="install-icon">📱</div>
+          <h2>Installera app</h2>
+          <p>Tryck på knappen nedan för att installera appen direkt på din enhet.</p>
+          <button id="install-android-btn" onclick="triggerAndroidInstall()">Installera</button>
+          <p class="install-note">Eller öppna webbläsarens meny och välj <strong>"Lägg till på hemskärmen"</strong>.</p>
+        </div>
+        <div id="install-generic" class="hidden">
+          <div class="install-icon">📱</div>
+          <h2>Lägg till på hemskärmen</h2>
+          <p>Öppna webbläsarens meny och välj <strong>"Lägg till på hemskärmen"</strong> eller <strong>"Installera app"</strong>.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Search modal -->
     <div id="search-modal" class="hidden">
       <div id="search-backdrop"></div>
@@ -181,6 +218,59 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
   // ── VIEW SWITCHER ─────────────────────────────────────────────────────────────
+  // ── INSTALL BANNER ─────────────────────────────────────────────────────────
+  const isPWA = window.navigator.standalone === true ||
+                window.matchMedia('(display-mode: standalone)').matches;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+  let deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+  });
+
+  function initInstallBanner() {
+    if (isPWA) return; // running as installed app – hide everything
+    if (localStorage.getItem('install_dismissed')) return;
+    document.getElementById('install-banner').classList.remove('hidden');
+  }
+
+  function dismissInstallBanner() {
+    document.getElementById('install-banner').classList.add('hidden');
+    localStorage.setItem('install_dismissed', '1');
+  }
+
+  function showInstallModal() {
+    document.getElementById('install-modal').classList.remove('hidden');
+    if (isIOS) {
+      document.getElementById('install-ios').classList.remove('hidden');
+    } else if (deferredInstallPrompt) {
+      document.getElementById('install-android').classList.remove('hidden');
+    } else {
+      document.getElementById('install-generic').classList.remove('hidden');
+    }
+  }
+
+  function closeInstallModal() {
+    document.getElementById('install-modal').classList.add('hidden');
+    document.getElementById('install-ios').classList.add('hidden');
+    document.getElementById('install-android').classList.add('hidden');
+    document.getElementById('install-generic').classList.add('hidden');
+  }
+
+  async function triggerAndroidInstall() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') {
+      dismissInstallBanner();
+      closeInstallModal();
+    }
+    deferredInstallPrompt = null;
+  }
+
+  document.addEventListener('DOMContentLoaded', initInstallBanner);
+
   let lightningInitialized = false;
 
   function switchView(view) {
