@@ -581,8 +581,27 @@
     } catch { return []; }
   }
 
-  function blitzRestoreHistory() {
-    const history = blitzLoadHistory();
+  async function blitzRestoreHistory() {
+    let history = [];
+
+    // 1. Try server buffer (30 min of global data, always fresh)
+    try {
+      const resp = await fetch('/api/strikes');
+      if (resp.ok) {
+        history = await resp.json();
+        // Keep localStorage in sync with server data
+        try { localStorage.setItem(BLITZ_HISTORY_KEY, JSON.stringify(history)); } catch {}
+        console.log(`[History] Loaded ${history.length} strikes from server`);
+      }
+    } catch { /* server unreachable – fall through */ }
+
+    // 2. Fall back to localStorage if server returned nothing
+    if (history.length === 0) {
+      history = blitzLoadHistory();
+      if (history.length > 0)
+        console.log(`[History] Loaded ${history.length} strikes from localStorage`);
+    }
+
     for (const h of history) blitzAddStrike(h.lat, h.lon, h.data, h.time);
     if (history.length > 0) { blitzUpdateDisplay(); blitzUpdatePrediction(); }
   }
