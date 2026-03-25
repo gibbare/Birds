@@ -341,7 +341,13 @@ body {
   border-radius: 10px;
   padding: 6px 4px;
   text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  user-select: none;
 }
+
+.day-card:hover { background: rgba(126,184,247,0.14); }
+.day-card:active { transform: scale(0.96); }
 
 .day-card .dc-name {
   font-size: 0.65rem;
@@ -373,6 +379,44 @@ body {
 }
 
 #forecast-chart { display: block; }
+#detail-chart   { display: block; }
+
+/* Day detail panel */
+#day-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#day-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 4px;
+}
+
+#day-detail-back {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #7eb8f7;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+#day-detail-back:hover { background: rgba(126,184,247,0.14); }
+#day-detail-back:active { opacity: 0.7; }
+
+#day-detail-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e0eaff;
+  text-transform: capitalize;
+}
 
 #view-weather footer {
   text-align: center;

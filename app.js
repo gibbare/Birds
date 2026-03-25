@@ -1,6 +1,10 @@
 const SMHI_URL = (lon, lat) =>
   `https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/${lon}/lat/${lat}/data.json`;
 
+let _currentTimeSeries = null;
+let _currentLat = null;
+let _currentLon = null;
+
 const WEATHER_SYMBOLS = {
   1: 'Klart', 2: 'Nästan klart', 3: 'Halvklart', 4: 'Halvmulet',
   5: 'Mulet', 6: 'Mulet', 7: 'Dimma', 8: 'Lätt regnskur',
@@ -53,6 +57,45 @@ async function fetchWeather(lat, lon) {
   const res = await fetch(SMHI_URL(lon.toFixed(6), lat.toFixed(6)));
   if (!res.ok) throw new Error(`SMHI svarade med ${res.status}`);
   return res.json();
+}
+
+// ─── Moon & Sun helpers ───────────────────────────────────────────────────────
+
+function moonPhaseEmoji(date) {
+  const knownNewMoon = new Date(Date.UTC(2000, 0, 6, 18, 14, 0));
+  const cycle = 29.53058867;
+  const daysSince = (date - knownNewMoon) / 86400000;
+  const f = (((daysSince % cycle) + cycle) % cycle) / cycle;
+  if (f < 0.0625 || f >= 0.9375) return '🌑';
+  if (f < 0.1875) return '🌒';
+  if (f < 0.3125) return '🌓';
+  if (f < 0.4375) return '🌔';
+  if (f < 0.5625) return '🌕';
+  if (f < 0.6875) return '🌖';
+  if (f < 0.8125) return '🌗';
+  return '🌘';
+}
+
+function sunriseSunset(date, lat, lon) {
+  const D2R = Math.PI / 180;
+  const jd = date.getTime() / 86400000 + 2440587.5;
+  const n = Math.floor(jd - 2451545.0 + 0.5);
+  const jStar = n - lon / 360;
+  const M = ((357.5291 + 0.98560028 * jStar) % 360 + 360) % 360;
+  const C = 1.9148 * Math.sin(M * D2R) + 0.02 * Math.sin(2 * M * D2R);
+  const lam = ((M + C + 180 + 102.9372) % 360 + 360) % 360;
+  const sinDec = Math.sin(lam * D2R) * Math.sin(23.45 * D2R);
+  const cosDec = Math.cos(Math.asin(sinDec));
+  const cosHa = (Math.sin(-0.833 * D2R) - Math.sin(lat * D2R) * sinDec) / (Math.cos(lat * D2R) * cosDec);
+  const jTransit = 2451545.0 + jStar + 0.0053 * Math.sin(M * D2R) - 0.0069 * Math.sin(2 * lam * D2R);
+  if (Math.abs(cosHa) > 1) {
+    const d0 = new Date(date); d0.setHours(0,0,0,0);
+    const d1 = new Date(date); d1.setHours(23,59,59,999);
+    return cosHa > 1 ? { sunrise: null, sunset: null } : { sunrise: d0, sunset: d1 };
+  }
+  const ha = Math.acos(cosHa) * 180 / Math.PI;
+  const toDate = j => new Date((j - 2440587.5) * 86400000);
+  return { sunrise: toDate(jTransit - ha / 360), sunset: toDate(jTransit + ha / 360) };
 }
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
@@ -108,8 +151,8 @@ function buildDaySummaries(timeSeries) {
 
 function drawDaySummary(summaries) {
   const el = document.getElementById('day-summary');
-  el.innerHTML = summaries.map(s => `
-    <div class="day-card">
+  el.innerHTML = summaries.map((s, i) => `
+    <div class="day-card" onclick="openDayDetail(${i})">
       <div class="dc-name">${s.label}</div>
       <div class="dc-emoji">${s.emoji}</div>
       <div class="dc-temps">${s.tMax}° <span>/ ${s.tMin}°</span></div>
@@ -305,6 +348,203 @@ function drawForecastChart(timeSeries) {
   });
 }
 
+// ─── Day detail ───────────────────────────────────────────────────────────────
+
+function openDayDetail(dayIndex) {
+  if (!_currentTimeSeries) return;
+  const days = {};
+  _currentTimeSeries.forEach(ts => {
+    const key = new Date(ts.validTime).toDateString();
+    if (!days[key]) days[key] = [];
+    days[key].push(ts);
+  });
+  const dayKey = Object.keys(days)[dayIndex];
+  if (!dayKey) return;
+  const dayData = days[dayKey].sort((a, b) => new Date(a.validTime) - new Date(b.validTime));
+  const dayDate = new Date(dayData[0].validTime);
+  document.getElementById('day-detail-title').textContent =
+    dayDate.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+  drawDayDetailChart(dayData, _currentLat, _currentLon);
+  document.getElementById('weather').classList.add('hidden');
+  document.getElementById('day-detail').classList.remove('hidden');
+}
+
+function closeDayDetail() {
+  document.getElementById('day-detail').classList.add('hidden');
+  document.getElementById('weather').classList.remove('hidden');
+}
+
+function drawDayDetailChart(dayData, lat, lon) {
+  const canvas = document.getElementById('detail-chart');
+  const n = dayData.length;
+  if (n < 1) return;
+
+  const HOUR_SPACING = 46;
+  const PAD_L = 36, PAD_R = 20;
+
+  // Section y-coords
+  const TIME_Y      = 14;
+  const SUNMOON_Y   = 33;
+  const WXEMOJI_Y   = 52;
+  const TEMP_TOP    = 62;
+  const TEMP_H      = 110;
+  const TEMP_BOT    = TEMP_TOP + TEMP_H;
+  const WIND_TOP    = TEMP_BOT + 14;
+  const WIND_BAR_H  = 38;
+  const WIND_SPD_Y  = WIND_TOP + WIND_BAR_H + 12;
+  const WIND_ARR_Y  = WIND_SPD_Y + 16;
+  const WIND_BOT    = WIND_ARR_Y + 12;
+  const CLOUD_TOP   = WIND_BOT + 14;
+  const CLOUD_BAR_H = 36;
+  const CLOUD_PCT_Y = CLOUD_TOP + CLOUD_BAR_H + 11;
+  const TOTAL_H     = CLOUD_PCT_Y + 10;
+
+  const chartW = HOUR_SPACING * Math.max(n - 1, 1);
+  const totalW = PAD_L + chartW + PAD_R;
+
+  canvas.width  = totalW;
+  canvas.height = TOTAL_H;
+  canvas.style.width  = totalW + 'px';
+  canvas.style.height = TOTAL_H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, totalW, TOTAL_H);
+
+  const times   = dayData.map(ts => new Date(ts.validTime));
+  const temps   = dayData.map(ts => getParam(ts, 't')        ?? 0);
+  const winds   = dayData.map(ts => getParam(ts, 'ws')       ?? 0);
+  const wdirs   = dayData.map(ts => getParam(ts, 'wd')       ?? 0);
+  const clouds  = dayData.map(ts => getParam(ts, 'tcc_mean') ?? 0);
+  const precips = dayData.map(ts => getParam(ts, 'pmean')    ?? 0);
+  const symbols = dayData.map(ts => getParam(ts, 'Wsymb2')   ?? 1);
+
+  const xOf = i => PAD_L + i * HOUR_SPACING;
+
+  const { sunrise, sunset } = (lat != null && lon != null)
+    ? sunriseSunset(times[0], lat, lon)
+    : { sunrise: null, sunset: null };
+
+  // Section bg
+  [[TEMP_TOP, TEMP_H, '80,120,200'], [WIND_TOP, WIND_BOT - WIND_TOP, '80,180,160'], [CLOUD_TOP, CLOUD_PCT_Y - CLOUD_TOP + 8, '140,140,200']].forEach(([y, h, rgb]) => {
+    ctx.fillStyle = `rgba(${rgb},0.06)`;
+    ctx.beginPath(); ctx.roundRect(PAD_L, y, chartW, h, 4); ctx.fill();
+  });
+
+  // Section axis labels
+  ctx.font = '8px system-ui'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(100,130,180,0.6)';
+  ctx.fillText('°C', PAD_L - 4, TEMP_TOP + 8);
+  ctx.fillText('m/s', PAD_L - 4, WIND_TOP + 10);
+  ctx.fillText('moln', PAD_L - 4, CLOUD_TOP + 10);
+
+  // Per-column: time, sun/moon, weather emoji
+  times.forEach((t, i) => {
+    const x = xOf(i);
+    const isDay = sunrise && sunset ? (t >= sunrise && t <= sunset) : true;
+    ctx.fillStyle = 'rgba(140,165,210,0.8)';
+    ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(t.getHours().toString().padStart(2,'0') + ':00', x, TIME_Y);
+    ctx.font = '13px serif';
+    ctx.fillText(isDay ? '☀️' : moonPhaseEmoji(t), x, SUNMOON_Y);
+    ctx.fillText(WEATHER_EMOJI[symbols[i]] || '🌡️', x, WXEMOJI_Y);
+  });
+
+  // Temperature
+  const tMin = Math.floor(Math.min(...temps)) - 1;
+  const tMax = Math.ceil(Math.max(...temps)) + 2;
+  const tRange = tMax - tMin || 1;
+  const yTemp = t => TEMP_TOP + TEMP_H - ((t - tMin) / tRange) * TEMP_H;
+  const tempPts = temps.map((t, i) => ({ x: xOf(i), y: yTemp(t) }));
+
+  for (let t = Math.ceil(tMin); t <= tMax; t += 2) {
+    const y = yTemp(t);
+    if (y < TEMP_TOP - 2 || y > TEMP_BOT + 2) continue;
+    ctx.strokeStyle = t === 0 ? 'rgba(126,184,247,0.3)' : 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1; ctx.setLineDash(t === 0 ? [5,3] : []);
+    ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + chartW, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = t === 0 ? 'rgba(126,184,247,0.8)' : 'rgba(140,165,210,0.55)';
+    ctx.font = (t === 0 ? 'bold ' : '') + '9px system-ui'; ctx.textAlign = 'right';
+    ctx.fillText(t + '°', PAD_L - 4, y + 3);
+  }
+
+  // Precip bars
+  const maxP = Math.max(...precips, 0.5);
+  precips.forEach((p, i) => {
+    if (p <= 0) return;
+    const bh = Math.max((p / maxP) * TEMP_H * 0.25, 3);
+    const bw = HOUR_SPACING * 0.5;
+    ctx.fillStyle = 'rgba(80,160,255,0.45)';
+    ctx.beginPath(); ctx.roundRect(xOf(i) - bw/2, TEMP_BOT - bh, bw, bh, 2); ctx.fill();
+  });
+
+  // Gradient fill under temp curve
+  if (n > 1) {
+    const fg = ctx.createLinearGradient(0, TEMP_TOP, 0, TEMP_BOT);
+    fg.addColorStop(0, 'rgba(126,184,247,0.4)');
+    fg.addColorStop(0.6, 'rgba(126,184,247,0.1)');
+    fg.addColorStop(1, 'rgba(126,184,247,0)');
+    ctx.beginPath(); smoothPath(ctx, tempPts);
+    ctx.lineTo(tempPts[tempPts.length-1].x, TEMP_BOT);
+    ctx.lineTo(tempPts[0].x, TEMP_BOT);
+    ctx.closePath(); ctx.fillStyle = fg; ctx.fill();
+
+    const lg = ctx.createLinearGradient(PAD_L, 0, PAD_L + chartW, 0);
+    temps.forEach((t, i) => lg.addColorStop(i / (temps.length - 1), tempColor(t)));
+    ctx.beginPath(); smoothPath(ctx, tempPts);
+    ctx.strokeStyle = lg; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+  }
+
+  tempPts.forEach((pt, i) => {
+    ctx.shadowColor = tempColor(temps[i]); ctx.shadowBlur = 5;
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = tempColor(temps[i]); ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.5; ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#e8f0ff'; ctx.font = 'bold 10px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(Math.round(temps[i]) + '°', pt.x, pt.y - 7);
+  });
+
+  // Wind bars + speed + direction arrow
+  const maxW = Math.max(...winds, 1);
+  winds.forEach((w, i) => {
+    const x = xOf(i);
+    const bh = Math.max((w / maxW) * WIND_BAR_H, 2);
+    const bw = HOUR_SPACING * 0.5;
+    const strong = w > 15;
+    ctx.fillStyle = strong ? 'rgba(220,80,80,0.5)' : 'rgba(100,170,255,0.4)';
+    ctx.beginPath(); ctx.roundRect(x - bw/2, WIND_TOP + WIND_BAR_H - bh, bw, bh, 2); ctx.fill();
+    ctx.fillStyle = strong ? 'rgba(255,140,140,0.9)' : 'rgba(160,176,208,0.85)';
+    ctx.font = 'bold 9px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(w.toFixed(1), x, WIND_SPD_Y);
+    // Direction arrow (points in wind direction)
+    const toRad = ((wdirs[i] + 180) % 360) * Math.PI / 180;
+    const AL = 7, HL = 4, HA = Math.PI / 5;
+    const hx = x + Math.sin(toRad) * AL, hy = WIND_ARR_Y - Math.cos(toRad) * AL;
+    const tx = x - Math.sin(toRad) * AL, ty = WIND_ARR_Y + Math.cos(toRad) * AL;
+    ctx.strokeStyle = 'rgba(140,190,255,0.75)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy);
+    ctx.lineTo(hx - HL*Math.sin(toRad-HA), hy + HL*Math.cos(toRad-HA));
+    ctx.moveTo(hx, hy);
+    ctx.lineTo(hx - HL*Math.sin(toRad+HA), hy + HL*Math.cos(toRad+HA));
+    ctx.stroke();
+  });
+
+  // Cloud cover bars
+  clouds.forEach((c, i) => {
+    const x = xOf(i), frac = c / 8;
+    const bw = HOUR_SPACING * 0.6;
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.beginPath(); ctx.roundRect(x - bw/2, CLOUD_TOP + 14, bw, CLOUD_BAR_H, 3); ctx.fill();
+    const fillH = CLOUD_BAR_H * frac;
+    if (fillH > 0) {
+      ctx.fillStyle = `rgba(150,180,230,${0.15 + frac * 0.55})`;
+      ctx.beginPath(); ctx.roundRect(x - bw/2, CLOUD_TOP + 14 + CLOUD_BAR_H - fillH, bw, fillH, 3); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(160,176,208,0.85)';
+    ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(Math.round(frac * 100) + '%', x, CLOUD_PCT_Y);
+  });
+}
+
 // ─── Search ───────────────────────────────────────────────────────────────────
 
 async function searchPlaces(query) {
@@ -363,6 +603,8 @@ function saveLocation(lat, lon, name) {
 }
 
 async function loadWeatherForCoords(lat, lon, placeName) {
+  _currentLat = lat;
+  _currentLon = lon;
   saveLocation(lat, lon, placeName);
   document.getElementById('loading').classList.remove('hidden');
   document.getElementById('weather').classList.add('hidden');
@@ -406,6 +648,7 @@ function initSearch() {
 // ─── Render ───────────────────────────────────────────────────────────────────
 
 function renderWeather(data) {
+  _currentTimeSeries = data.timeSeries;
   const now     = data.timeSeries[0];
   const temp    = getParam(now, 't');
   const wind    = getParam(now, 'ws');
@@ -466,6 +709,8 @@ async function init() {
   navigator.geolocation.getCurrentPosition(
     async ({ coords }) => {
       const { latitude: lat, longitude: lon } = coords;
+      _currentLat = lat;
+      _currentLon = lon;
       try {
         const [placeName, weatherData] = await Promise.all([
           reverseGeocode(lat, lon),
