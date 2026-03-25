@@ -118,9 +118,12 @@ const WS_SERVERS = [
   'wss://ws8.blitzortung.org/',
 ];
 
-let wsIdx         = 0;
-let blitzWs       = null;
+let wsIdx          = 0;
+let blitzWs        = null;
 let reconnectTimer = null;
+let msgReceived    = 0;
+let msgDecodeOk    = 0;
+let msgDecodeErr   = 0;
 
 function connectBlitzortung() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
@@ -146,11 +149,12 @@ function connectBlitzortung() {
   });
 
   blitzWs.on('message', raw => {
+    msgReceived++;
     clearTimeout(noDataTimer);
     try {
       const text   = typeof raw === 'string' ? raw : raw.toString('binary');
       const strike = JSON.parse(blitzDecode(text));
-
+      msgDecodeOk++;
       if (strike.lat != null && strike.lon != null) {
         saveStrike({
           lat:  strike.lat,
@@ -162,9 +166,17 @@ function connectBlitzortung() {
             delay: strike.delay,
             sig:   strike.sig ? strike.sig.slice(0, 5) : undefined,
           },
-        }).catch(() => {});
+        });
       }
-    } catch { /* ignore malformed frames */ }
+    } catch (e) {
+      msgDecodeErr++;
+      if (msgDecodeErr <= 3) {
+        console.error('[Blitzortung] Decode error:', e.message,
+          '| type:', typeof raw,
+          '| length:', raw?.length ?? raw?.byteLength,
+          '| sample:', Buffer.isBuffer(raw) ? raw.slice(0,20).toString('hex') : String(raw).slice(0,40));
+      }
+    }
   });
 
   blitzWs.on('error', err => {
@@ -242,6 +254,9 @@ app.get('/api/status', async (req, res) => {
       server:        WS_SERVERS[wsIdx % WS_SERVERS.length],
       redis:         redisReady ? 'connected' : 'unavailable (in-memory fallback)',
       redisWriteTest,
+      msgReceived,
+      msgDecodeOk,
+      msgDecodeErr,
       savedCount,
       saveErrors,
       buffered:      count,
