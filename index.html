@@ -143,6 +143,7 @@
       <div id="blixt-location-row">
         <span class="lightning-icon">⚡</span>
         <h1 id="blixt-location-name">Hämtar position...</h1>
+        <button id="blixt-recenter-btn" onclick="blitzRecenter()" title="Centrera på min position">📍</button>
       </div>
     </header>
 
@@ -781,6 +782,11 @@
       : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
     blitzTileLayer.setUrl(url);
     document.getElementById('map-style-btn').textContent = blitzDarkMode ? '☀️ Ljus' : '🌙 Mörk';
+  }
+
+  function blitzRecenter() {
+    if (!blitzMap || blitzLat === null) return;
+    blitzMap.flyTo([blitzLat, blitzLon], Math.max(blitzMap.getZoom(), 9), { duration: 0.8 });
   }
 
   function blitzInit() {

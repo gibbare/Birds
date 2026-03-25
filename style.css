@@ -570,6 +570,26 @@ body {
   gap: 8px;
 }
 
+#blixt-recenter-btn {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #a0b0d0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+#blixt-recenter-btn:hover  { background: rgba(255,255,255,0.14); }
+#blixt-recenter-btn:active { transform: scale(0.88); }
+
 .lightning-icon {
   font-size: 1.2rem;
   animation: blink 1.8s infinite;
