@@ -58,10 +58,20 @@ async function pruneOld() {
 }
 
 // Add one strike (fire-and-forget)
+let savedCount = 0;
+let saveErrors = 0;
 async function saveStrike(strike) {
   if (redisReady) {
-    redis.zadd(REDIS_KEY, strike.time, JSON.stringify(strike)).catch(() => {});
-    redis.expire(REDIS_KEY, STRIKE_TTL * 2).catch(() => {});
+    try {
+      await redis.zadd(REDIS_KEY, strike.time, JSON.stringify(strike));
+      await redis.expire(REDIS_KEY, STRIKE_TTL * 2);
+      savedCount++;
+    } catch (err) {
+      saveErrors++;
+      if (saveErrors <= 5) console.error('[Redis] zadd failed:', err.message);
+      // fall back to memory
+      memBuffer.push(strike);
+    }
   } else {
     memBuffer.push(strike);
     if (memBuffer.length > 30000) memBuffer = memBuffer.slice(-25000);
@@ -215,13 +225,29 @@ app.get('/api/status', async (req, res) => {
       count = memBuffer.filter(s => s.time > cutoff).length;
       oldestTime = memBuffer[0]?.time ?? null;
     }
+    // Quick Redis write/read test
+    let redisWriteTest = 'not tested';
+    if (redisReady) {
+      try {
+        await redis.set('blitz:test', '1', 'EX', 10);
+        const val = await redis.get('blitz:test');
+        redisWriteTest = val === '1' ? 'ok' : 'read mismatch';
+      } catch (e) {
+        redisWriteTest = 'FAILED: ' + e.message;
+      }
+    }
+
     res.json({
-      blitzortung:  blitzWs?.readyState === WebSocket.OPEN ? 'connected' : 'disconnected',
-      server:       WS_SERVERS[wsIdx % WS_SERVERS.length],
-      redis:        redisReady ? 'connected' : 'unavailable (in-memory fallback)',
-      buffered:     count,
-      oldestStrike: oldestTime,
-      cacheMinutes: oldestTime ? Math.floor((Date.now() - oldestTime) / 60000) : 0,
+      blitzortung:   blitzWs?.readyState === WebSocket.OPEN ? 'connected' : 'disconnected',
+      server:        WS_SERVERS[wsIdx % WS_SERVERS.length],
+      redis:         redisReady ? 'connected' : 'unavailable (in-memory fallback)',
+      redisWriteTest,
+      savedCount,
+      saveErrors,
+      buffered:      count,
+      memBuffered:   memBuffer.length,
+      oldestStrike:  oldestTime,
+      cacheMinutes:  oldestTime ? Math.floor((Date.now() - oldestTime) / 60000) : 0,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
