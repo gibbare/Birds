@@ -765,15 +765,10 @@
 
   function toggleMapStyle() {
     blitzDarkMode = !blitzDarkMode;
-    blitzMap.removeLayer(blitzTileLayer);
     const url = blitzDarkMode
       ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
       : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-    blitzTileLayer = L.tileLayer(url, {
-      attribution: '© OpenStreetMap © CARTO',
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(blitzMap);
+    blitzTileLayer.setUrl(url);
     document.getElementById('map-style-btn').textContent = blitzDarkMode ? '☀️ Ljus' : '🌙 Mörk';
   }
 
