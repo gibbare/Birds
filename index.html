@@ -240,6 +240,46 @@
   let blitzLive = false;
   let blitzStormLat, blitzStormLon, blitzStormVLat, blitzStormVLon;
 
+  const BLITZ_HISTORY_KEY = 'blitz_strike_history';
+
+  // ── BACKGROUND PRE-FETCH ───────────────────────────────────────────────────
+  // Connects to Blitzortung immediately (even on weather tab) and caches
+  // incoming strikes to localStorage so the lightning map has data ready.
+  let _bgWs = null;
+  let _bgWsIdx = 0;
+
+  function blitzCacheToStorage(lat, lon, data, time) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(BLITZ_HISTORY_KEY) || '[]');
+      const now = Date.now();
+      saved.push({ lat, lon, time, data });
+      localStorage.setItem(
+        BLITZ_HISTORY_KEY,
+        JSON.stringify(saved.filter(s => now - s.time < STRIKE_TTL_MS))
+      );
+    } catch {}
+  }
+
+  function blitzStartBackground() {
+    if (_bgWsIdx >= WS_SERVERS.length) return;
+    try { _bgWs = new WebSocket(WS_SERVERS[_bgWsIdx]); } catch {
+      _bgWsIdx++; blitzStartBackground(); return;
+    }
+    const timer = setTimeout(() => {
+      _bgWs && _bgWs.close(); _bgWsIdx++; blitzStartBackground();
+    }, 8000);
+    _bgWs.onopen  = () => _bgWs.send(JSON.stringify({ "a": 111 }));
+    _bgWs.onmessage = e => {
+      clearTimeout(timer);
+      try {
+        const d = JSON.parse(blitzDecode(e.data));
+        if (d.lat && d.lon) blitzCacheToStorage(d.lat, d.lon, d, Date.now());
+      } catch {}
+    };
+    _bgWs.onerror = () => { clearTimeout(timer); _bgWsIdx++; blitzStartBackground(); };
+    _bgWs.onclose = () => {};
+  }
+
   function blitzInitMap(lat, lon) {
     blitzMap = L.map('map', { zoomControl: true, closePopupOnClick: true });
     const km = 35;
@@ -433,7 +473,6 @@
   }
 
   // ── HISTORY (localStorage) ───────────────────────────────────────────────────
-  const BLITZ_HISTORY_KEY = 'blitz_strike_history';
 
   function blitzSaveHistory() {
     const now = Date.now();
@@ -622,10 +661,15 @@
   }
 
   function blitzInit() {
+    // Stop background connection – the live connection takes over
+    if (_bgWs) { _bgWs.onclose = null; _bgWs.close(); _bgWs = null; }
     setInterval(blitzUpdateDisplay,    10000);
     setInterval(blitzUpdatePrediction, 30000);
     blitzGetLocation();
   }
+
+  // Start buffering strikes to localStorage immediately on page load
+  blitzStartBackground();
   </script>
 </body>
 </html>
