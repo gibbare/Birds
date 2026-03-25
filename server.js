@@ -3,33 +3,57 @@
  *
  * • Serves static files (index.html, app.js, style.css, …)
  * • Maintains a permanent WebSocket connection to Blitzortung
- * • Buffers the last 30 minutes of global lightning strikes in memory
- * • Exposes GET /api/strikes  →  JSON array of recent strikes
+ * • Stores the last 30 minutes of global lightning strikes in Redis
+ *   (survives server restarts, deploys and Railway sleep/wake cycles)
+ * • GET /api/strikes  → JSON array of recent strikes
+ * • GET /api/status   → health check
  */
 
-const express  = require('express');
+const express   = require('express');
 const WebSocket = require('ws');
-const path     = require('path');
+const Redis     = require('ioredis');
+const path      = require('path');
 
-const app          = express();
-const PORT         = process.env.PORT || 3000;
-const STRIKE_TTL   = 30 * 60 * 1000;   // 30 minutes in ms
-const MAX_BUFFER   = 30000;             // hard cap to keep RAM sane
+const app        = express();
+const PORT       = process.env.PORT || 3000;
+const STRIKE_TTL = 30 * 60;          // 30 minutes in seconds
+const REDIS_KEY  = 'blitz:strikes';  // sorted set – score = timestamp ms
 
-// ── Strike buffer ─────────────────────────────────────────────────────────────
-let strikeBuffer = [];
+// ── Redis ─────────────────────────────────────────────────────────────────────
+const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+  maxRetriesPerRequest: 3,
+  lazyConnect: false,
+});
 
-function pruneBuffer() {
-  const cutoff = Date.now() - STRIKE_TTL;
-  strikeBuffer = strikeBuffer.filter(s => s.time > cutoff);
-  // Also cap absolute size
-  if (strikeBuffer.length > MAX_BUFFER) {
-    strikeBuffer = strikeBuffer.slice(-MAX_BUFFER);
-  }
+redis.on('connect', () => console.log('[Redis] Connected'));
+redis.on('error',   e  => console.error('[Redis] Error:', e.message));
+
+// Remove strikes older than 30 minutes
+async function pruneRedis() {
+  const cutoff = Date.now() - STRIKE_TTL * 1000;
+  await redis.zremrangebyscore(REDIS_KEY, '-inf', cutoff);
 }
 
-// Prune every 60 seconds
-setInterval(pruneBuffer, 60_000);
+// Add one strike to Redis (fire-and-forget)
+async function saveStrike(strike) {
+  const score = strike.time;
+  const value = JSON.stringify(strike);
+  await redis.zadd(REDIS_KEY, score, value);
+  // Set TTL on the key so Redis cleans up automatically if server is idle
+  await redis.expire(REDIS_KEY, STRIKE_TTL * 2);
+}
+
+// Get all strikes from the last 30 minutes
+async function getStrikes(since = 0) {
+  const cutoff = since > 0 ? since : Date.now() - STRIKE_TTL * 1000;
+  const raw    = await redis.zrangebyscore(REDIS_KEY, cutoff, '+inf');
+  return raw.map(r => {
+    try { return JSON.parse(r); } catch { return null; }
+  }).filter(Boolean);
+}
+
+// Prune Redis every 5 minutes
+setInterval(pruneRedis, 5 * 60 * 1000);
 
 // ── LZW decompression (identical to client-side blitzDecode) ─────────────────
 function blitzDecode(data) {
@@ -58,8 +82,8 @@ const WS_SERVERS = [
   'wss://ws8.blitzortung.org/',
 ];
 
-let wsIdx = 0;
-let blitzWs = null;
+let wsIdx         = 0;
+let blitzWs       = null;
 let reconnectTimer = null;
 
 function connectBlitzortung() {
@@ -69,14 +93,13 @@ function connectBlitzortung() {
   console.log(`[Blitzortung] Connecting to ${url}`);
 
   try { blitzWs = new WebSocket(url); } catch (err) {
-    console.error('[Blitzortung] Could not create socket:', err.message);
-    scheduleReconnect();
-    return;
+    console.error('[Blitzortung] Socket error:', err.message);
+    scheduleReconnect(); return;
   }
 
-  // Timeout: if no data within 10 s, try next server
+  // If no data within 10 s, try next server
   const noDataTimer = setTimeout(() => {
-    console.warn(`[Blitzortung] No data from ${url}, trying next`);
+    console.warn(`[Blitzortung] No data from ${url}, switching`);
     blitzWs.terminate();
     wsIdx++;
     scheduleReconnect(1000);
@@ -90,11 +113,10 @@ function connectBlitzortung() {
     clearTimeout(noDataTimer);
     try {
       const text   = typeof raw === 'string' ? raw : raw.toString('binary');
-      const decoded = blitzDecode(text);
-      const strike  = JSON.parse(decoded);
+      const strike = JSON.parse(blitzDecode(text));
 
       if (strike.lat != null && strike.lon != null) {
-        strikeBuffer.push({
+        saveStrike({
           lat:  strike.lat,
           lon:  strike.lon,
           time: Date.now(),
@@ -104,21 +126,21 @@ function connectBlitzortung() {
             delay: strike.delay,
             sig:   strike.sig ? strike.sig.slice(0, 5) : undefined,
           },
-        });
+        }).catch(() => {});
       }
     } catch { /* ignore malformed frames */ }
   });
 
   blitzWs.on('error', err => {
     clearTimeout(noDataTimer);
-    console.error(`[Blitzortung] Error on ${url}:`, err.message);
+    console.error(`[Blitzortung] Error:`, err.message);
     wsIdx++;
     scheduleReconnect(2000);
   });
 
   blitzWs.on('close', () => {
     clearTimeout(noDataTimer);
-    console.log(`[Blitzortung] Connection closed, reconnecting…`);
+    console.log(`[Blitzortung] Closed, reconnecting…`);
     scheduleReconnect(5000);
   });
 }
@@ -129,10 +151,8 @@ function scheduleReconnect(delay = 5000) {
 }
 
 // ── HTTP API ──────────────────────────────────────────────────────────────────
-// Serve static files from the same directory
 app.use(express.static(path.join(__dirname)));
 
-// CORS header so the browser can call the API from any origin during dev
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   next();
@@ -140,29 +160,37 @@ app.use((req, res, next) => {
 
 /**
  * GET /api/strikes
- * Returns all strikes buffered in the last 30 minutes.
- * Optional query param: ?since=<unix_ms>  to fetch only newer strikes.
+ * Returns strikes from the last 30 minutes (or since ?since=<unix_ms>).
  */
-app.get('/api/strikes', (req, res) => {
-  pruneBuffer();
-  const since  = req.query.since ? parseInt(req.query.since, 10) : 0;
-  const result = since > 0
-    ? strikeBuffer.filter(s => s.time > since)
-    : strikeBuffer;
-  res.json(result);
+app.get('/api/strikes', async (req, res) => {
+  try {
+    const since   = req.query.since ? parseInt(req.query.since, 10) : 0;
+    const strikes = await getStrikes(since);
+    res.json(strikes);
+  } catch (err) {
+    console.error('[API] /api/strikes error:', err.message);
+    res.status(500).json({ error: 'Redis unavailable' });
+  }
 });
 
 /**
  * GET /api/status
- * Simple health-check endpoint.
+ * Health check: connection state + buffer size.
  */
-app.get('/api/status', (req, res) => {
-  res.json({
-    connected:    blitzWs?.readyState === WebSocket.OPEN,
-    server:       WS_SERVERS[wsIdx % WS_SERVERS.length],
-    buffered:     strikeBuffer.length,
-    oldestStrike: strikeBuffer[0]?.time ?? null,
-  });
+app.get('/api/status', async (req, res) => {
+  try {
+    const count  = await redis.zcount(REDIS_KEY, Date.now() - STRIKE_TTL * 1000, '+inf');
+    const oldest = await redis.zrangebyscore(REDIS_KEY, '-inf', '+inf', 'LIMIT', 0, 1);
+    res.json({
+      blitzortung:  blitzWs?.readyState === WebSocket.OPEN ? 'connected' : 'disconnected',
+      server:       WS_SERVERS[wsIdx % WS_SERVERS.length],
+      redis:        redis.status,
+      buffered:     count,
+      oldestStrike: oldest[0] ? JSON.parse(oldest[0]).time : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
