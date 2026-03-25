@@ -124,6 +124,7 @@ let reconnectTimer = null;
 let msgReceived    = 0;
 let msgDecodeOk    = 0;
 let msgDecodeErr   = 0;
+let lastDecodeErr  = null;
 
 function connectBlitzortung() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
@@ -131,7 +132,7 @@ function connectBlitzortung() {
   const url = WS_SERVERS[wsIdx % WS_SERVERS.length];
   console.log(`[Blitzortung] Connecting to ${url}`);
 
-  try { blitzWs = new WebSocket(url); } catch (err) {
+  try { blitzWs = new WebSocket(url, { skipUTF8Validation: true }); } catch (err) {
     console.error('[Blitzortung] Socket error:', err.message);
     scheduleReconnect(); return;
   }
@@ -152,7 +153,13 @@ function connectBlitzortung() {
     msgReceived++;
     clearTimeout(noDataTimer);
     try {
-      const text   = typeof raw === 'string' ? raw : raw.toString('binary');
+      // ws with skipUTF8Validation delivers data as Buffer – decode as UTF-8
+      // to preserve multi-byte LZW code points (same as browser behaviour)
+      let text;
+      if (Buffer.isBuffer(raw))       text = raw.toString('utf8');
+      else if (typeof raw === 'string') text = raw;
+      else                              text = Buffer.from(raw).toString('utf8');
+
       const strike = JSON.parse(blitzDecode(text));
       msgDecodeOk++;
       if (strike.lat != null && strike.lon != null) {
@@ -170,11 +177,11 @@ function connectBlitzortung() {
       }
     } catch (e) {
       msgDecodeErr++;
+      lastDecodeErr = e.message;
       if (msgDecodeErr <= 3) {
         console.error('[Blitzortung] Decode error:', e.message,
-          '| type:', typeof raw,
-          '| length:', raw?.length ?? raw?.byteLength,
-          '| sample:', Buffer.isBuffer(raw) ? raw.slice(0,20).toString('hex') : String(raw).slice(0,40));
+          '| isBuffer:', Buffer.isBuffer(raw),
+          '| length:', raw?.length ?? raw?.byteLength);
       }
     }
   });
@@ -257,6 +264,7 @@ app.get('/api/status', async (req, res) => {
       msgReceived,
       msgDecodeOk,
       msgDecodeErr,
+      lastDecodeErr,
       savedCount,
       saveErrors,
       buffered:      count,
