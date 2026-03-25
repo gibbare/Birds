@@ -155,7 +155,7 @@
         ⚡ <span class="stat-value" id="strike-count">0</span>&nbsp;(30 min)
       </div>
       <div class="stat">
-        📡 <span class="stat-value" id="source-label">Blitzortung</span>
+        🗂 <span class="stat-value" id="cache-minutes">0</span>&nbsp;min cache
       </div>
     </div>
 
@@ -467,7 +467,6 @@
         blitzLive = true;
         document.getElementById('conn-dot').className = 'live';
         document.getElementById('conn-label').textContent = 'Live – Blitzortung';
-        document.getElementById('source-label').textContent = 'Blitzortung.org';
         document.getElementById('demo-badge').classList.add('hidden');
       }
       try {
@@ -492,7 +491,6 @@
   function blitzStartDemo() {
     document.getElementById('conn-dot').className = 'demo';
     document.getElementById('conn-label').textContent = 'Demo (simulerad storm)';
-    document.getElementById('source-label').textContent = 'Demo';
     const badge = document.getElementById('demo-badge');
     badge.textContent = 'DEMO-DATA';
     badge.classList.add('demo');
@@ -604,6 +602,7 @@
 
     for (const h of history) blitzAddStrike(h.lat, h.lon, h.data, h.time);
     if (history.length > 0) { blitzUpdateDisplay(); blitzUpdatePrediction(); }
+    blitzUpdateCacheMinutes();
   }
 
   // ── STRIKES ───────────────────────────────────────────────────────────────────
@@ -622,6 +621,13 @@
     }
   }
 
+  function blitzUpdateCacheMinutes() {
+    if (!strikes.length) { document.getElementById('cache-minutes').textContent = '0'; return; }
+    const oldest = Math.min(...strikes.map(s => s.time));
+    const mins = Math.floor((Date.now() - oldest) / 60000);
+    document.getElementById('cache-minutes').textContent = mins;
+  }
+
   function blitzUpdateDisplay() {
     const now = Date.now();
     strikes = strikes.filter(s => {
@@ -630,6 +636,7 @@
       return true;
     });
     document.getElementById('strike-count').textContent = blitzVisibleStrikes().length;
+    blitzUpdateCacheMinutes();
     blitzSaveHistory();
   }
 
