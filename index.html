@@ -92,6 +92,7 @@
     </main>
 
     <footer>
+      <p style="color:#3a4a60;margin-bottom:3px;">weathervb.up.railway.app</p>
       <p>Data från <a href="https://opendata.smhi.se" target="_blank">SMHI Open Data</a></p>
       <p>Utvecklad av Jonas Karlsson &middot; v3.1</p>
     </footer>
@@ -114,9 +115,6 @@
       </div>
       <div class="stat">
         ⚡ <span class="stat-value" id="strike-count">0</span>&nbsp;slag (30 min)
-      </div>
-      <div class="stat">
-        🕐 <span class="stat-value" id="last-strike">–</span>
       </div>
       <div class="stat">
         📡 <span class="stat-value" id="source-label">Blitzortung</span>
@@ -436,7 +434,6 @@
         .bindPopup(blitzBuildPopup(lat, lon, now, data), { maxWidth: 260 })
     };
     strikes.push(s);
-    document.getElementById('last-strike').textContent = new Date(now).toLocaleTimeString('sv-SE');
     if (blitzDistKm(lat, lon) <= 30) {
       document.getElementById('pred-trend').textContent = '⚠️ Blixt inom 30 km!';
     }
