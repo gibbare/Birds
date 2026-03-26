@@ -1290,23 +1290,17 @@
     awMap = L.map('aw-map', {zoomControl: true, attributionControl: false}).setView([65, 15], 4);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(awMap);
 
-    // Get user position
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(pos => {
-        awUserLat = pos.coords.latitude;
-        awUserLon = pos.coords.longitude;
-        awMap.setView([awUserLat, awUserLon], 5);
-        awUserMarker = L.circleMarker([awUserLat, awUserLon],
-          {radius:8, color:'#22d3a0', fillColor:'#22d3a0', fillOpacity:.95, weight:2})
-          .addTo(awMap).bindPopup('<b>📍 Din position</b>');
-        awUpdateLocalInfo(awUserLat, awUserLon);
-        document.getElementById('aw-coords').textContent =
-          `${awUserLat.toFixed(1)}°N ${awUserLon.toFixed(1)}°Ö`;
-      }, () => {
-        // fallback Stockholm
-        awUserLat = 59.33; awUserLon = 18.07;
-        awUpdateLocalInfo(awUserLat, awUserLon);
-      });
+    // Try saved location first (shared with weather app), otherwise GPS
+    try {
+      const saved = localStorage.getItem('wx_location');
+      if (saved) {
+        const { lat, lon, name } = JSON.parse(saved);
+        awApplyLocation(lat, lon, name, false);
+      } else {
+        awGpsLocate();
+      }
+    } catch {
+      awGpsLocate();
     }
 
     // Draw static aurora oval (will update on Kp fetch)
@@ -1322,7 +1316,43 @@
     if ('speechSynthesis' in window) {
       document.getElementById('aw-tts-btn').classList.add('visible');
     }
+  }
 
+  // Apply a location to map, UI and optionally save to localStorage
+  function awApplyLocation(lat, lon, name, save = true) {
+    awUserLat = lat;
+    awUserLon = lon;
+    awMap.setView([lat, lon], 5);
+    if (awUserMarker) awUserMarker.remove();
+    awUserMarker = L.circleMarker([lat, lon],
+      {radius:8, color:'#22d3a0', fillColor:'#22d3a0', fillOpacity:.95, weight:2})
+      .addTo(awMap).bindPopup('<b>📍 Din position</b>');
+    document.getElementById('aw-loc-name').textContent = name;
+    document.getElementById('aw-coords').textContent =
+      `${lat.toFixed(1)}°N ${lon.toFixed(1)}°Ö`;
+    awUpdateLocalInfo(lat, lon);
+    if (save) {
+      try { localStorage.setItem('wx_location', JSON.stringify({lat, lon, name})); } catch {}
+    }
+    // Refresh cloud cover for new location
+    awFetchKpForecast();
+  }
+
+  // Geolocate via GPS — same options as the weather app
+  function awGpsLocate() {
+    if (!navigator.geolocation) {
+      awApplyLocation(59.33, 18.07, 'Stockholm', false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        const { latitude: lat, longitude: lon } = coords;
+        const name = await reverseGeocode(lat, lon);
+        awApplyLocation(lat, lon, name);
+      },
+      () => { awApplyLocation(59.33, 18.07, 'Stockholm', false); },
+      { timeout: 10000, maximumAge: 60000 }
+    );
   }
 
   // ── Fetch all NOAA data ───────────────────────────────────────────
@@ -1728,35 +1758,69 @@
   // ── Search ────────────────────────────────────────────────────────
   function awOpenSearch() {
     document.getElementById('aw-search-modal').classList.add('open');
-    awFilterSearch('');
+    awRenderStaticPlaces('');
     setTimeout(() => document.getElementById('aw-search-input').focus(), 60);
   }
   function awCloseSearch() {
     document.getElementById('aw-search-modal').classList.remove('open');
     document.getElementById('aw-search-input').value = '';
   }
+  let _awSearchTimer;
   function awFilterSearch(q) {
+    clearTimeout(_awSearchTimer);
+    if (!q.trim()) { awRenderStaticPlaces(''); return; }
+    document.getElementById('aw-search-results').innerHTML =
+      '<div style="padding:12px;color:#64748b;text-align:center;font-size:13px">Söker…</div>';
+    _awSearchTimer = setTimeout(async () => {
+      try {
+        const results = await searchPlaces(q); // from app.js (Nominatim)
+        awRenderNominatimResults(results);
+      } catch {
+        awRenderStaticPlaces(q);
+      }
+    }, 350);
+  }
+  function awRenderStaticPlaces(q) {
     const res = q ? awPlaces.filter(p =>
       p.n.toLowerCase().includes(q.toLowerCase()) || p.c.toLowerCase().includes(q.toLowerCase())
     ) : awPlaces;
     document.getElementById('aw-search-results').innerHTML = res.map(p =>
-      `<div class="aw-search-item" onclick="awGoTo(${p.lat},${p.lon},'${p.n}','${p.c}')">
+      `<div class="aw-search-item" onclick="awGoTo(${p.lat},${p.lon},'${p.n.replace(/'/g,"\\'")}','${p.c.replace(/'/g,"\\'")}')">
         <span style="font-size:15px">📍</span>
         <div><div class="aw-si-name">${p.n}</div><div class="aw-si-country">${p.c}</div></div>
       </div>`).join('');
   }
+  function awRenderNominatimResults(results) {
+    const el = document.getElementById('aw-search-results');
+    if (!results.length) {
+      el.innerHTML = '<div style="padding:12px;color:#64748b;text-align:center;font-size:13px">Inga platser hittades</div>';
+      return;
+    }
+    function pName(r) {
+      const a = r.address || {};
+      return a.city || a.town || a.village || a.hamlet ||
+             a.suburb || a.quarter || a.locality ||
+             r.display_name.split(',')[0];
+    }
+    el.innerHTML = results.map(r => {
+      const a = r.address || {};
+      const name = pName(r);
+      const country = a.country || '';
+      const detail = [a.municipality, a.county, country].filter(Boolean).join(', ');
+      const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+      return `<div class="aw-search-item" onclick="awGoTo(${lat},${lon},'${name.replace(/'/g,"\\'")}','${country.replace(/'/g,"\\'")}')">
+        <span style="font-size:15px">📍</span>
+        <div><div class="aw-si-name">${name}</div><div class="aw-si-country">${detail}</div></div>
+      </div>`;
+    }).join('');
+  }
   function awGoTo(lat, lon, name, country) {
-    awMap.setView([lat, lon], 6);
-    document.getElementById('aw-loc-name').textContent = `${name}, ${country}`;
-    awUpdateLocalInfo(lat, lon);
+    const fullName = country ? `${name}, ${country}` : name;
+    awApplyLocation(lat, lon, fullName);
     awCloseSearch();
   }
   function awReturnHome() {
-    if (awUserLat) {
-      awMap.setView([awUserLat, awUserLon], 5);
-      document.getElementById('aw-loc-name').textContent = 'Min position';
-      awUpdateLocalInfo(awUserLat, awUserLon);
-    }
+    awGpsLocate();
   }
 
   // ── Chart builders ────────────────────────────────────────────────
