@@ -819,6 +819,8 @@
     } else {
       radarOn = true;
       btn.textContent = '🌧 Laddar...';
+      // RainViewer max zoom is 7 – zoom out if needed before loading tiles
+      if (blitzMap.getZoom() > 7) blitzMap.setZoom(7);
       await loadRadarFrame();
       btn.textContent = '🌧 Radar ✓';
       btn.classList.add('active');
