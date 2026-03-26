@@ -379,7 +379,84 @@ body {
 }
 
 #forecast-chart { display: block; }
-#detail-chart   { display: block; }
+/* Hourly detail list */
+.hour-header,
+.hour-row {
+  display: grid;
+  grid-template-columns: 42px 22px 22px 36px 1fr 38px 36px;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+}
+
+.hour-header {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #607090;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding-bottom: 6px;
+}
+
+.hour-row-alt { background: rgba(255,255,255,0.03); }
+
+.hour-row + .hour-row { border-top: 1px solid rgba(255,255,255,0.04); }
+
+.hr-time {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a0b4d0;
+  font-variant-numeric: tabular-nums;
+}
+
+.hr-sky, .hr-wx { font-size: 1rem; text-align: center; }
+
+.hr-temp {
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.hr-wind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 6px;
+}
+
+.hr-arrow {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: #7eb8f7;
+  line-height: 1;
+}
+
+.hr-wspd {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #a0b4d0;
+  font-variant-numeric: tabular-nums;
+}
+
+.wind-strong { color: #f08080; }
+
+.hr-wdir {
+  font-size: 0.7rem;
+  color: #607090;
+}
+
+.hr-cloud {
+  font-size: 0.78rem;
+  color: #a0b4d0;
+  text-align: right;
+}
+
+.hr-precip {
+  font-size: 0.75rem;
+  color: #6090c0;
+  text-align: right;
+}
 
 /* Day detail panel */
 #day-detail {
