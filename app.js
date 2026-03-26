@@ -379,10 +379,6 @@ function renderDayDetailList(dayData, lat, lon) {
   dayData = [...dayData].sort((a, b) => new Date(a.validTime) - new Date(b.validTime));
   if (!dayData.length) return;
 
-  const { sunrise, sunset } = (lat != null && lon != null)
-    ? sunriseSunset(new Date(dayData[0].validTime), lat, lon)
-    : { sunrise: null, sunset: null };
-
   const DIRS = ['N','NO','O','SO','S','SV','V','NV'];
 
   const rows = dayData.map((ts, idx) => {
@@ -394,7 +390,11 @@ function renderDayDetailList(dayData, lat, lon) {
     const precip = getParam(ts, 'pmean')    ?? 0;
     const symbol = getParam(ts, 'Wsymb2')   ?? 1;
 
-    const isDay      = sunrise && sunset ? (t >= sunrise && t <= sunset) : true;
+    const isDay = (() => {
+      if (lat == null || lon == null) return true;
+      const { sunrise, sunset } = sunriseSunset(t, lat, lon);
+      return sunrise && sunset ? (t >= sunrise && t <= sunset) : true;
+    })();
     const skyEmoji   = isDay ? '☀️' : moonPhaseEmoji(t);
     const wxEmoji    = WEATHER_EMOJI[symbol] || '🌡️';
     const cloudPct   = Math.round((cloud / 8) * 100);
