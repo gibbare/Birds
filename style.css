@@ -259,27 +259,32 @@ body {
 }
 
 .main-temp {
+  position: relative;
   display: flex;
-  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+}
+
+.temp-center {
+  text-align: center;
 }
 
 .temp-row {
   display: flex;
   align-items: flex-start;
+  justify-content: center;
   line-height: 1;
-  gap: 6px;
+  gap: 4px;
 }
 
 .main-sun-times {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  margin-left: auto;
-  padding-top: 4px;
+  gap: 5px;
   font-size: 0.78rem;
   color: #f7c948;
   font-weight: 600;
