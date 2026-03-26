@@ -503,30 +503,13 @@
       <div class="aw-card">
         <div class="aw-card-title">📈 Kp-prognos · 3 dagar</div>
         <div class="aw-ch-meta">
-          <div><div id="aw-fc3-val" class="aw-ch-val aw-yellow">—</div><div class="aw-ch-sub">NOAA SWPC · <span style="color:#94a3b8">——</span> Fri sikt %</div></div>
+          <div><div id="aw-fc3-val" class="aw-ch-val aw-yellow">—</div><div class="aw-ch-sub">NOAA SWPC · <span style="color:#94a3b8">——</span> Molnighet %</div></div>
           <div class="aw-ch-delta" id="aw-fc3-delta"></div>
         </div>
         <div class="aw-ch-wrap tall"><canvas id="aw-c-kpfc3"></canvas></div>
       </div>
 
-      <!-- 3. Kp-skala -->
-      <div class="aw-card">
-        <div class="aw-card-title">📊 Kp-skala</div>
-        <div class="aw-kp-scale">
-          <div class="aw-kp-bar" style="background:#2d9e5f"></div>
-          <div class="aw-kp-bar" style="background:#3ab76b"></div>
-          <div class="aw-kp-bar" style="background:#5dc95a"></div>
-          <div class="aw-kp-bar" style="background:#a0d44a"></div>
-          <div class="aw-kp-bar" id="aw-kp-cur-bar" style="background:#f0d53a;height:12px;border-radius:3px;margin-top:-2px"></div>
-          <div class="aw-kp-bar" style="background:#f0a030"></div>
-          <div class="aw-kp-bar" style="background:#e05030"></div>
-          <div class="aw-kp-bar" style="background:#c02020"></div>
-          <div class="aw-kp-bar" style="background:#900"></div>
-        </div>
-        <div class="aw-kp-labels"><span>Kp1 Lugnt</span><span id="aw-kp-cur-lbl">Kp— Nu</span><span>Kp9 Extrem</span></div>
-      </div>
-
-      <!-- 4. Lokal info -->
+      <!-- 3. Lokal info -->
       <div class="aw-card">
         <div class="aw-card-title">🌅 Lokal info</div>
         <div class="aw-info-row"><span>Solnedgång</span><span id="aw-sunset">—</span></div>
@@ -1410,7 +1393,7 @@
 
       const labels   = [];
       const kpVals   = [];
-      const siktVals = []; // free sky % = 100 - cloud_cover
+      const siktVals = []; // cloud cover % (0=klart, 100=mulet)
 
       rows.forEach(r => {
         const d = new Date(r[0]);
@@ -1422,7 +1405,7 @@
         const localIso = new Date(d.getTime()).toLocaleDateString('sv-SE') + 'T' +
           String(d.getHours()).padStart(2,'0') + ':00';
         const cc = cloudMap[localIso] ?? cloudMap[iso] ?? null;
-        siktVals.push(cc !== null ? Math.round(100 - cc) : null);
+        siktVals.push(cc !== null ? Math.round(cc) : null);
       });
 
       const maxVal = Math.max(...kpVals);
@@ -1795,7 +1778,7 @@
     ];
     if (hasSikt) {
       datasets.push({
-        type:'line', label:'Fri sikt %', data:siktVals,
+        type:'line', label:'Molnighet %', data:siktVals,
         borderColor:'rgba(255,255,255,.75)', backgroundColor:'rgba(255,255,255,.07)',
         fill:true, tension:.4, pointRadius:3, pointBackgroundColor:'rgba(255,255,255,.9)',
         borderWidth:2, yAxisID:'ySikt', order:1,
@@ -1811,7 +1794,7 @@
           tooltip:{ ...awTooltip,
             callbacks:{
               label: ctx => ctx.dataset.yAxisID === 'ySikt'
-                ? `Fri sikt: ${ctx.raw ?? '—'}%`
+                ? `Molnighet: ${ctx.raw ?? '—'}%`
                 : `Kp: ${ctx.raw?.toFixed(1)}`
             }
           }
@@ -1824,7 +1807,7 @@
           ySikt: hasSikt ? {
             grid:{display:false}, ticks:{color:'rgba(255,255,255,.5)', font:{size:10}},
             min:0, max:100, position:'right',
-            title:{display:true, text:'Fri sikt %', color:'rgba(255,255,255,.5)', font:{size:10}}
+            title:{display:true, text:'Molnighet %', color:'rgba(255,255,255,.5)', font:{size:10}}
           } : { display:false }
         }}
     });
