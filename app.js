@@ -380,7 +380,7 @@ function renderDayDetailList(dayData, lat, lon) {
   if (!dayData.length) return;
 
   // Sunrise/sunset — use a midday timestamp to avoid UTC-date edge cases
-  const noonTs = dayData.find(ts => new Date(ts.validTime).getUTCHours() >= 9) || dayData[Math.floor(dayData.length / 2)];
+  const noonTs = dayData.find(ts => new Date(ts.validTime).getHours() >= 10) || dayData[Math.floor(dayData.length / 2)];
   let sunriseStr = '--', sunsetStr = '--';
   if (lat != null && lon != null) {
     const { sunrise: sr, sunset: ss } = sunriseSunset(new Date(noonTs.validTime), lat, lon);
