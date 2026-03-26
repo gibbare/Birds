@@ -380,23 +380,34 @@ body {
 
 #forecast-chart { display: block; }
 /* Hourly detail list */
+.sun-info {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  padding: 8px 12px 6px;
+  font-size: 0.78rem;
+  color: #f7c948;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
 .hour-header,
 .hour-row {
   display: grid;
-  grid-template-columns: 42px 22px 22px 36px 1fr 38px 36px;
+  grid-template-columns: 38px 20px 22px 28px 1fr 30px 26px;
   align-items: center;
-  gap: 4px;
-  padding: 7px 12px;
+  gap: 5px;
+  padding: 6px 12px;
 }
 
 .hour-header {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
   color: #607090;
   border-bottom: 1px solid rgba(255,255,255,0.07);
-  padding-bottom: 6px;
+  padding-bottom: 5px;
 }
 
 .hour-row-alt { background: rgba(255,255,255,0.03); }

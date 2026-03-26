@@ -379,6 +379,16 @@ function renderDayDetailList(dayData, lat, lon) {
   dayData = [...dayData].sort((a, b) => new Date(a.validTime) - new Date(b.validTime));
   if (!dayData.length) return;
 
+  // Sunrise/sunset — use a midday timestamp to avoid UTC-date edge cases
+  const noonTs = dayData.find(ts => new Date(ts.validTime).getUTCHours() >= 9) || dayData[Math.floor(dayData.length / 2)];
+  let sunriseStr = '--', sunsetStr = '--';
+  if (lat != null && lon != null) {
+    const { sunrise: sr, sunset: ss } = sunriseSunset(new Date(noonTs.validTime), lat, lon);
+    const fmt = d => d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '--';
+    sunriseStr = fmt(sr);
+    sunsetStr  = fmt(ss);
+  }
+
   const DIRS = ['N','NO','O','SO','S','SV','V','NV'];
 
   const rows = dayData.map((ts, idx) => {
@@ -422,14 +432,18 @@ function renderDayDetailList(dayData, lat, lon) {
   });
 
   el.innerHTML = `
+    <div class="sun-info">
+      <span>🌅 ${sunriseStr}</span>
+      <span>🌇 ${sunsetStr}</span>
+    </div>
     <div class="hour-header">
-      <span class="hr-time"></span>
+      <span class="hr-time">TID</span>
       <span class="hr-sky"></span>
-      <span class="hr-wx">Väder</span>
-      <span class="hr-temp">Temp</span>
-      <div class="hr-wind">Vind</div>
-      <span class="hr-cloud">Moln</span>
-      <span class="hr-precip">mm/h</span>
+      <span class="hr-wx">VÄD</span>
+      <span class="hr-temp">°C</span>
+      <div class="hr-wind">VIND&nbsp;m/s</div>
+      <span class="hr-cloud">☁%</span>
+      <span class="hr-precip">mm</span>
     </div>
     ${rows.join('')}
   `;
