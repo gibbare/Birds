@@ -11,6 +11,229 @@
   <meta name="apple-mobile-web-app-title" content="Väder" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ══ AURORA VIEW ══════════════════════════════════════════════════ */
+    #view-aurora {
+      display: flex; flex-direction: column;
+      height: 100dvh; overflow: hidden;
+      background: #080c14; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #view-aurora.hidden { display: none !important; }
+
+    /* top bar: location pill + alerts button */
+    #aw-topbar {
+      flex-shrink: 0; display: flex; align-items: center;
+      justify-content: space-between; padding: 8px 12px;
+      background: rgba(8,12,20,.97); border-bottom: 1px solid rgba(255,255,255,.07);
+      gap: 8px; min-height: 48px;
+    }
+    #aw-loc-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+      border-radius: 24px; padding: 5px 8px 5px 14px; flex: 1; min-width: 0;
+    }
+    #aw-loc-name {
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border-bottom: 1px dashed rgba(255,255,255,.25); transition: color .2s; flex: 1;
+    }
+    #aw-loc-name:hover { color: #22d3a0; }
+    #aw-pin-btn {
+      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(34,211,160,.12); border: 1px solid rgba(34,211,160,.3);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 13px; transition: background .2s;
+    }
+    #aw-pin-btn:hover { background: rgba(34,211,160,.25); }
+    #aw-alert-btn {
+      position: relative; flex-shrink: 0;
+      background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3);
+      border-radius: 8px; padding: 5px 12px; color: #f87171;
+      font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    #aw-alert-badge {
+      position: absolute; top: -7px; right: -7px; width: 17px; height: 17px;
+      background: #f87171; border-radius: 50%; font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; color: #fff;
+    }
+    #aw-kp-pill {
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+      background: rgba(34,211,160,.08); border: 1px solid rgba(34,211,160,.2);
+      border-radius: 8px; padding: 5px 10px;
+    }
+    #aw-kp-big { font-size: 20px; font-weight: 700; color: #22d3a0; line-height: 1; }
+    #aw-kp-lbl { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+    #aw-kp-status { font-size: 10px; font-weight: 600; color: #22d3a0; }
+
+    /* map */
+    #aw-map-wrap { flex-shrink: 0; height: 38vh; min-height: 220px; position: relative; }
+    #aw-map { width: 100%; height: 100%; }
+    .leaflet-tile { filter: brightness(.6) saturate(.4) hue-rotate(195deg); }
+
+    /* scrollable content */
+    #aw-scroll {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: 12px 12px 60px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* section cards */
+    .aw-card {
+      background: rgba(16,24,40,.9); border: 1px solid rgba(255,255,255,.07);
+      border-radius: 12px; padding: 14px; margin-bottom: 10px;
+      overflow: hidden; min-width: 0;
+    }
+    .aw-card-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: #64748b; margin-bottom: 10px; display: flex;
+      align-items: center; gap: 6px;
+    }
+    .aw-badge {
+      font-size: 10px; font-weight: 600; padding: 1px 8px; border-radius: 20px;
+      margin-left: auto;
+    }
+    .aw-badge-g { background: rgba(34,211,160,.15); color: #22d3a0; border: 1px solid rgba(34,211,160,.3); }
+    .aw-badge-b { background: rgba(56,189,248,.15); color: #38bdf8; border: 1px solid rgba(56,189,248,.3); }
+    .aw-badge-r { background: rgba(248,113,113,.15); color: #f87171; border: 1px solid rgba(248,113,113,.3); }
+    .aw-badge-y { background: rgba(251,191,36,.15); color: #fbbf24; border: 1px solid rgba(251,191,36,.3); }
+
+    /* visibility bars */
+    .aw-vis-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+    .aw-vis-label { font-size: 11px; color: #94a3b8; width: 108px; flex-shrink: 0; }
+    .aw-vis-track { flex: 1; height: 6px; background: rgba(255,255,255,.07); border-radius: 3px; overflow: hidden; }
+    .aw-vis-fill { height: 100%; border-radius: 3px; }
+    .aw-vis-pct { font-size: 11px; width: 30px; text-align: right; font-weight: 600; }
+
+    /* chart wrap */
+    .aw-ch-wrap { position: relative; height: 160px; }
+    .aw-ch-wrap.tall { height: 185px; }
+    .aw-ch-meta { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .aw-ch-val { font-size: 20px; font-weight: 700; line-height: 1; }
+    .aw-ch-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .aw-ch-delta { font-size: 11px; color: #64748b; text-align: right; }
+
+    /* Kp scale */
+    .aw-kp-scale { display: flex; gap: 3px; margin-top: 4px; }
+    .aw-kp-bar { flex: 1; height: 8px; border-radius: 2px; }
+    .aw-kp-labels { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 4px; }
+
+    /* Local info */
+    .aw-info-row { display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
+    .aw-info-row span:last-child { color: #e2e8f0; font-weight: 500; }
+
+    /* Quick stats 2x2 */
+    .aw-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .aw-stat-card {
+      background: #121929; border: 1px solid rgba(255,255,255,.07);
+      border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: border-color .2s;
+    }
+    .aw-stat-card:hover { border-color: rgba(255,255,255,.15); }
+    .aw-stat-lbl { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .aw-stat-val { font-size: 22px; font-weight: 700; margin: 3px 0 1px; line-height: 1; }
+    .aw-stat-unit { font-size: 10px; color: #94a3b8; }
+
+    /* Collapsible */
+    .aw-coll { margin-bottom: 10px; }
+    .aw-coll-btn {
+      width: 100%; display: flex; align-items: center; justify-content: space-between;
+      background: rgba(16,24,40,.9); border: 1px solid rgba(255,255,255,.07);
+      border-radius: 12px; padding: 13px 16px; cursor: pointer;
+      font-family: inherit; color: #e2e8f0; transition: border-color .2s;
+    }
+    .aw-coll-btn:hover { border-color: rgba(255,255,255,.14); }
+    .aw-coll-btn.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
+    .aw-coll-left { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+    .aw-coll-arrow { font-size: 11px; color: #64748b; transition: transform .3s; }
+    .aw-coll-arrow.open { transform: rotate(180deg); }
+    .aw-coll-body {
+      overflow: hidden; max-height: 0; transition: max-height .4s ease;
+      background: rgba(16,24,40,.9); border: 1px solid rgba(255,255,255,.07);
+      border-top: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
+    }
+    .aw-coll-body.open { max-height: 600px; }
+    .aw-coll-inner { padding: 14px; }
+
+    /* Alerts */
+    .aw-alert-item {
+      background: #121929; border: 1px solid rgba(255,255,255,.07);
+      border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .aw-alert-item.high { border-left: 3px solid #fb923c; }
+    .aw-alert-item.warn { border-left: 3px solid #fbbf24; }
+    .aw-alert-item.info { border-left: 3px solid #38bdf8; }
+    .aw-alert-icon { font-size: 18px; flex-shrink: 0; }
+    .aw-alert-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .aw-alert-desc { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+    .aw-alert-time { font-size: 10px; color: #64748b; margin-top: 5px; }
+
+    /* Loading pulse */
+    .aw-loading { text-align: center; padding: 20px; color: #64748b; font-size: 13px; }
+
+    /* wind gauges */
+    .aw-wind-gauges { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 12px; }
+    .aw-gauge { text-align: center; }
+    .aw-gauge-ring {
+      width: 68px; height: 68px; border-radius: 50%; margin: 0 auto 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; position: relative;
+    }
+    .aw-gauge-ring::before { content:''; position:absolute; inset:5px; border-radius:50%; background:#121929; }
+    .aw-gauge-v { position: relative; z-index: 1; }
+    .aw-gauge-lbl { font-size: 10px; color: #64748b; }
+
+    /* Search modal */
+    #aw-search-modal {
+      display: none; position: fixed; inset: 0; z-index: 3000;
+      background: rgba(0,0,0,.78); backdrop-filter: blur(6px);
+      align-items: flex-start; justify-content: center; padding-top: 80px;
+    }
+    #aw-search-modal.open { display: flex; }
+    #aw-search-box {
+      background: #0d1220; border: 1px solid rgba(255,255,255,.1);
+      border-radius: 14px; width: min(480px,92vw); overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.7);
+    }
+    #aw-search-input-row {
+      display: flex; align-items: center; padding: 14px 18px; gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    #aw-search-input {
+      flex: 1; background: none; border: none; outline: none; color: #e2e8f0;
+      font-size: 15px; font-family: inherit;
+    }
+    #aw-search-input::placeholder { color: #64748b; }
+    #aw-search-close { background: none; border: none; color: #64748b; cursor: pointer; font-size: 18px; }
+    #aw-search-results { max-height: 300px; overflow-y: auto; }
+    .aw-search-item {
+      padding: 12px 18px; display: flex; align-items: center; gap: 10px;
+      cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.05); transition: background .15s;
+    }
+    .aw-search-item:hover { background: rgba(255,255,255,.05); }
+    .aw-si-name { font-weight: 500; font-size: 14px; }
+    .aw-si-country { font-size: 11px; color: #64748b; }
+
+    /* colors */
+    .aw-green { color: #22d3a0; } .aw-blue { color: #38bdf8; }
+    .aw-purple { color: #a78bfa; } .aw-yellow { color: #fbbf24; }
+    .aw-orange { color: #fb923c; } .aw-red { color: #f87171; }
+
+    /* update timestamp */
+    #aw-updated { font-size: 10px; color: #64748b; text-align: right; margin-bottom: 8px; }
+
+    /* read-alerts floating btn */
+    #aw-tts-btn {
+      position: fixed; bottom: 70px; right: 14px; z-index: 500;
+      width: 42px; height: 42px; border-radius: 50%;
+      background: rgba(34,211,160,.15); border: 1px solid rgba(34,211,160,.4);
+      display: none; align-items: center; justify-content: center;
+      font-size: 18px; cursor: pointer; transition: background .2s;
+    }
+    #aw-tts-btn.visible { display: flex; }
+    #aw-tts-btn:hover { background: rgba(34,211,160,.3); }
+  </style>
 </head>
 <body>
 
@@ -18,6 +241,7 @@
   <nav id="app-nav">
     <button class="nav-tab active" id="tab-weather" onclick="switchView('weather')">🌤 Väder</button>
     <button class="nav-tab" id="tab-lightning" onclick="switchView('lightning')">⚡ Blixt</button>
+    <button class="nav-tab" id="tab-aurora" onclick="switchView('aurora')">🌌 Aurora</button>
   </nav>
 
   <!-- ══════════════ WEATHER VIEW ══════════════ -->
@@ -230,6 +454,224 @@
     </footer>
   </div>
 
+  <!-- ══════════════ AURORA VIEW ══════════════ -->
+  <div id="view-aurora" class="hidden">
+
+    <!-- Search modal -->
+    <div id="aw-search-modal" onclick="if(event.target===this)awCloseSearch()">
+      <div id="aw-search-box">
+        <div id="aw-search-input-row">
+          <span style="font-size:16px">🔍</span>
+          <input id="aw-search-input" placeholder="Sök stad eller plats…" oninput="awFilterSearch(this.value)" autocomplete="off"/>
+          <button id="aw-search-close" onclick="awCloseSearch()">✕</button>
+        </div>
+        <div id="aw-search-results"></div>
+      </div>
+    </div>
+
+    <!-- Top bar -->
+    <div id="aw-topbar">
+      <div id="aw-loc-pill">
+        <div id="aw-loc-name" onclick="awOpenSearch()">Stockholm, Sverige</div>
+        <div id="aw-pin-btn" onclick="awReturnHome()" title="Min position">📍</div>
+      </div>
+      <div id="aw-kp-pill">
+        <div>
+          <div id="aw-kp-lbl">Kp-index</div>
+          <div id="aw-kp-big">—</div>
+          <div id="aw-kp-status" class="aw-green"></div>
+        </div>
+      </div>
+      <button id="aw-alert-btn" onclick="awScrollToAlerts()">
+        ⚠ Varningar<div id="aw-alert-badge">0</div>
+      </button>
+    </div>
+
+    <!-- Map -->
+    <div id="aw-map-wrap">
+      <div id="aw-map"></div>
+    </div>
+
+    <!-- TTS floating button -->
+    <button id="aw-tts-btn" onclick="awReadAlerts()" title="Läs upp varningar">🔊</button>
+
+    <!-- Scrollable content -->
+    <div id="aw-scroll">
+      <div id="aw-updated">Uppdaterar…</div>
+
+      <!-- 1. Din synlighet -->
+      <div class="aw-card">
+        <div class="aw-card-title">📍 Din synlighet<span id="aw-vis-updated" class="aw-badge aw-badge-g" style="margin-left:auto"></span></div>
+        <div class="aw-vis-row"><div class="aw-vis-label" id="aw-lbl-now">Just nu</div>
+          <div class="aw-vis-track"><div class="aw-vis-fill" id="aw-vis-now" style="width:0%;background:linear-gradient(90deg,#22d3a0,#38bdf8)"></div></div>
+          <div class="aw-vis-pct aw-green" id="aw-pct-now">—</div></div>
+        <div class="aw-vis-row"><div class="aw-vis-label" id="aw-lbl-eve">I kväll</div>
+          <div class="aw-vis-track"><div class="aw-vis-fill" id="aw-vis-eve" style="width:0%;background:linear-gradient(90deg,#22d3a0,#38bdf8)"></div></div>
+          <div class="aw-vis-pct aw-green" id="aw-pct-eve">—</div></div>
+        <div class="aw-vis-row"><div class="aw-vis-label" id="aw-lbl-tmr">I morgon</div>
+          <div class="aw-vis-track"><div class="aw-vis-fill" id="aw-vis-tmr" style="width:0%;background:linear-gradient(90deg,#fbbf24,#fb923c)"></div></div>
+          <div class="aw-vis-pct aw-yellow" id="aw-pct-tmr">—</div></div>
+        <div class="aw-vis-row" style="margin-bottom:0"><div class="aw-vis-label">Om 7 dagar</div>
+          <div class="aw-vis-track"><div class="aw-vis-fill" id="aw-vis-7d" style="width:0%;background:#475569"></div></div>
+          <div class="aw-vis-pct" id="aw-pct-7d" style="color:#64748b">—</div></div>
+      </div>
+
+      <!-- 2. Kp-prognos 3 dagar -->
+      <div class="aw-card">
+        <div class="aw-card-title">📈 Kp-prognos · 3 dagar</div>
+        <div class="aw-ch-meta">
+          <div><div id="aw-fc3-val" class="aw-ch-val aw-yellow">—</div><div class="aw-ch-sub">NOAA SWPC-modell</div></div>
+          <div class="aw-ch-delta" id="aw-fc3-delta"></div>
+        </div>
+        <div class="aw-ch-wrap"><canvas id="aw-c-kpfc3"></canvas></div>
+      </div>
+
+      <!-- 3. Kp-skala -->
+      <div class="aw-card">
+        <div class="aw-card-title">📊 Kp-skala</div>
+        <div class="aw-kp-scale">
+          <div class="aw-kp-bar" style="background:#2d9e5f"></div>
+          <div class="aw-kp-bar" style="background:#3ab76b"></div>
+          <div class="aw-kp-bar" style="background:#5dc95a"></div>
+          <div class="aw-kp-bar" style="background:#a0d44a"></div>
+          <div class="aw-kp-bar" id="aw-kp-cur-bar" style="background:#f0d53a;height:12px;border-radius:3px;margin-top:-2px"></div>
+          <div class="aw-kp-bar" style="background:#f0a030"></div>
+          <div class="aw-kp-bar" style="background:#e05030"></div>
+          <div class="aw-kp-bar" style="background:#c02020"></div>
+          <div class="aw-kp-bar" style="background:#900"></div>
+        </div>
+        <div class="aw-kp-labels"><span>Kp1 Lugnt</span><span id="aw-kp-cur-lbl">Kp— Nu</span><span>Kp9 Extrem</span></div>
+      </div>
+
+      <!-- 4. Lokal info -->
+      <div class="aw-card">
+        <div class="aw-card-title">🌅 Lokal info</div>
+        <div class="aw-info-row"><span>Solnedgång</span><span id="aw-sunset">—</span></div>
+        <div class="aw-info-row"><span>Soluppgång</span><span id="aw-sunrise">—</span></div>
+        <div class="aw-info-row"><span>Molntäcke</span><span id="aw-cloud">—</span></div>
+        <div class="aw-info-row"><span>Astronomisk mörker</span><span id="aw-astro">—</span></div>
+        <div class="aw-info-row" style="margin-bottom:0"><span>Koordinater</span><span id="aw-coords">—</span></div>
+      </div>
+
+      <!-- 5. Snabbvärden -->
+      <div class="aw-card">
+        <div class="aw-card-title">⚡ Snabbvärden</div>
+        <div class="aw-stats-grid">
+          <div class="aw-stat-card" onclick="awOpenColl('bz')">
+            <div class="aw-stat-lbl">Bz (IMF)</div>
+            <div class="aw-stat-val aw-green" id="aw-bz-val">—</div>
+            <div class="aw-stat-unit" id="aw-bz-dir">nT</div>
+          </div>
+          <div class="aw-stat-card" onclick="awOpenColl('wind')">
+            <div class="aw-stat-lbl">Solvind</div>
+            <div class="aw-stat-val aw-blue" id="aw-speed-val">—</div>
+            <div class="aw-stat-unit">km/s</div>
+          </div>
+          <div class="aw-stat-card" onclick="awOpenColl('dst')">
+            <div class="aw-stat-lbl">Dst-index</div>
+            <div class="aw-stat-val aw-purple" id="aw-dst-val">—</div>
+            <div class="aw-stat-unit">nT</div>
+          </div>
+          <div class="aw-stat-card" onclick="awOpenColl('wind')">
+            <div class="aw-stat-lbl">Densitet</div>
+            <div class="aw-stat-val aw-yellow" id="aw-dens-val">—</div>
+            <div class="aw-stat-unit">p/cm³</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. 7-dagars Kp-prognos -->
+      <div class="aw-card">
+        <div class="aw-card-title">📅 7-dagars Kp-prognos</div>
+        <div class="aw-ch-meta">
+          <div><div id="aw-7d-val" class="aw-ch-val aw-blue">—</div><div class="aw-ch-sub">Lång sikt · NOAA-modell</div></div>
+          <div class="aw-ch-delta" id="aw-7d-day"></div>
+        </div>
+        <div class="aw-ch-wrap tall"><canvas id="aw-c-kp7d"></canvas></div>
+      </div>
+
+      <!-- 7. Kp-Index Historik -->
+      <div class="aw-card">
+        <div class="aw-card-title">🕐 Kp-index · Historik (24h)</div>
+        <div class="aw-ch-meta">
+          <div><div id="aw-hist-val" class="aw-ch-val aw-green">—</div><div class="aw-ch-sub">3h-intervall</div></div>
+          <div class="aw-ch-delta" id="aw-hist-delta"></div>
+        </div>
+        <div class="aw-ch-wrap"><canvas id="aw-c-kphist"></canvas></div>
+      </div>
+
+      <!-- 8. Bz (collapsible, closed) -->
+      <div class="aw-coll">
+        <button class="aw-coll-btn" id="aw-btn-bz" onclick="awToggleColl('bz')">
+          <div class="aw-coll-left">🧲 Bz-komponent (IMF)<span class="aw-badge aw-badge-g" id="aw-bz-badge"></span></div>
+          <span class="aw-coll-arrow" id="aw-arr-bz">▼</span>
+        </button>
+        <div class="aw-coll-body" id="aw-bd-bz">
+          <div class="aw-coll-inner">
+            <div class="aw-ch-meta">
+              <div><div class="aw-ch-sub">Söderut (negativ Bz) gynnar norrsken</div></div>
+            </div>
+            <div class="aw-ch-wrap"><canvas id="aw-c-bz"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 9. Dst (collapsible, closed) -->
+      <div class="aw-coll">
+        <button class="aw-coll-btn" id="aw-btn-dst" onclick="awToggleColl('dst')">
+          <div class="aw-coll-left">🌍 Dst-index · Geomagnetisk storm<span class="aw-badge aw-badge-y" id="aw-dst-badge"></span></div>
+          <span class="aw-coll-arrow" id="aw-arr-dst">▼</span>
+        </button>
+        <div class="aw-coll-body" id="aw-bd-dst">
+          <div class="aw-coll-inner">
+            <div class="aw-ch-sub" style="margin-bottom:8px">Senaste 48h · Negativa värden = störning</div>
+            <div class="aw-ch-wrap"><canvas id="aw-c-dst"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 10. Solvinddata (collapsible, closed) -->
+      <div class="aw-coll">
+        <button class="aw-coll-btn" id="aw-btn-wind" onclick="awToggleColl('wind')">
+          <div class="aw-coll-left">💨 Solvinddata — Hastighet, Densitet &amp; Temperatur<span class="aw-badge aw-badge-b">Live 5-min</span></div>
+          <span class="aw-coll-arrow" id="aw-arr-wind">▼</span>
+        </button>
+        <div class="aw-coll-body" id="aw-bd-wind">
+          <div class="aw-coll-inner">
+            <div class="aw-wind-gauges">
+              <div class="aw-gauge">
+                <div class="aw-gauge-ring" id="aw-g-speed" style="background:conic-gradient(#38bdf8 0%,rgba(255,255,255,.06) 0)">
+                  <div class="aw-gauge-v aw-blue" id="aw-g-speed-v">—</div></div>
+                <div class="aw-gauge-lbl">Hastighet</div><div class="aw-gauge-lbl">km/s</div>
+              </div>
+              <div class="aw-gauge">
+                <div class="aw-gauge-ring" id="aw-g-dens" style="background:conic-gradient(#fbbf24 0%,rgba(255,255,255,.06) 0)">
+                  <div class="aw-gauge-v aw-yellow" id="aw-g-dens-v">—</div></div>
+                <div class="aw-gauge-lbl">Densitet</div><div class="aw-gauge-lbl">p/cm³</div>
+              </div>
+              <div class="aw-gauge">
+                <div class="aw-gauge-ring" id="aw-g-temp" style="background:conic-gradient(#fb923c 0%,rgba(255,255,255,.06) 0)">
+                  <div class="aw-gauge-v aw-orange" id="aw-g-temp-v">—</div></div>
+                <div class="aw-gauge-lbl">Temperatur</div><div class="aw-gauge-lbl">kK</div>
+              </div>
+            </div>
+            <div class="aw-ch-wrap tall"><canvas id="aw-c-wind"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 11. Aktiva varningar -->
+      <div id="aw-alerts-sec">
+        <div class="aw-card-title" style="margin-bottom:8px">⚠️ Aktiva rymdvädervarningar<span id="aw-alerts-count" class="aw-badge aw-badge-r" style="margin-left:8px">0 aktiva</span></div>
+        <div id="aw-alerts-list"><div class="aw-loading">Hämtar varningar…</div></div>
+      </div>
+
+      <div style="text-align:center;padding:16px 0 4px;font-size:11px;color:#334155">
+        AuroraWatch · Källa: NOAA SWPC · Uppdateras var 10:e minut
+      </div>
+    </div><!-- /aw-scroll -->
+  </div><!-- /view-aurora -->
+
   <script src="app.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
@@ -288,21 +730,21 @@
   document.addEventListener('DOMContentLoaded', initInstallBanner);
 
   let lightningInitialized = false;
+  let auroraInitialized   = false;
 
   function switchView(view) {
-    const toLightning = view === 'lightning';
-    document.getElementById('view-weather').classList.toggle('hidden', toLightning);
-    document.getElementById('view-lightning').classList.toggle('hidden', !toLightning);
-    document.getElementById('tab-weather').classList.toggle('active', !toLightning);
-    document.getElementById('tab-lightning').classList.toggle('active', toLightning);
+    ['weather','lightning','aurora'].forEach(v => {
+      document.getElementById(`view-${v}`)?.classList.toggle('hidden', v !== view);
+      document.getElementById(`tab-${v}`)?.classList.toggle('active', v === view);
+    });
 
-    if (toLightning) {
-      if (!lightningInitialized) {
-        lightningInitialized = true;
-        blitzInit();
-      } else if (blitzMap) {
-        setTimeout(() => blitzMap.invalidateSize(), 50);
-      }
+    if (view === 'lightning') {
+      if (!lightningInitialized) { lightningInitialized = true; blitzInit(); }
+      else if (blitzMap) setTimeout(() => blitzMap.invalidateSize(), 50);
+    }
+    if (view === 'aurora') {
+      if (!auroraInitialized) { auroraInitialized = true; auroraInit(); }
+      else if (awMap) setTimeout(() => awMap.invalidateSize(), 50);
     }
   }
 
@@ -841,6 +1283,597 @@
     setInterval(blitzUpdatePrediction, 30000);
     blitzGetLocation();
   }
+
+  // Start buffering strikes to localStorage immediately on page load
+  blitzStartBackground();
+
+  // ══════════════════════════════════════════════════════════════════
+  // ── AURORA APP ────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════
+  let awMap = null;
+  let awUserLat = null, awUserLon = null;
+  let awUserMarker = null, awAuroraLayers = [];
+  let awCharts = {};
+  let awAlertTexts = [];
+  const NOAA = 'https://services.swpc.noaa.gov';
+
+  // ── Places ────────────────────────────────────────────────────────
+  const awPlaces = [
+    {n:'Stockholm',c:'Sverige',lat:59.33,lon:18.07},
+    {n:'Göteborg',c:'Sverige',lat:57.71,lon:11.97},
+    {n:'Malmö',c:'Sverige',lat:55.60,lon:13.00},
+    {n:'Kiruna',c:'Sverige',lat:67.86,lon:20.23},
+    {n:'Luleå',c:'Sverige',lat:65.58,lon:22.16},
+    {n:'Umeå',c:'Sverige',lat:63.83,lon:20.26},
+    {n:'Abisko',c:'Sverige',lat:68.35,lon:18.83},
+    {n:'Oslo',c:'Norge',lat:59.91,lon:10.75},
+    {n:'Tromsø',c:'Norge',lat:69.65,lon:18.96},
+    {n:'Bodø',c:'Norge',lat:67.28,lon:14.38},
+    {n:'Reykjavik',c:'Island',lat:64.14,lon:-21.94},
+    {n:'Helsinki',c:'Finland',lat:60.17,lon:24.93},
+    {n:'Rovaniemi',c:'Finland',lat:66.50,lon:25.73},
+    {n:'Longyearbyen',c:'Svalbard',lat:78.22,lon:15.63},
+    {n:'Nuuk',c:'Grönland',lat:64.18,lon:-51.73},
+    {n:'Fairbanks',c:'Alaska, USA',lat:64.84,lon:-147.72},
+    {n:'Yellowknife',c:'Kanada',lat:62.45,lon:-114.37},
+  ];
+
+  // ── Init ──────────────────────────────────────────────────────────
+  function auroraInit() {
+    // Map
+    awMap = L.map('aw-map', {zoomControl: true, attributionControl: false}).setView([65, 15], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(awMap);
+
+    // Get user position
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        awUserLat = pos.coords.latitude;
+        awUserLon = pos.coords.longitude;
+        awMap.setView([awUserLat, awUserLon], 5);
+        awUserMarker = L.circleMarker([awUserLat, awUserLon],
+          {radius:8, color:'#22d3a0', fillColor:'#22d3a0', fillOpacity:.95, weight:2})
+          .addTo(awMap).bindPopup('<b>📍 Din position</b>');
+        awUpdateLocalInfo(awUserLat, awUserLon);
+        awUpdateVisibility(awUserLat, awUserLon);
+        document.getElementById('aw-coords').textContent =
+          `${awUserLat.toFixed(1)}°N ${awUserLon.toFixed(1)}°Ö`;
+      }, () => {
+        // fallback Stockholm
+        awUserLat = 59.33; awUserLon = 18.07;
+        awUpdateLocalInfo(awUserLat, awUserLon);
+        awUpdateVisibility(awUserLat, awUserLon);
+      });
+    }
+
+    // Draw static aurora oval (will update on Kp fetch)
+    awDrawAuroraOval(3.5);
+
+    // Fetch all data
+    awFetchAll();
+
+    // Auto-refresh every 10 minutes
+    setInterval(awFetchAll, 10 * 60 * 1000);
+
+    // TTS button visible if speech available
+    if ('speechSynthesis' in window) {
+      document.getElementById('aw-tts-btn').classList.add('visible');
+    }
+
+    // Clock for "Just nu"
+    (function tickNow() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2,'0');
+      const mm = String(now.getMinutes()).padStart(2,'0');
+      const el = document.getElementById('aw-lbl-now');
+      if (el) el.textContent = `Just nu (${hh}:${mm})`;
+      setTimeout(tickNow, 60000);
+    })();
+  }
+
+  // ── Fetch all NOAA data ───────────────────────────────────────────
+  async function awFetchAll() {
+    const ts = new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('aw-updated').textContent = `Uppdaterad ${ts}`;
+
+    await Promise.allSettled([
+      awFetchKpHistory(),
+      awFetchKpForecast(),
+      awFetchDst(),
+      awFetchSolarWind(),
+      awFetchAlerts(),
+    ]);
+  }
+
+  // ── Kp History ────────────────────────────────────────────────────
+  async function awFetchKpHistory() {
+    try {
+      const r = await fetch(`${NOAA}/products/noaa-planetary-k-index.json`);
+      const raw = await r.json();
+      // raw: [[time_tag, Kp, a_running, station_count], ...]
+      // Take last 8 entries (24h at 3h intervals)
+      const rows = raw.slice(-8);
+      const labels = rows.map(r => {
+        const d = new Date(r[0]); return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+      });
+      const vals = rows.map(r => parseFloat(r[1]) || 0);
+      const current = vals[vals.length - 1];
+      const prev = vals[vals.length - 2] || current;
+
+      document.getElementById('aw-hist-val').textContent = current.toFixed(1);
+      const diff = current - prev;
+      document.getElementById('aw-hist-delta').textContent =
+        `${diff >= 0 ? '↑' : '↓'} ${Math.abs(diff).toFixed(1)} vs föregående`;
+      document.getElementById('aw-kp-big').textContent = current.toFixed(1);
+      document.getElementById('aw-kp-cur-lbl').textContent = `Kp${Math.round(current)} ▲ Nu`;
+      awUpdateKpStatus(current);
+      awUpdateVisibility(awUserLat || 59.33, awUserLon || 18.07, current);
+      awDrawAuroraOval(current);
+
+      awBuildBarChart('aw-c-kphist', labels, vals, true);
+    } catch(e) { console.warn('Kp history error:', e); }
+  }
+
+  // ── Kp Forecast ───────────────────────────────────────────────────
+  async function awFetchKpForecast() {
+    try {
+      const r = await fetch(`${NOAA}/products/noaa-planetary-k-index-forecast.json`);
+      const raw = await r.json();
+      // raw: [[time_tag, Kp, observed/estimated/predicted], ...]
+      // Keep next ~36h of predicted values
+      const rows = raw.filter(r => r[2] === 'predicted').slice(0, 13);
+      if (!rows.length) return;
+      const labels = rows.map(r => {
+        const d = new Date(r[0]); return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+      });
+      const vals = rows.map(r => parseFloat(r[1]) || 0);
+      const maxVal = Math.max(...vals);
+      const maxIdx = vals.indexOf(maxVal);
+      document.getElementById('aw-fc3-val').textContent = `${Math.min(...vals).toFixed(0)}–${maxVal.toFixed(0)}`;
+      document.getElementById('aw-fc3-delta').textContent =
+        maxVal >= 5 ? '🟡 Förhöjd aktivitet' : maxVal >= 3 ? '🟢 Måttlig aktivitet' : '🔵 Låg aktivitet';
+
+      // 7-day: overlap with forecast; separate fetch
+      awBuildBarChart('aw-c-kpfc3', labels, vals, true);
+
+      // Also fill 7-day from same dataset if rows >= 56 (7d * 8 rows/day)
+      const all = raw.filter(r => r[2] === 'predicted');
+      if (all.length >= 8) {
+        // Group by day
+        const byDay = {};
+        all.forEach(r => {
+          const day = new Date(r[0]).toLocaleDateString('sv-SE',{weekday:'short',day:'numeric'});
+          if (!byDay[day]) byDay[day] = [];
+          byDay[day].push(parseFloat(r[1]) || 0);
+        });
+        const days = Object.keys(byDay).slice(0,7);
+        const mins = days.map(d => Math.min(...byDay[d]));
+        const maxes = days.map(d => Math.max(...byDay[d]));
+        const maxKp7 = Math.max(...maxes);
+        const maxDay7 = days[maxes.indexOf(maxKp7)];
+        document.getElementById('aw-7d-val').textContent = `Max ${maxKp7.toFixed(1)}`;
+        document.getElementById('aw-7d-day').textContent = maxDay7;
+        awBuild7DayChart(days, mins, maxes);
+      }
+    } catch(e) { console.warn('Kp forecast error:', e); }
+  }
+
+  // ── DST ───────────────────────────────────────────────────────────
+  async function awFetchDst() {
+    try {
+      const r = await fetch(`${NOAA}/json/geospace/geospace_dst_1_hour.json`);
+      const raw = await r.json();
+      // raw: [{time_tag, dst}, ...]
+      const rows = raw.slice(-48);
+      const labels = rows.map(r => {
+        const d = new Date(r.time_tag);
+        return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+      });
+      const vals = rows.map(r => parseFloat(r.dst) || 0);
+      const cur = vals[vals.length - 1];
+      document.getElementById('aw-dst-val').textContent = cur.toFixed(0);
+      const badge = document.getElementById('aw-dst-badge');
+      badge.textContent = cur < -100 ? 'Stor storm' : cur < -50 ? 'Moderat' : cur < -25 ? 'Svag störning' : 'Lugnt';
+
+      awBuildLineChart('aw-c-dst', labels, vals, '#a78bfa', 'rgba(167,139,250,.12)');
+    } catch(e) { console.warn('DST error:', e); }
+  }
+
+  // ── Solar Wind ────────────────────────────────────────────────────
+  async function awFetchSolarWind() {
+    try {
+      const [magR, plasmaR] = await Promise.all([
+        fetch(`${NOAA}/products/solar-wind/mag-5-minute.json`),
+        fetch(`${NOAA}/products/solar-wind/plasma-5-minute.json`),
+      ]);
+      const mag    = await magR.json();
+      const plasma = await plasmaR.json();
+
+      // mag: [[time, bx, by, bz, bt, lat, lon], ...]  (first row is header)
+      // plasma: [[time, density, speed, temperature], ...]
+      const magRows    = mag.slice(-13);
+      const plasmaRows = plasma.slice(-13);
+
+      const bzVals    = magRows.map(r => parseFloat(r[3]) || 0);
+      const speedVals = plasmaRows.map(r => parseFloat(r[2]) || 0);
+      const densVals  = plasmaRows.map(r => parseFloat(r[1]) || 0);
+      const tempVals  = plasmaRows.map(r => parseFloat(r[3]) || 0);
+      const labels    = magRows.map(r => {
+        const d = new Date(r[0]); return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+      });
+
+      const curBz    = bzVals[bzVals.length - 1];
+      const curSpeed = speedVals[speedVals.length - 1];
+      const curDens  = densVals[densVals.length - 1];
+      const curTemp  = tempVals[tempVals.length - 1];
+
+      document.getElementById('aw-bz-val').textContent = curBz.toFixed(1);
+      document.getElementById('aw-bz-dir').textContent =
+        curBz < -5 ? 'nT · Söderut ✓' : curBz < 0 ? 'nT · Svagt söderut' : 'nT · Norrut ✗';
+      document.getElementById('aw-bz-val').className =
+        'aw-stat-val ' + (curBz < -5 ? 'aw-green' : curBz < 0 ? 'aw-yellow' : 'aw-red');
+      document.getElementById('aw-bz-badge').textContent = `${curBz.toFixed(1)} nT`;
+
+      document.getElementById('aw-speed-val').textContent = Math.round(curSpeed);
+      document.getElementById('aw-dens-val').textContent  = curDens.toFixed(1);
+
+      // Gauges (% of max expected: speed 800, density 30, temp 200k)
+      awSetGauge('aw-g-speed', curSpeed/800, '#38bdf8', Math.round(curSpeed));
+      awSetGauge('aw-g-dens',  curDens/30,   '#fbbf24', curDens.toFixed(1));
+      awSetGauge('aw-g-temp',  curTemp/200000,'#fb923c', Math.round(curTemp/1000)+'k');
+
+      // Bz chart
+      awBuildLineChart('aw-c-bz', labels, bzVals, '#22d3a0', 'rgba(34,211,160,.1)');
+
+      // Wind chart (dual axis)
+      awBuildWindChart(labels, speedVals, densVals);
+
+    } catch(e) { console.warn('Solar wind error:', e); }
+  }
+
+  // ── Alerts ────────────────────────────────────────────────────────
+  async function awFetchAlerts() {
+    try {
+      const r = await fetch(`${NOAA}/products/alerts.json`);
+      const raw = await r.json();
+      // Keep active alerts from last 24h
+      const cutoff = Date.now() - 24 * 3600 * 1000;
+      const active = raw.filter(a => {
+        const t = new Date(a.issue_time || a.issuedAt || 0).getTime();
+        return t > cutoff;
+      }).slice(0, 8);
+
+      document.getElementById('aw-alert-badge').textContent = active.length;
+      document.getElementById('aw-alerts-count').textContent = `${active.length} aktiva`;
+
+      awAlertTexts = active.map(a => {
+        const msg = a.message || a.messageBody || '';
+        return msg.replace(/<[^>]+>/g,'').substring(0, 300);
+      });
+
+      const list = document.getElementById('aw-alerts-list');
+      if (!active.length) {
+        list.innerHTML = '<div class="aw-loading">Inga aktiva rymdvädervarningar 🟢</div>';
+        return;
+      }
+      list.innerHTML = active.map(a => {
+        const msg = (a.message || a.messageBody || '').replace(/<[^>]+>/g,'');
+        const lines = msg.split('\n').filter(l => l.trim());
+        const heading = lines[0] || 'Rymdvädervarning';
+        const body = lines.slice(1,4).join(' ');
+        const when = new Date(a.issue_time || a.issuedAt || 0)
+          .toLocaleString('sv-SE',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+        const level = heading.toLowerCase().includes('warning') || heading.toLowerCase().includes('storm') ? 'high'
+                    : heading.toLowerCase().includes('watch') ? 'warn' : 'info';
+        const icon = level==='high' ? '🌩️' : level==='warn' ? '☀️' : '📡';
+        return `<div class="aw-alert-item ${level}">
+          <div class="aw-alert-icon">${icon}</div>
+          <div>
+            <div class="aw-alert-title ${level==='high'?'aw-orange':level==='warn'?'aw-yellow':'aw-blue'}">${heading}</div>
+            <div class="aw-alert-desc">${body}</div>
+            <div class="aw-alert-time">🕐 ${when} UTC · NOAA SWPC</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Auto-read alerts (TTS) on first load
+      if (awAlertTexts.length && !awAlerts_spoken) {
+        awAlerts_spoken = true;
+        setTimeout(awReadAlerts, 1500);
+      }
+    } catch(e) { console.warn('Alerts error:', e); }
+  }
+  let awAlerts_spoken = false;
+
+  // ── TTS ───────────────────────────────────────────────────────────
+  function awReadAlerts() {
+    if (!('speechSynthesis' in window) || !awAlertTexts.length) return;
+    window.speechSynthesis.cancel();
+    const intro = new SpeechSynthesisUtterance('Aktiva rymdvädervarningar:');
+    intro.lang = 'sv-SE'; intro.rate = 1.0;
+    window.speechSynthesis.speak(intro);
+    awAlertTexts.forEach((txt, i) => {
+      const u = new SpeechSynthesisUtterance(`Varning ${i+1}: ${txt}`);
+      u.lang = 'en-US'; u.rate = 0.9;
+      window.speechSynthesis.speak(u);
+    });
+  }
+
+  // ── Scroll to alerts ──────────────────────────────────────────────
+  function awScrollToAlerts() {
+    const el = document.getElementById('aw-alerts-sec');
+    el?.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  // ── Kp status label ───────────────────────────────────────────────
+  function awUpdateKpStatus(kp) {
+    const el = document.getElementById('aw-kp-status');
+    if (kp >= 8)      el.textContent = '🔴 G4–G5 Extrem storm';
+    else if (kp >= 6) el.textContent = '🟠 G2–G3 Stark storm';
+    else if (kp >= 5) el.textContent = '🟡 G1 Geomagnetisk storm';
+    else if (kp >= 4) el.textContent = '🟢 Aktiv';
+    else if (kp >= 3) el.textContent = '🔵 Svagt aktiv';
+    else              el.textContent = '⚪ Lugnt';
+    el.className = kp >= 5 ? 'aw-orange' : kp >= 3 ? 'aw-green' : '';
+  }
+
+  // ── Visibility based on Kp + latitude ─────────────────────────────
+  function awUpdateVisibility(lat, lon, kp) {
+    // Equatorward boundary of aurora ≈ 90 - (Kp*7 + 28) degrees
+    const auroraLat = 90 - (kp * 7 + 28);
+    const dist = lat - auroraLat; // degrees above boundary
+    let pctNow = Math.min(100, Math.max(0, Math.round(50 + dist * 8)));
+
+    // Evening = use forecast (+1 step optimistic)
+    const pctEve = Math.min(100, pctNow + 10);
+    const pctTmr = Math.max(0, pctNow - 20);
+    const pct7d  = Math.max(0, pctNow - 40);
+
+    awSetVis('now', pctNow);
+    awSetVis('eve', pctEve);
+    awSetVis('tmr', pctTmr, true);
+    awSetVis('7d',  pct7d,  true, true);
+
+    // Times
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2,'0');
+    const mm = String(now.getMinutes()).padStart(2,'0');
+    document.getElementById('aw-lbl-now').textContent = `Just nu (${hh}:${mm})`;
+
+    const eveTime = awAstroTwilightEnd(lat, lon, now);
+    const tmrDate = new Date(now); tmrDate.setDate(tmrDate.getDate() + 1);
+    const tmrTime = awAstroTwilightEnd(lat, lon, tmrDate);
+    document.getElementById('aw-lbl-eve').textContent = eveTime ? `I kväll (${eveTime})` : 'I kväll';
+    document.getElementById('aw-lbl-tmr').textContent = tmrTime ? `I morgon (${tmrTime})` : 'I morgon';
+  }
+
+  function awSetVis(id, pct, warm, muted) {
+    const fill = document.getElementById(`aw-vis-${id}`);
+    const pctEl = document.getElementById(`aw-pct-${id}`);
+    if (!fill || !pctEl) return;
+    fill.style.width = pct + '%';
+    fill.style.background = muted ? '#475569'
+      : warm ? 'linear-gradient(90deg,#fbbf24,#fb923c)'
+             : 'linear-gradient(90deg,#22d3a0,#38bdf8)';
+    pctEl.textContent = pct + '%';
+    pctEl.className = 'aw-vis-pct ' + (muted ? '' : warm ? 'aw-yellow' : 'aw-green');
+  }
+
+  // ── Astronomical twilight end (sun 18° below horizon) ────────────
+  function awAstroTwilightEnd(lat, lon, date) {
+    const rad = Math.PI / 180;
+    const doy = Math.floor((date - new Date(date.getFullYear(),0,0)) / 86400000);
+    const decl = 23.45 * Math.sin(rad * (360/365) * (doy - 81));
+    const cosH = (Math.sin(rad*-18) - Math.sin(rad*lat)*Math.sin(rad*decl))
+               / (Math.cos(rad*lat)*Math.cos(rad*decl));
+    if (cosH < -1 || cosH > 1) return null;
+    const H = Math.acos(cosH) / rad;
+    const B = rad * (360/365) * (doy - 81);
+    const eot = 9.87*Math.sin(2*B) - 7.53*Math.cos(B) - 1.5*Math.sin(B);
+    const tzOff = -date.getTimezoneOffset();
+    const endMin = Math.round(720 - eot + (tzOff - lon*4) + H*4);
+    const hh = Math.floor(endMin/60) % 24;
+    const mm = endMin % 60;
+    return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+  }
+
+  // ── Local info (sunrise/sunset approx) ───────────────────────────
+  function awUpdateLocalInfo(lat, lon) {
+    const now = new Date();
+    const rad = Math.PI/180;
+    const doy = Math.floor((now - new Date(now.getFullYear(),0,0)) / 86400000);
+    const decl = 23.45 * Math.sin(rad*(360/365)*(doy-81));
+    const cosHS = (Math.sin(rad*-0.833) - Math.sin(rad*lat)*Math.sin(rad*decl))
+                / (Math.cos(rad*lat)*Math.cos(rad*decl));
+    const B = rad*(360/365)*(doy-81);
+    const eot = 9.87*Math.sin(2*B) - 7.53*Math.cos(B) - 1.5*Math.sin(B);
+    const tzOff = -now.getTimezoneOffset();
+    const noon = 720 - eot + (tzOff - lon*4);
+    const HS = Math.acos(Math.max(-1,Math.min(1,cosHS)))/rad;
+    const fmtM = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(Math.round(m%60)).padStart(2,'0')}`;
+    document.getElementById('aw-sunset').textContent = fmtM(noon + HS*4);
+    document.getElementById('aw-sunrise').textContent = fmtM(noon - HS*4);
+
+    const astroEnd = awAstroTwilightEnd(lat, lon, now);
+    const astroStart = (() => {
+      // morning: sun 18° below horizon on the AM side
+      const cosHA = (Math.sin(rad*-18)-Math.sin(rad*lat)*Math.sin(rad*decl))
+                  / (Math.cos(rad*lat)*Math.cos(rad*decl));
+      if (cosHA < -1 || cosHA > 1) return null;
+      const HA = Math.acos(cosHA)/rad;
+      const m = Math.round(noon - HA*4);
+      return `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+    })();
+    document.getElementById('aw-astro').textContent =
+      (astroEnd && astroStart) ? `${astroEnd}–${astroStart}` : 'Ej astronomisk mörker';
+    document.getElementById('aw-cloud').textContent = '—';
+    document.getElementById('aw-coords').textContent = `${lat.toFixed(1)}°N ${lon.toFixed(1)}°Ö`;
+  }
+
+  // ── Aurora oval on map ────────────────────────────────────────────
+  function awDrawAuroraOval(kp) {
+    awAuroraLayers.forEach(l => awMap.removeLayer(l));
+    awAuroraLayers = [];
+    const eqLat = 90 - (kp*7 + 28); // equatorward edge
+    const poleLat = eqLat + 8;      // poleward edge
+    [[78,15,.99,200],[76,12,.97,220],[74,20,.95,240],[72,15,.97,290],
+     [71,25,.93,280],[70,28,.94,260],[69,18,.88,260],[68,15,.85,240],
+     [67,20,.82,230],[66,-14,.84,210],[65,25,.78,220],[65,-18,.90,220],
+     [64,22,.75,200],[64,-22,.88,240],[63,28,.72,200],
+     [62,15,.62,190],[61,-2,.60,170],[60,25,.55,180],[59,18,.48,155],
+     [58,20,.40,160],[58,-4,.55,160],[57,10,.35,145],[56,15,.25,135],
+     [55,10,.16,120],[55,-1,.14,110]].forEach(([lat,lon,p,r]) => {
+      const visible = lat >= eqLat - 5;
+      if (!visible) return;
+      const alpha = Math.min(p, (lat - (eqLat-5)) / 15);
+      const c = alpha>.7?['rgba(34,211,160,.45)','rgba(34,211,160,.7)']:
+               alpha>.5?['rgba(56,189,248,.35)','rgba(56,189,248,.6)']:
+               alpha>.3?['rgba(167,139,250,.25)','rgba(167,139,250,.5)']:
+                        ['rgba(251,191,36,.15)','rgba(251,191,36,.35)'];
+      const layer = L.circle([lat,lon],{radius:r*1000,color:c[1],fillColor:c[0],fillOpacity:1,weight:1}).addTo(awMap);
+      awAuroraLayers.push(layer);
+    });
+  }
+
+  // ── Gauge helper ──────────────────────────────────────────────────
+  function awSetGauge(id, pct, color, label) {
+    pct = Math.min(1, Math.max(0, pct));
+    const el = document.getElementById(id);
+    if (el) el.style.background = `conic-gradient(${color} ${(pct*100).toFixed(0)}%,rgba(255,255,255,.06) 0)`;
+    const v = document.getElementById(id+'-v');
+    if (v) v.textContent = label;
+  }
+
+  // ── Collapsible ───────────────────────────────────────────────────
+  function awToggleColl(id) {
+    const body = document.getElementById(`aw-bd-${id}`);
+    const arr  = document.getElementById(`aw-arr-${id}`);
+    const btn  = document.getElementById(`aw-btn-${id}`);
+    body?.classList.toggle('open');
+    arr?.classList.toggle('open');
+    btn?.classList.toggle('open');
+    // Resize chart if inside
+    if (body?.classList.contains('open')) {
+      setTimeout(() => { if(awCharts[id]) awCharts[id].resize(); }, 350);
+    }
+  }
+  function awOpenColl(id) {
+    const body = document.getElementById(`aw-bd-${id}`);
+    if (body && !body.classList.contains('open')) awToggleColl(id);
+    document.getElementById(`aw-btn-${id}`)?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+
+  // ── Search ────────────────────────────────────────────────────────
+  function awOpenSearch() {
+    document.getElementById('aw-search-modal').classList.add('open');
+    awFilterSearch('');
+    setTimeout(() => document.getElementById('aw-search-input').focus(), 60);
+  }
+  function awCloseSearch() {
+    document.getElementById('aw-search-modal').classList.remove('open');
+    document.getElementById('aw-search-input').value = '';
+  }
+  function awFilterSearch(q) {
+    const res = q ? awPlaces.filter(p =>
+      p.n.toLowerCase().includes(q.toLowerCase()) || p.c.toLowerCase().includes(q.toLowerCase())
+    ) : awPlaces;
+    document.getElementById('aw-search-results').innerHTML = res.map(p =>
+      `<div class="aw-search-item" onclick="awGoTo(${p.lat},${p.lon},'${p.n}','${p.c}')">
+        <span style="font-size:15px">📍</span>
+        <div><div class="aw-si-name">${p.n}</div><div class="aw-si-country">${p.c}</div></div>
+      </div>`).join('');
+  }
+  function awGoTo(lat, lon, name, country) {
+    awMap.setView([lat, lon], 6);
+    document.getElementById('aw-loc-name').textContent = `${name}, ${country}`;
+    awUpdateLocalInfo(lat, lon);
+    awUpdateVisibility(lat, lon, parseFloat(document.getElementById('aw-kp-big').textContent) || 3);
+    awCloseSearch();
+  }
+  function awReturnHome() {
+    if (awUserLat) {
+      awMap.setView([awUserLat, awUserLon], 5);
+      document.getElementById('aw-loc-name').textContent = 'Min position';
+      awUpdateLocalInfo(awUserLat, awUserLon);
+    }
+  }
+
+  // ── Chart builders ────────────────────────────────────────────────
+  const awGC = 'rgba(255,255,255,.05)', awTC = '#64748b';
+  const awTooltip = {
+    backgroundColor:'rgba(8,12,20,.95)', borderColor:'rgba(255,255,255,.1)',
+    borderWidth:1, titleColor:'#94a3b8', bodyColor:'#e2e8f0', padding:10, cornerRadius:8
+  };
+
+  function awBuildBarChart(canvasId, labels, vals, colorByKp) {
+    if (awCharts[canvasId]) awCharts[canvasId].destroy();
+    const colors = colorByKp
+      ? vals.map(v => v>=6?'#f87171':v>=5?'#fb923c':v>=4?'#fbbf24':'#38bdf8')
+      : vals.map(() => '#38bdf8');
+    awCharts[canvasId] = new Chart(canvasId, {
+      type:'bar',
+      data:{ labels, datasets:[{data:vals, backgroundColor:colors, borderRadius:4, borderSkipped:false}]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:awTooltip },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:9}} },
+          y:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}}, min:0, max:9 }
+        }}
+    });
+  }
+
+  function awBuild7DayChart(labels, mins, maxes) {
+    const id = 'aw-c-kp7d';
+    if (awCharts[id]) awCharts[id].destroy();
+    awCharts[id] = new Chart(id, {
+      type:'bar',
+      data:{ labels, datasets:[
+        {label:'Min', data:mins, backgroundColor:'rgba(56,189,248,.15)', borderRadius:4, borderSkipped:false},
+        {label:'Max', data:maxes, backgroundColor:maxes.map(v=>v>=6?'rgba(248,113,113,.55)':v>=5?'rgba(251,146,60,.5)':'rgba(56,189,248,.4)'), borderRadius:4, borderSkipped:false}
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:true, labels:{color:awTC, font:{size:10}, boxWidth:10}}, tooltip:awTooltip },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:9}}, stacked:true },
+          y:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}}, min:0, max:9, stacked:true }
+        }}
+    });
+  }
+
+  function awBuildLineChart(canvasId, labels, vals, borderColor, bgColor) {
+    if (awCharts[canvasId]) awCharts[canvasId].destroy();
+    awCharts[canvasId] = new Chart(canvasId, {
+      type:'line',
+      data:{ labels, datasets:[{data:vals, borderColor, backgroundColor:bgColor, fill:true, tension:.4, pointRadius:2, borderWidth:2}]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:awTooltip },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:9}} },
+          y:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}} }
+        }}
+    });
+  }
+
+  function awBuildWindChart(labels, speeds, dens) {
+    const id = 'aw-c-wind';
+    if (awCharts[id]) awCharts[id].destroy();
+    awCharts[id] = new Chart(id, {
+      type:'line',
+      data:{ labels, datasets:[
+        {label:'Hastighet (km/s)', data:speeds, borderColor:'#38bdf8', fill:false, tension:.3, pointRadius:2, borderWidth:2, yAxisID:'yS'},
+        {label:'Densitet (p/cm³)', data:dens,   borderColor:'#fbbf24', fill:false, tension:.3, pointRadius:2, borderWidth:2, yAxisID:'yD'}
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:true, labels:{color:awTC, font:{size:10}, boxWidth:10}}, tooltip:awTooltip },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:9}} },
+          yS:{ grid:{color:awGC}, ticks:{color:'#38bdf8', font:{size:10}}, position:'left',
+               title:{display:true, text:'km/s', color:'#38bdf8', font:{size:10}} },
+          yD:{ grid:{display:false}, ticks:{color:'#fbbf24', font:{size:10}}, position:'right',
+               title:{display:true, text:'p/cm³', color:'#fbbf24', font:{size:10}} }
+        }}
+    });
+  }
+  // ── END AURORA APP ───────────────────────────────────────────────
 
   // Start buffering strikes to localStorage immediately on page load
   blitzStartBackground();

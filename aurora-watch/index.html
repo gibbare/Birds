@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Aurora Watch — Norrskensprognos</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root {
+      --bg:#080c14; --bg2:#0d1220; --bg3:#121929;
+      --card:rgba(16,24,40,0.85); --border:rgba(255,255,255,0.07);
+      --green:#22d3a0; --blue:#38bdf8; --purple:#a78bfa;
+      --yellow:#fbbf24; --red:#f87171; --orange:#fb923c;
+      --text:#e2e8f0; --text2:#94a3b8; --text3:#64748b;
+      --radius:14px; --radius-sm:8px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;overflow-x:hidden;}
+    ::-webkit-scrollbar{width:6px;} ::-webkit-scrollbar-track{background:var(--bg);}
+    ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px;}
+
+    /* NAV */
+    nav{position:fixed;top:0;left:0;right:0;z-index:1000;display:flex;align-items:center;
+      justify-content:space-between;padding:0 24px;height:60px;
+      background:rgba(8,12,20,.93);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+    .nav-brand{display:flex;align-items:center;gap:10px;}
+    .nav-logo{width:32px;height:32px;border-radius:50%;
+      background:linear-gradient(135deg,var(--green),var(--blue));
+      display:flex;align-items:center;justify-content:center;font-size:16px;}
+    .nav-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;}
+    .nav-title span{color:var(--green);}
+    .nav-right{display:flex;align-items:center;gap:14px;}
+    .live-badge{display:flex;align-items:center;gap:6px;padding:4px 12px;
+      background:rgba(34,211,160,.1);border:1px solid rgba(34,211,160,.3);
+      border-radius:20px;font-size:12px;font-weight:600;color:var(--green);}
+    .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite;}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+    .nav-time{font-size:13px;color:var(--text2);}
+    .alert-btn{position:relative;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);
+      border-radius:8px;padding:6px 14px;color:var(--red);font-size:13px;font-weight:600;
+      cursor:pointer;transition:all .2s;font-family:'Inter',sans-serif;}
+    .alert-btn:hover{background:rgba(248,113,113,.2);}
+    .alert-badge{position:absolute;top:-7px;right:-7px;width:18px;height:18px;
+      background:var(--red);border-radius:50%;font-size:11px;font-weight:700;
+      display:flex;align-items:center;justify-content:center;color:#fff;}
+
+    /* SEARCH MODAL */
+    .search-modal{display:none;position:fixed;inset:0;z-index:2000;
+      background:rgba(0,0,0,.75);backdrop-filter:blur(6px);
+      align-items:flex-start;justify-content:center;padding-top:100px;}
+    .search-modal.open{display:flex;}
+    .search-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+      width:min(500px,90vw);box-shadow:0 24px 64px rgba(0,0,0,.7);overflow:hidden;}
+    .search-input-wrap{display:flex;align-items:center;padding:16px 20px;gap:12px;border-bottom:1px solid var(--border);}
+    .search-input{flex:1;background:none;border:none;outline:none;color:var(--text);
+      font-size:16px;font-family:'Inter',sans-serif;}
+    .search-input::placeholder{color:var(--text3);}
+    .search-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:20px;}
+    .search-results{max-height:320px;overflow-y:auto;}
+    .search-item{padding:13px 20px;display:flex;align-items:center;gap:12px;
+      cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s;}
+    .search-item:hover{background:rgba(255,255,255,.05);}
+    .si-name{font-weight:500;font-size:14px;} .si-country{font-size:12px;color:var(--text3);}
+
+    /* LAYOUT */
+    .page{padding-top:60px;}
+    .hero{display:grid;grid-template-columns:1fr 360px;height:55vh;min-height:380px;}
+
+    /* MAP */
+    .map-wrap{position:relative;overflow:hidden;}
+    #map{width:100%;height:100%;}
+    .leaflet-tile{filter:brightness(.65) saturate(.45) hue-rotate(195deg);}
+    .leaflet-control-zoom a{background:var(--bg2)!important;color:var(--text2)!important;border-color:var(--border)!important;}
+    .map-overlay-top{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:500;
+      display:flex;align-items:center;gap:8px;background:rgba(8,12,20,.9);backdrop-filter:blur(10px);
+      border:1px solid var(--border);border-radius:30px;padding:6px 8px 6px 16px;}
+    .location-name{font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;
+      border-bottom:1px dashed rgba(255,255,255,.25);transition:color .2s;}
+    .location-name:hover{color:var(--green);}
+    .pin-btn{width:28px;height:28px;border-radius:50%;background:rgba(34,211,160,.12);
+      border:1px solid rgba(34,211,160,.3);display:flex;align-items:center;justify-content:center;
+      cursor:pointer;font-size:14px;transition:all .2s;}
+    .pin-btn:hover{background:rgba(34,211,160,.25);}
+    .map-kp-badge{position:absolute;bottom:14px;left:14px;z-index:500;
+      background:rgba(8,12,20,.93);backdrop-filter:blur(10px);
+      border:1px solid rgba(34,211,160,.25);border-radius:var(--radius-sm);
+      padding:10px 16px;display:flex;align-items:center;gap:12px;}
+    .kp-big{font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:700;color:var(--green);line-height:1;}
+    .kp-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;}
+    .kp-status{font-size:12px;font-weight:600;color:var(--green);margin-top:3px;}
+
+    /* SIDEBAR */
+    .sidebar{background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
+    .ss{padding:14px 16px;border-bottom:1px solid var(--border);}
+    .ss:last-child{border-bottom:none;flex:1;}
+    .ss-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px;}
+    .vis-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+    .vis-label{font-size:11px;color:var(--text2);width:106px;flex-shrink:0;}
+    .vis-track{flex:1;height:6px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
+    .vis-fill{height:100%;border-radius:3px;}
+    .vis-pct{font-size:11px;width:30px;text-align:right;font-weight:600;}
+    .quick-stats{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+    .stat-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);
+      padding:10px 12px;cursor:pointer;transition:all .2s;}
+    .stat-card:hover{border-color:rgba(255,255,255,.14);transform:translateY(-1px);}
+    .stat-label{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+    .stat-value{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;margin:3px 0 1px;}
+    .stat-unit{font-size:10px;color:var(--text2);}
+    .info-row{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:5px;}
+    .info-row span:last-child{color:var(--text);font-weight:500;}
+    .kp-scale{display:flex;gap:3px;margin-top:6px;}
+    .kp-bar{flex:1;height:8px;border-radius:2px;}
+
+    /* MAIN */
+    .main{padding:20px 24px 40px;}
+    .sec-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+    .sec-title{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;}
+    .badge{font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;}
+    .badge-g{background:rgba(34,211,160,.15);color:var(--green);border:1px solid rgba(34,211,160,.3);}
+    .badge-b{background:rgba(56,189,248,.15);color:var(--blue);border:1px solid rgba(56,189,248,.3);}
+    .badge-r{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3);}
+    .badge-y{background:rgba(251,191,36,.15);color:var(--yellow);border:1px solid rgba(251,191,36,.3);}
+
+    /* CHART CARDS */
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+    .chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+      padding:16px;backdrop-filter:blur(10px);transition:border-color .2s,box-shadow .2s;}
+    .chart-card:hover{border-color:rgba(255,255,255,.13);box-shadow:0 8px 32px rgba(0,0,0,.3);}
+    .ch{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;}
+    .ch-title{font-size:13px;font-weight:600;}
+    .ch-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+    .ch-val{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;text-align:right;}
+    .ch-delta{font-size:11px;color:var(--text3);margin-top:2px;text-align:right;}
+    .ch-wrap{position:relative;height:140px;}
+    .ch-wrap.tall{height:175px;}
+
+    /* COLLAPSIBLE */
+    .coll{margin-bottom:10px;}
+    .coll-btn{width:100%;display:flex;align-items:center;justify-content:space-between;
+      background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);
+      padding:12px 16px;cursor:pointer;transition:all .2s;font-family:'Inter',sans-serif;}
+    .coll-btn:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.11);}
+    .coll-left{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--text);}
+    .coll-arrow{font-size:12px;color:var(--text3);transition:transform .3s;}
+    .coll-arrow.open{transform:rotate(180deg);}
+    .coll-body{overflow:hidden;max-height:0;transition:max-height .4s ease;}
+    .coll-body.open{max-height:700px;}
+    .coll-inner{padding:16px 0 4px;}
+
+    /* WIND */
+    .wind-gauges{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+    .gauge{text-align:center;}
+    .gauge-ring{width:72px;height:72px;border-radius:50%;margin:0 auto 6px;
+      display:flex;align-items:center;justify-content:center;
+      font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;position:relative;}
+    .gauge-ring::before{content:'';position:absolute;inset:5px;border-radius:50%;background:var(--bg3);}
+    .gauge-v{position:relative;z-index:1;}
+    .gauge-lbl{font-size:11px;color:var(--text3);}
+    .gauge-u{font-size:10px;color:var(--text3);}
+
+    /* ALERTS */
+    .alerts-list{display:flex;flex-direction:column;gap:10px;}
+    .alert-item{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);
+      padding:14px 16px;display:flex;gap:12px;align-items:flex-start;}
+    .alert-item.high{border-left:3px solid var(--orange);}
+    .alert-item.warn{border-left:3px solid var(--yellow);}
+    .alert-item.info{border-left:3px solid var(--blue);}
+    .alert-icon{font-size:20px;}
+    .alert-title{font-size:13px;font-weight:600;margin-bottom:5px;}
+    .alert-desc{font-size:12px;color:var(--text2);line-height:1.55;}
+    .alert-time{font-size:11px;color:var(--text3);margin-top:6px;}
+
+    .green{color:var(--green);} .blue{color:var(--blue);} .purple{color:var(--purple);}
+    .yellow{color:var(--yellow);} .orange{color:var(--orange);} .red{color:var(--red);}
+
+    footer{text-align:center;padding:20px;font-size:12px;color:var(--text3);border-top:1px solid var(--border);}
+
+    /* Prevent chart cards from overflowing their grid cell */
+    .chart-card{min-width:0;overflow:hidden;}
+    .grid3,.grid2{overflow:hidden;}
+
+    @media(max-width:1024px){
+      .hero{grid-template-columns:1fr;grid-template-rows:50vh auto;height:auto;}
+      .sidebar{border-left:none;border-top:1px solid var(--border);}
+      .grid3{grid-template-columns:1fr 1fr;}
+    }
+    @media(max-width:680px){
+      .grid3,.grid2{grid-template-columns:1fr;}
+      .main{padding:10px 10px 40px;}
+      .hero{grid-template-rows:42vh auto;}
+      .wind-gauges{gap:6px;}
+      .gauge-ring{width:58px;height:58px;font-size:13px;}
+      .gauge-ring::before{inset:4px;}
+      .ch-wrap{height:120px;}
+      .ch-wrap.tall{height:150px;}
+      .ch-val{font-size:18px;}
+      .sidebar .quick-stats{grid-template-columns:1fr 1fr;}
+      .coll-body.open{max-height:900px;}
+      .nav-time{display:none;}
+    }
+  </style>
+</head>
+<body>
+
+<!-- SEARCH MODAL -->
+<div class="search-modal" id="searchModal" onclick="if(event.target===this)closeSearch()">
+  <div class="search-box">
+    <div class="search-input-wrap">
+      <span style="font-size:18px">🔍</span>
+      <input class="search-input" id="searchInput" placeholder="Sök stad eller plats…" oninput="filterSearch(this.value)"/>
+      <button class="search-close" onclick="closeSearch()">✕</button>
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+</div>
+
+<!-- NAVBAR -->
+<nav>
+  <div class="nav-brand">
+    <div class="nav-logo">🌌</div>
+    <div class="nav-title">Aurora<span>Watch</span></div>
+  </div>
+  <div class="nav-right">
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <div class="nav-time" id="navTime"></div>
+    <button class="alert-btn" onclick="document.getElementById('alertsSec').scrollIntoView({behavior:'smooth'})">
+      ⚠ Varningar<div class="alert-badge">3</div>
+    </button>
+  </div>
+</nav>
+
+<div class="page">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="map-overlay-top">
+        <div class="location-name" id="locationName" onclick="openSearch()">Stockholm, Sverige</div>
+        <div class="pin-btn" onclick="returnHome()" title="Tillbaka till min plats">📍</div>
+      </div>
+      <div class="map-kp-badge">
+        <div><div class="kp-label">Kp-index</div><div class="kp-big">5.3</div></div>
+        <div><div class="kp-status">🟢 Aktiv G1-storm</div><div class="kp-label" style="margin-top:4px">Synlig ned till 55°N</div></div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="ss">
+        <div class="ss-title">📍 Din synlighet</div>
+        <div class="vis-row"><div class="vis-label" id="lblNow">Just nu</div>
+          <div class="vis-track"><div class="vis-fill" style="width:72%;background:linear-gradient(90deg,var(--green),var(--blue))"></div></div>
+          <div class="vis-pct green">72%</div></div>
+        <div class="vis-row"><div class="vis-label" id="lblEvening">I kväll</div>
+          <div class="vis-track"><div class="vis-fill" style="width:85%;background:linear-gradient(90deg,var(--green),var(--blue))"></div></div>
+          <div class="vis-pct green">85%</div></div>
+        <div class="vis-row"><div class="vis-label" id="lblTomorrow">I morgon</div>
+          <div class="vis-track"><div class="vis-fill" style="width:40%;background:linear-gradient(90deg,var(--yellow),var(--orange))"></div></div>
+          <div class="vis-pct yellow">40%</div></div>
+        <div class="vis-row" style="margin-bottom:0"><div class="vis-label">Om 7 dagar</div>
+          <div class="vis-track"><div class="vis-fill" style="width:20%;background:var(--text3)"></div></div>
+          <div class="vis-pct" style="color:var(--text3)">20%</div></div>
+      </div>
+
+      <div class="ss">
+        <div class="ss-title">⚡ Snabbvärden</div>
+        <div class="quick-stats">
+          <div class="stat-card" onclick="document.getElementById('bzSec').scrollIntoView({behavior:'smooth'})">
+            <div class="stat-label">Bz (IMF)</div><div class="stat-value green">−14.2</div><div class="stat-unit">nT · Söderut ✓</div>
+          </div>
+          <div class="stat-card" onclick="document.getElementById('windSec').scrollIntoView({behavior:'smooth'})">
+            <div class="stat-label">Solvind</div><div class="stat-value blue">612</div><div class="stat-unit">km/s · Hög ✓</div>
+          </div>
+          <div class="stat-card" onclick="document.getElementById('dstSec').scrollIntoView({behavior:'smooth'})">
+            <div class="stat-label">Dst-index</div><div class="stat-value purple">−48</div><div class="stat-unit">nT · Moderat</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Densitet</div><div class="stat-value yellow">18.4</div><div class="stat-unit">p/cm³</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ss">
+        <div class="ss-title">🌅 Lokal info</div>
+        <div class="info-row"><span>Solnedgång</span><span>17:48</span></div>
+        <div class="info-row"><span>Soluppgång</span><span>07:12</span></div>
+        <div class="info-row"><span>Molntäcke</span><span class="green">12% ☀</span></div>
+        <div class="info-row"><span>Astronomisk mörker</span><span>19:30–05:30</span></div>
+        <div class="info-row" style="margin-bottom:0"><span>Koordinater</span><span>59.3°N 18.1°Ö</span></div>
+      </div>
+
+      <div class="ss">
+        <div class="ss-title">📊 Kp-skala</div>
+        <div class="kp-scale">
+          <div class="kp-bar" style="background:#2d9e5f"></div>
+          <div class="kp-bar" style="background:#3ab76b"></div>
+          <div class="kp-bar" style="background:#5dc95a"></div>
+          <div class="kp-bar" style="background:#a0d44a"></div>
+          <div class="kp-bar" style="background:#f0d53a;height:12px;border-radius:3px;margin-top:-2px"></div>
+          <div class="kp-bar" style="background:#f0a030"></div>
+          <div class="kp-bar" style="background:#e05030"></div>
+          <div class="kp-bar" style="background:#c02020"></div>
+          <div class="kp-bar" style="background:#900"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:5px">
+          <span>Kp1 Lugnt</span><span>Kp5 ▲ Nu</span><span>Kp9 Extrem</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+
+    <div class="sec-header">
+      <div class="sec-title">📈 Live-data &amp; Prognos</div>
+      <span class="badge badge-g">Uppdaterad 14:32 UTC</span>
+    </div>
+    <div class="grid3">
+      <div class="chart-card">
+        <div class="ch">
+          <div><div class="ch-title">Kp-index · Historik</div><div class="ch-sub">24h bakåt (3h-intervall)</div></div>
+          <div><div class="ch-val green">5.3</div><div class="ch-delta">↑ +1.7 vs igår</div></div>
+        </div>
+        <div class="ch-wrap"><canvas id="cKpHist"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="ch">
+          <div><div class="ch-title">Kp-prognos · 3 dagar</div><div class="ch-sub">NOAA SWPC modell</div></div>
+          <div><div class="ch-val yellow">4–6</div><div class="ch-delta">Förhöjd aktivitet</div></div>
+        </div>
+        <div class="ch-wrap"><canvas id="cKpFc3"></canvas></div>
+      </div>
+      <div class="chart-card" id="bzSec">
+        <div class="ch">
+          <div><div class="ch-title">Bz-komponent (IMF)</div><div class="ch-sub">Söderut = gynnsamt för norrsken</div></div>
+          <div><div class="ch-val green">−14.2 nT</div><div class="ch-delta">🟢 Söderut</div></div>
+        </div>
+        <div class="ch-wrap"><canvas id="cBz"></canvas></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="chart-card">
+        <div class="ch">
+          <div><div class="ch-title">7-dagars Kp-prognos</div><div class="ch-sub">Lång sikt · NOAA modell</div></div>
+          <div><div class="ch-val blue">Max 7.2</div><div class="ch-delta">Torsdag 27/3</div></div>
+        </div>
+        <div class="ch-wrap tall"><canvas id="cKp7d"></canvas></div>
+      </div>
+      <div class="chart-card" id="dstSec">
+        <div class="ch">
+          <div><div class="ch-title">Dst-index · Geomagnetisk storm</div><div class="ch-sub">Senaste 48h</div></div>
+          <div><div class="ch-val purple">−48 nT</div><div class="ch-delta">Moderat storm</div></div>
+        </div>
+        <div class="ch-wrap tall"><canvas id="cDst"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Solar Wind (collapsible) -->
+    <div class="coll" id="windSec">
+      <button class="coll-btn" onclick="toggleColl('wind',this)">
+        <div class="coll-left">
+          <span>💨</span> Solvinddata — Hastighet, Densitet &amp; Temperatur
+          <span class="badge badge-b">Live 5-min</span>
+        </div>
+        <span class="coll-arrow" id="arr-wind">▼</span>
+      </button>
+      <div class="coll-body" id="bd-wind">
+        <div class="coll-inner">
+          <div class="wind-gauges">
+            <div class="gauge">
+              <div class="gauge-ring" style="background:conic-gradient(var(--blue) 68%,rgba(255,255,255,.06) 0)">
+                <div class="gauge-v blue">612</div></div>
+              <div class="gauge-lbl">Hastighet</div><div class="gauge-u">km/s</div>
+            </div>
+            <div class="gauge">
+              <div class="gauge-ring" style="background:conic-gradient(var(--yellow) 46%,rgba(255,255,255,.06) 0)">
+                <div class="gauge-v yellow">18.4</div></div>
+              <div class="gauge-lbl">Densitet</div><div class="gauge-u">p/cm³</div>
+            </div>
+            <div class="gauge">
+              <div class="gauge-ring" style="background:conic-gradient(var(--orange) 41%,rgba(255,255,255,.06) 0)">
+                <div class="gauge-v orange">82k</div></div>
+              <div class="gauge-lbl">Temperatur</div><div class="gauge-u">Kelvin</div>
+            </div>
+          </div>
+          <div class="ch-wrap tall"><canvas id="cWind"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div style="margin-top:22px" id="alertsSec">
+      <div class="sec-header">
+        <div class="sec-title">⚠️ Aktiva rymdvädervarningar</div>
+        <span class="badge badge-r">3 aktiva</span>
+      </div>
+      <div class="alerts-list">
+        <div class="alert-item high">
+          <div class="alert-icon">🌩️</div>
+          <div>
+            <div class="alert-title orange">Geomagnetisk storm · G2-klass (moderat)</div>
+            <div class="alert-desc">En G2-storm är aktiv. Kp-index förväntas nå 6–7 under de kommande 6 timmarna. Synlighet av norrsken förväntas ned till 55°N breddgrad, inkl. norra Danmark och norra Tyskland.</div>
+            <div class="alert-time">🕐 2026-03-26 11:15 UTC · NOAA SWPC</div>
+          </div>
+        </div>
+        <div class="alert-item warn">
+          <div class="alert-icon">☀️</div>
+          <div>
+            <div class="alert-title yellow">CME-ankomst förväntad om ~14 timmar</div>
+            <div class="alert-desc">En koronamassutkastning (CME) från region AR3590 beräknas träffa jordens magnetosfär. Sannolikhet för G3-storm: 35%. Förbered dig på ökad aktivitet under natten mot 27 mars.</div>
+            <div class="alert-time">🕐 2026-03-26 08:42 UTC · NOAA SWPC</div>
+          </div>
+        </div>
+        <div class="alert-item info">
+          <div class="alert-icon">📡</div>
+          <div>
+            <div class="alert-title blue">HF-radiostörningar · Klass R1</div>
+            <div class="alert-desc">Kortvariga störningar på kortvågsradio kan uppstå på solsidan av jorden p.g.a. förhöjd röntgenstrålning. GPS-precision kan påverkas marginellt.</div>
+            <div class="alert-time">🕐 2026-03-26 09:00 UTC · NOAA SWPC</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <footer>AuroraWatch · Demonstration med testdata · Källa: NOAA SWPC / NASA DONKI · Uppdateras var 5:e minut</footer>
+</div>
+
+<script>
+// CLOCK
+(function tick(){
+  document.getElementById('navTime').textContent=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' UTC+1';
+  setTimeout(tick,1000);
+})();
+
+// ASTRONOMICAL DARKNESS — simplified solar position for a given lat, date
+// Returns the local time (HH:MM) when astronomical twilight ends (sun 18° below horizon)
+function astroTwilightEnd(lat, lon, date) {
+  const rad = Math.PI / 180;
+  const doy = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
+
+  // Solar declination (degrees)
+  const decl = 23.45 * Math.sin(rad * (360 / 365) * (doy - 81));
+
+  // Hour angle when sun is 18° below horizon (astronomical twilight)
+  const cosH = (Math.sin(rad * -18) - Math.sin(rad * lat) * Math.sin(rad * decl))
+              / (Math.cos(rad * lat) * Math.cos(rad * decl));
+
+  // No astronomical darkness possible (polar day) — sun never goes 18° below horizon
+  if (cosH < -1 || cosH > 1) return null;
+
+  const H = Math.acos(cosH) / rad; // degrees
+
+  // Solar noon: 12:00 + equation of time offset (approx) + longitude correction
+  const B = rad * (360 / 365) * (doy - 81);
+  const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B); // minutes
+  // Local timezone offset in minutes (detect from browser)
+  const tzOffMin = -date.getTimezoneOffset();
+  const solarNoonMin = 720 - eot + (tzOffMin - lon * 4);
+
+  // Astronomical twilight end = solar noon + H hours
+  const endMin = Math.round(solarNoonMin + H * 4); // H*4 = H/15*60
+  const hh = Math.floor(endMin / 60) % 24;
+  const mm = endMin % 60;
+  return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+}
+
+// Update visibility labels with clock times
+function updateVisLabels() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('lblNow').textContent = `Just nu (${hh}:${mm})`;
+
+  // Tonight: use today's date but evening — astro twilight end
+  const tonight = astroTwilightEnd(uLat, uLon, now);
+  document.getElementById('lblEvening').textContent = tonight
+    ? `I kväll (${tonight})` : 'I kväll';
+
+  // Tomorrow: same calculation but with tomorrow's date
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tmrw = astroTwilightEnd(uLat, uLon, tomorrow);
+  document.getElementById('lblTomorrow').textContent = tmrw
+    ? `I morgon (${tmrw})` : 'I morgon';
+}
+// updateVisLabels() is called after uLat/uLon are defined below
+// Update "Just nu" time every minute
+setInterval(()=>{
+  const now=new Date();
+  const hh=String(now.getHours()).padStart(2,'0');
+  const mm=String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('lblNow').textContent=`Just nu (${hh}:${mm})`;
+},60000);
+
+// MAP
+const uLat=59.33,uLon=18.07;
+updateVisLabels(); // now uLat/uLon are defined
+const map=L.map('map',{zoomControl:true,attributionControl:false}).setView([uLat,uLon],4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+// Aurora probability blobs (lat, lon, probability 0-1, radius km)
+[
+  [72,15,.97,290],[71,25,.92,280],[70,28,.95,260],[69,18,.88,260],
+  [68,15,.85,240],[67,20,.82,230],[66,-14,.85,210],[65,25,.78,220],
+  [65,-18,.90,220],[64,22,.75,200],[64,-22,.88,240],[63,28,.72,200],
+  [62,15,.62,190],[61,-2,.60,170],[60,25,.55,180],[59,18,.48,155],
+  [58,20,.40,160],[58,-4,.55,160],[57,10,.35,145],[56,15,.25,135],
+  [55,10,.16,120],[55,-1,.14,110],[78,15,.99,200],[76,15,.98,200],
+].forEach(([lat,lon,p,r])=>{
+  const c=p>.85?['rgba(34,211,160,.5)','rgba(34,211,160,.75)']:
+           p>.65?['rgba(56,189,248,.4)','rgba(56,189,248,.65)']:
+           p>.40?['rgba(167,139,250,.3)','rgba(167,139,250,.55)']:
+                 ['rgba(251,191,36,.18)','rgba(251,191,36,.4)'];
+  L.circle([lat,lon],{radius:r*1000,color:c[1],fillColor:c[0],fillOpacity:1,weight:1}).addTo(map);
+});
+L.circleMarker([uLat,uLon],{radius:8,color:'#22d3a0',fillColor:'#22d3a0',fillOpacity:.95,weight:2})
+  .addTo(map).bindPopup('<b>📍 Din position</b><br>Stockholm, Sverige');
+
+// SEARCH
+const places=[
+  {n:'Stockholm',c:'Sverige',lat:59.33,lon:18.07},{n:'Oslo',c:'Norge',lat:59.91,lon:10.75},
+  {n:'Tromsø',c:'Norge',lat:69.65,lon:18.96},{n:'Kiruna',c:'Sverige',lat:67.86,lon:20.23},
+  {n:'Reykjavik',c:'Island',lat:64.14,lon:-21.94},{n:'Helsinki',c:'Finland',lat:60.17,lon:24.93},
+  {n:'Rovaniemi',c:'Finland',lat:66.50,lon:25.73},{n:'Luleå',c:'Sverige',lat:65.58,lon:22.16},
+  {n:'Bodø',c:'Norge',lat:67.28,lon:14.38},{n:'Abisko',c:'Sverige',lat:68.35,lon:18.83},
+  {n:'Fairbanks',c:'Alaska, USA',lat:64.84,lon:-147.72},{n:'Yellowknife',c:'Kanada',lat:62.45,lon:-114.37},
+  {n:'Longyearbyen',c:'Svalbard',lat:78.22,lon:15.63},{n:'Nuuk',c:'Grönland',lat:64.18,lon:-51.73},
+  {n:'Umeå',c:'Sverige',lat:63.83,lon:20.26},{n:'Sundsvall',c:'Sverige',lat:62.39,lon:17.30},
+  {n:'Göteborg',c:'Sverige',lat:57.71,lon:11.97},{n:'Malmö',c:'Sverige',lat:55.60,lon:13.00},
+];
+function openSearch(){document.getElementById('searchModal').classList.add('open');filterSearch('');setTimeout(()=>document.getElementById('searchInput').focus(),50);}
+function closeSearch(){document.getElementById('searchModal').classList.remove('open');document.getElementById('searchInput').value='';}
+function filterSearch(q){
+  const res=q?places.filter(p=>p.n.toLowerCase().includes(q.toLowerCase())||p.c.toLowerCase().includes(q.toLowerCase())):places;
+  document.getElementById('searchResults').innerHTML=res.map(p=>
+    `<div class="search-item" onclick="goTo(${p.lat},${p.lon},'${p.n}, ${p.c}')">
+      <span style="font-size:16px">📍</span>
+      <div><div class="si-name">${p.n}</div><div class="si-country">${p.c}</div></div>
+    </div>`).join('');
+}
+function goTo(lat,lon,name){map.setView([lat,lon],7);document.getElementById('locationName').textContent=name;closeSearch();}
+function returnHome(){map.setView([uLat,uLon],4);document.getElementById('locationName').textContent='Stockholm, Sverige';}
+
+// COLLAPSIBLE
+function toggleColl(id){
+  document.getElementById('bd-'+id).classList.toggle('open');
+  document.getElementById('arr-'+id).classList.toggle('open');
+}
+
+// CHART SETUP
+const gc='rgba(255,255,255,.05)',tc='#64748b';
+const tooltip={backgroundColor:'rgba(8,12,20,.95)',borderColor:'rgba(255,255,255,.1)',borderWidth:1,titleColor:'#94a3b8',bodyColor:'#e2e8f0',padding:10,cornerRadius:8};
+function scaleXY(xExtra={},yExtra={}){
+  return{x:{grid:{color:gc},ticks:{color:tc,font:{size:10}},...xExtra},
+         y:{grid:{color:gc},ticks:{color:tc,font:{size:10}},...yExtra}};
+}
+
+// KP HISTORY
+new Chart('cKpHist',{type:'bar',
+  data:{labels:['−21h','−18h','−15h','−12h','−9h','−6h','−3h','Nu'],
+    datasets:[{data:[1.7,2.2,1.9,2.8,3.3,4.1,4.8,5.3],
+      backgroundColor:['#38bdf8','#38bdf8','#38bdf8','#38bdf8','#fbbf24','#fbbf24','#fb923c','#f87171'],
+      borderRadius:5,borderSkipped:false}]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip},
+    scales:scaleXY({},{min:0,max:9})}
+});
+
+// KP FORECAST 3-day
+const fc3d=[5.3,5.7,6.1,6.3,5.8,5.2,4.6,4.0,3.5,3.0,2.7,2.4,2.1];
+new Chart('cKpFc3',{type:'bar',
+  data:{labels:['Nu','3h','6h','9h','12h','15h','18h','21h','24h','27h','30h','33h','36h'],
+    datasets:[{data:fc3d,
+      backgroundColor:fc3d.map(v=>v>=6?'#f87171':v>=5?'#fb923c':'#fbbf24'),
+      borderRadius:4,borderSkipped:false}]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip},
+    scales:scaleXY({ticks:{color:tc,font:{size:9}}},{min:0,max:9})}
+});
+
+// BZ
+new Chart('cBz',{type:'line',
+  data:{labels:['-60m','-50m','-40m','-30m','-20m','-10m','Nu'],
+    datasets:[{data:[2.1,-3.8,-8.1,-12.0,-14.2,-13.9,-14.2],
+      borderColor:'#22d3a0',backgroundColor:'rgba(34,211,160,.1)',
+      fill:true,tension:.4,pointRadius:3,borderWidth:2}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip},scales:scaleXY()}
+});
+
+// 7-DAY
+const min7=[1.5,2.0,3.5,4.0,2.0,1.5,1.2],rng7=[2.0,2.5,2.8,3.2,3.0,2.0,1.8];
+new Chart('cKp7d',{type:'bar',
+  data:{labels:['Mån 24','Tis 25','Ons 26','Tor 27','Fre 28','Lör 29','Sön 30'],
+    datasets:[
+      {label:'Min',data:min7,backgroundColor:'rgba(56,189,248,.15)',borderRadius:4,borderSkipped:false},
+      {label:'Spann',data:rng7,backgroundColor:['rgba(56,189,248,.4)','rgba(56,189,248,.4)','rgba(251,191,36,.5)','rgba(248,113,113,.55)','rgba(251,146,60,.45)','rgba(56,189,248,.3)','rgba(56,189,248,.25)'],borderRadius:4,borderSkipped:false}
+    ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:true,labels:{color:tc,font:{size:10},boxWidth:10}},tooltip},
+    scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:10}},stacked:true},y:{grid:{color:gc},ticks:{color:tc,font:{size:10}},min:0,max:9,stacked:true}}}
+});
+
+// DST
+new Chart('cDst',{type:'line',
+  data:{labels:Array.from({length:13},(_,i)=>i===12?'Nu':`-${(12-i)*4}h`),
+    datasets:[{data:[3,0,-4,-10,-18,-26,-34,-40,-45,-47,-46,-48,-48],
+      borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,.1)',
+      fill:true,tension:.4,pointRadius:2,borderWidth:2}]},
+  options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip},scales:scaleXY()}
+});
+
+// SOLAR WIND
+new Chart('cWind',{type:'line',
+  data:{labels:['-60m','-50m','-40m','-30m','-20m','-10m','Nu'],
+    datasets:[
+      {label:'Hastighet (km/s)',data:[556,568,582,596,605,609,612],borderColor:'#38bdf8',fill:false,tension:.3,pointRadius:3,borderWidth:2,yAxisID:'yS'},
+      {label:'Densitet (p/cm³)',data:[14.2,15.5,16.8,17.4,18.0,18.2,18.4],borderColor:'#fbbf24',fill:false,tension:.3,pointRadius:3,borderWidth:2,yAxisID:'yD'}
+    ]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:true,labels:{color:tc,font:{size:10},boxWidth:10}},tooltip},
+    scales:{
+      x:{grid:{color:gc},ticks:{color:tc,font:{size:10}}},
+      yS:{grid:{color:gc},ticks:{color:'#38bdf8',font:{size:10}},position:'left',title:{display:true,text:'km/s',color:'#38bdf8',font:{size:10}}},
+      yD:{grid:{display:false},ticks:{color:'#fbbf24',font:{size:10}},position:'right',title:{display:true,text:'p/cm³',color:'#fbbf24',font:{size:10}}}
+    }}
+});
+</script>
+</body>
+</html>
