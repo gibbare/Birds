@@ -654,95 +654,78 @@
     blitzSaveHistory();
   }
 
-  // ── PREDICTION (linear regression over last 40 visible strikes) ───────────────
+  // ── PREDICTION (centroid of new vs old strikes) ──────────────────────────────
   function blitzUpdatePrediction() {
     predLayer.clearLayers();
     const visible = blitzVisibleStrikes();
 
+    const setPredEmpty = hint => {
+      document.getElementById('pred-dir').textContent   = '–';
+      document.getElementById('pred-speed').textContent = hint;
+      document.getElementById('pred-dist').textContent  = '–';
+      document.getElementById('pred-trend').textContent = '–';
+    };
+
     if (visible.length < MIN_STRIKES_FOR_PRED) {
-      const hint = blitzMap.getZoom() < 7
-        ? 'Zooma in på storm'
-        : visible.length > 0 ? 'Väntar på data...' : '–';
-      document.getElementById('pred-dir').textContent   = '–';
-      document.getElementById('pred-speed').textContent = hint;
-      document.getElementById('pred-dist').textContent  = '–';
-      document.getElementById('pred-trend').textContent = '–';
+      setPredEmpty(blitzMap.getZoom() < 7 ? 'Zooma in på storm' : visible.length > 0 ? 'Väntar på data...' : '–');
       return;
     }
 
-    // Sort by time, cap at 40 strikes for regression
-    const sorted = [...visible].sort((a, b) => a.time - b.time).slice(-40);
-    const n  = sorted.length;
-    const t0 = sorted[0].time;
+    const now = Date.now();
+    const avg = (arr, key) => arr.reduce((a, s) => a + s[key], 0) / arr.length;
 
-    // Times in minutes from oldest strike
-    const times = sorted.map(s => (s.time - t0) / 60000);
-    const lats  = sorted.map(s => s.lat);
-    const lons  = sorted.map(s => s.lon);
+    // New strikes = yellow (0–10 min) → WHERE the storm is NOW
+    // Old strikes = red   (15–30 min) → WHERE the storm WAS
+    const binNew = visible.filter(s => now - s.time <  10 * 60000);
+    const binOld = visible.filter(s => now - s.time >= 15 * 60000);
 
-    const tMean   = times.reduce((a, b) => a + b) / n;
-    const latMean = lats.reduce((a, b) => a + b) / n;
-    const lonMean = lons.reduce((a, b) => a + b) / n;
-
-    let tVar = 0, latCov = 0, lonCov = 0;
-    for (let i = 0; i < n; i++) {
-      const dt = times[i] - tMean;
-      tVar   += dt * dt;
-      latCov += dt * (lats[i] - latMean);
-      lonCov += dt * (lons[i] - lonMean);
-    }
-
-    // Need at least 2 minutes of time spread for a meaningful regression
-    if (tVar < 1.0) {
-      const hint = blitzMap.getZoom() < 7 ? 'Zooma in på storm' : 'Beräknar...';
-      document.getElementById('pred-dir').textContent   = '–';
-      document.getElementById('pred-speed').textContent = hint;
-      document.getElementById('pred-dist').textContent  = '–';
-      document.getElementById('pred-trend').textContent = '–';
+    if (binNew.length < 5 || binOld.length < 5) {
+      setPredEmpty('Väntar på data...');
       return;
     }
 
-    // Velocity: degrees per minute
-    const dLatPerMin = latCov / tVar;
-    const dLonPerMin = lonCov / tVar;
+    // Centroids of each time window
+    const curLat = avg(binNew, 'lat');
+    const curLon = avg(binNew, 'lon');
+    const oldLat = avg(binOld, 'lat');
+    const oldLon = avg(binOld, 'lon');
 
-    const cosLat   = Math.cos(latMean * Math.PI / 180);
+    // Actual time gap between the two window centres
+    const tNew  = avg(binNew, 'time');
+    const tOld  = avg(binOld, 'time');
+    const dtMin = (tNew - tOld) / 60000;
+
+    if (dtMin < 5) { setPredEmpty('Beräknar...'); return; }
+
+    const dLat      = curLat - oldLat;
+    const dLon      = curLon - oldLon;
+    const dLatPerMin = dLat / dtMin;
+    const dLonPerMin = dLon / dtMin;
+
+    const cosLat   = Math.cos(curLat * Math.PI / 180);
     const speedKmh = Math.sqrt((dLatPerMin * 111) ** 2 + (dLonPerMin * 111 * cosLat) ** 2) * 60;
     const bear     = ((Math.atan2(dLonPerMin, dLatPerMin) * 180 / Math.PI) + 360) % 360;
-
-    // Current storm centre = average of 5 most recent visible strikes
-    const recent = sorted.slice(-5);
-    const curLat = recent.reduce((a, s) => a + s.lat, 0) / recent.length;
-    const curLon = recent.reduce((a, s) => a + s.lon, 0) / recent.length;
-
-    // Previous centre (5 strikes before recent) for trend direction
-    const prevGroup = sorted.slice(-10, -5);
-    const prevLat = prevGroup.length ? prevGroup.reduce((a, s) => a + s.lat, 0) / prevGroup.length : latMean;
-    const prevLon = prevGroup.length ? prevGroup.reduce((a, s) => a + s.lon, 0) / prevGroup.length : lonMean;
-
-    const distFromUser = blitzDistKm(curLat, curLon);
-    const prevDist     = blitzDistKm(prevLat, prevLon);
 
     // Predicted position PRED_MINUTES ahead
     const predLat = curLat + dLatPerMin * PRED_MINUTES;
     const predLon = curLon + dLonPerMin * PRED_MINUTES;
 
-    // Speed sanity check – thunderstorm cells rarely exceed 120 km/h
-    if (speedKmh > 250) {
-      document.getElementById('pred-dir').textContent   = '–';
-      document.getElementById('pred-speed').textContent = 'Otillräcklig data';
-      document.getElementById('pred-dist').textContent  = `${Math.round(distFromUser)} km`;
-      document.getElementById('pred-trend').textContent = '–';
+    // Speed sanity – storm cells rarely exceed 150 km/h
+    if (speedKmh > 200) {
+      setPredEmpty('Otillräcklig data');
       return;
     }
+
+    const distFromUser = blitzDistKm(curLat, curLon);
+    const prevDist     = blitzDistKm(oldLat, oldLon);
 
     const closeStrike = visible.some(s => blitzDistKm(s.lat, s.lon) <= 30);
     document.getElementById('pred-trend').textContent = closeStrike
       ? '⚠️ Blixt inom 30 km!'
       : distFromUser < prevDist ? '⚠️ Närmar sig' : '✅ Rör sig bort';
 
-    // Dashed trail: where storm came from → current position
-    L.polyline([[prevLat, prevLon], [curLat, curLon]], {
+    // Dashed trail: old centroid (red strikes) → current centroid (yellow strikes)
+    L.polyline([[oldLat, oldLon], [curLat, curLon]], {
       color: '#7eb8f7', weight: 2, opacity: 0.4, dashArray: '5 5'
     }).addTo(predLayer);
 
