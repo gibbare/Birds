@@ -1274,7 +1274,7 @@
   // ══════════════════════════════════════════════════════════════════
   let awMap = null;
   let awUserLat = null, awUserLon = null;
-  let awUserMarker = null, awAuroraLayers = [];
+  let awUserMarker = null, awAuroraLayers = [], awOvationLayer = null;
   let awCharts = {};
   let awAlertTexts = [];
   const NOAA = 'https://services.swpc.noaa.gov';
@@ -1319,10 +1319,7 @@
       awGpsLocate();
     }
 
-    // Draw static aurora oval (will update on Kp fetch)
-    awDrawAuroraOval(3.5);
-
-    // Fetch all data
+    // Fetch all data (includes OVATION aurora map)
     awFetchAll();
 
     // Auto-refresh every 10 minutes
@@ -1383,6 +1380,7 @@
       awFetchDst(),
       awFetchSolarWind(),
       awFetchAlerts(),
+      awFetchOvation(),
     ]);
   }
 
@@ -1409,8 +1407,6 @@
       const kpCurLbl = document.getElementById('aw-kp-cur-lbl');
       if (kpCurLbl) kpCurLbl.textContent = `Kp${Math.round(current)} ▲ Nu`;
       awUpdateKpStatus(current);
-      awDrawAuroraOval(current);
-
       awBuildBarChart('aw-c-kphist', labels, vals, true);
     } catch(e) { console.warn('Kp history error:', e); }
   }
@@ -1729,57 +1725,53 @@
     document.getElementById('aw-coords').textContent = `${lat.toFixed(1)}°N ${lon.toFixed(1)}°Ö`;
   }
 
-  // ── Aurora band on map (geomagnetic → geographic) ─────────────────
-  function awDrawAuroraOval(kp) {
-    awAuroraLayers.forEach(l => awMap.removeLayer(l));
-    awAuroraLayers = [];
+  // ── Aurora map: real NOAA OVATION probability data ───────────────
+  async function awFetchOvation() {
+    try {
+      const r = await fetch('https://services.swpc.noaa.gov/json/ovation_aurora_latest.json');
+      const data = await r.json();
 
-    const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+      // Remove previous overlay
+      if (awOvationLayer) { awMap.removeLayer(awOvationLayer); awOvationLayer = null; }
+      awAuroraLayers.forEach(l => awMap.removeLayer(l));
+      awAuroraLayers = [];
 
-    // Geomagnetic north pole position (geographic)
-    const pLat = 80.4 * D2R, pLon = -72.7 * D2R;
+      // Build a 720×362 canvas (2 px per degree) covering -180..180, -90..90
+      // OVATION lon 0-359 → geographic lon: lon ≤ 180 ? lon : lon - 360
+      const W = 720, H = 362;
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
 
-    // Angular distance from geomagnetic pole to oval centre
-    // At Kp=0 ≈ 20°, shifts equatorward ~2.5° per Kp unit
-    const cenDist = (20 + kp * 2.5) * D2R;
-    const halfW   = 4 * D2R; // half-width of auroral band
+      data.coordinates.forEach(([lon, lat, prob]) => {
+        if (prob <= 0) return;
+        const geoLon = lon <= 180 ? lon : lon - 360;
+        const x = Math.round((geoLon + 180) / 360 * W);
+        const y = Math.round((90 - lat) / 180 * H);
+        // Scale alpha so even 5% probability is somewhat visible
+        const a = Math.min(0.15 + (prob / 100) * 0.75, 0.9);
+        const rgb = prob > 70 ? '248,113,113' : prob > 40 ? '251,191,36' : '34,211,160';
+        ctx.fillStyle = `rgba(${rgb},${a})`;
+        ctx.fillRect(x - 1, y - 1, 4, 4); // 4×4 px blob per data point
+      });
 
-    // Generate a ring of geographic lat/lon points at a given
-    // angular distance from the geomagnetic pole
-    function ring(angDist) {
-      const pts = [];
-      for (let b = 0; b <= 360; b += 3) {
-        const br = b * D2R;
-        const sp = Math.sin(pLat) * Math.cos(angDist) +
-                   Math.cos(pLat) * Math.sin(angDist) * Math.cos(br);
-        const lat = Math.asin(Math.max(-1, Math.min(1, sp))) * R2D;
-        const dL  = Math.atan2(
-          Math.sin(br) * Math.sin(angDist) * Math.cos(pLat),
-          Math.cos(angDist) - Math.sin(pLat) * sp
-        );
-        const lon = (((pLon + dL) * R2D) + 540) % 360 - 180;
-        pts.push([lat, lon]);
+      awOvationLayer = L.imageOverlay(canvas.toDataURL(), [[-90, -180], [90, 180]], {
+        opacity: 0.9, interactive: false, className: 'aw-ovation'
+      }).addTo(awMap);
+
+      // Apply CSS blur for a natural glow effect
+      const ovEl = document.querySelector('.leaflet-image-layer.aw-ovation') ||
+                   document.querySelector('.aw-ovation');
+      if (ovEl) ovEl.style.filter = 'blur(4px)';
+
+      // Show forecast time
+      if (data['Forecast Time']) {
+        const ft = new Date(data['Forecast Time']);
+        const ts = ft.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+        document.getElementById('aw-updated').textContent =
+          `Uppdaterad ${new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'})} · OVATION-prognos ${ts}`;
       }
-      return pts;
-    }
-
-    const poleEdge = ring(Math.max(cenDist - halfW, 2 * D2R)); // poleward
-    const eqEdge   = ring(cenDist + halfW);                    // equatorward
-    const center   = ring(cenDist);
-
-    const color = kp >= 6 ? '#f87171' : kp >= 4 ? '#fbbf24' : '#22d3a0';
-
-    // Filled band between poleward and equatorward edges
-    const fill = L.polygon([...poleEdge, ...[...eqEdge].reverse()], {
-      color: 'transparent', fillColor: color, fillOpacity: 0.18, weight: 0
-    }).addTo(awMap);
-
-    // Bright centre line
-    const line = L.polyline(center, {
-      color, weight: 2.5, opacity: 0.85
-    }).addTo(awMap);
-
-    awAuroraLayers.push(fill, line);
+    } catch(e) { console.warn('OVATION error:', e); }
   }
 
   // ── Gauge helper ──────────────────────────────────────────────────
