@@ -308,7 +308,8 @@ body {
 .weather-desc {
   font-size: 0.9rem;
   color: #c0d0f0;
-  max-width: 100px;
+  align-self: flex-end;
+  padding-bottom: 3px;
 }
 
 .cards-grid {
