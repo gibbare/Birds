@@ -31,24 +31,34 @@
       background: rgba(8,12,20,.97); border-bottom: 1px solid rgba(255,255,255,.07);
       gap: 8px; min-height: 48px;
     }
-    #aw-loc-pill {
-      display: flex; align-items: center; gap: 8px;
-      background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
-      border-radius: 24px; padding: 5px 8px 5px 14px; flex: 1; min-width: 0;
+    #aw-loc-row {
+      display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
     }
     #aw-loc-name {
-      font-size: 13px; font-weight: 500; cursor: pointer;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      border-bottom: 1px dashed rgba(255,255,255,.25); transition: color .2s; flex: 1;
+      font-size: 1.3rem; font-weight: 700; color: #e0eaff; cursor: pointer;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+      transition: color .2s;
     }
     #aw-loc-name:hover { color: #22d3a0; }
-    #aw-pin-btn {
-      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
-      background: rgba(34,211,160,.12); border: 1px solid rgba(34,211,160,.3);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; font-size: 13px; transition: background .2s;
+    #aw-search-btn {
+      font-size: 15px; cursor: pointer; flex-shrink: 0; opacity: .6;
+      transition: opacity .2s; user-select: none;
     }
-    #aw-pin-btn:hover { background: rgba(34,211,160,.25); }
+    #aw-search-btn:hover { opacity: 1; }
+    #aw-pin-btn {
+      font-size: 15px; cursor: pointer; flex-shrink: 0; opacity: .6;
+      transition: opacity .2s; user-select: none;
+    }
+    #aw-pin-btn:hover { opacity: 1; }
+    /* map legend */
+    #aw-map-legend {
+      position: absolute; bottom: 8px; right: 8px; z-index: 500;
+      background: rgba(8,12,20,.85); border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px; padding: 6px 10px; font-size: 10px; color: #94a3b8;
+      display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+    }
+    .aw-ml-item { display: flex; align-items: center; gap: 6px; }
+    .aw-ml-swatch { width: 24px; height: 3px; border-radius: 2px; display: inline-block; }
     #aw-alert-btn {
       position: relative; flex-shrink: 0;
       background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3);
@@ -471,9 +481,10 @@
 
     <!-- Top bar -->
     <div id="aw-topbar">
-      <div id="aw-loc-pill">
-        <div id="aw-loc-name" onclick="awOpenSearch()">Stockholm, Sverige</div>
-        <div id="aw-pin-btn" onclick="awReturnHome()" title="Min position">📍</div>
+      <div id="aw-loc-row">
+        <h2 id="aw-loc-name" onclick="awOpenSearch()">—</h2>
+        <span id="aw-search-btn" onclick="awOpenSearch()" title="Sök plats">🔍</span>
+        <span id="aw-pin-btn" onclick="awReturnHome()" title="Min position">📍</span>
       </div>
       <div id="aw-kp-pill">
         <div>
@@ -490,6 +501,11 @@
     <!-- Map -->
     <div id="aw-map-wrap">
       <div id="aw-map"></div>
+      <div id="aw-map-legend">
+        <div class="aw-ml-item"><span class="aw-ml-swatch" style="background:#22d3a0"></span>Norrsken (Kp &lt; 4)</div>
+        <div class="aw-ml-item"><span class="aw-ml-swatch" style="background:#fbbf24"></span>Aktiv (Kp 4–5)</div>
+        <div class="aw-ml-item"><span class="aw-ml-swatch" style="background:#f87171"></span>Geomagnetisk storm (Kp 6+)</div>
+      </div>
     </div>
 
     <!-- TTS floating button -->
@@ -503,7 +519,7 @@
       <div class="aw-card">
         <div class="aw-card-title">📈 Kp-prognos · 3 dagar</div>
         <div class="aw-ch-meta">
-          <div><div id="aw-fc3-val" class="aw-ch-val aw-yellow">—</div><div class="aw-ch-sub">NOAA SWPC · <span style="color:#94a3b8">——</span> Molnighet %</div></div>
+          <div><div id="aw-fc3-val" class="aw-ch-val aw-yellow">—</div><div class="aw-ch-sub">NOAA SWPC</div></div>
           <div class="aw-ch-delta" id="aw-fc3-delta"></div>
         </div>
         <div class="aw-ch-wrap tall"><canvas id="aw-c-kpfc3"></canvas></div>
@@ -1390,7 +1406,8 @@
       document.getElementById('aw-hist-delta').textContent =
         `${diff >= 0 ? '↑' : '↓'} ${Math.abs(diff).toFixed(1)} vs föregående`;
       document.getElementById('aw-kp-big').textContent = current.toFixed(1);
-      document.getElementById('aw-kp-cur-lbl').textContent = `Kp${Math.round(current)} ▲ Nu`;
+      const kpCurLbl = document.getElementById('aw-kp-cur-lbl');
+      if (kpCurLbl) kpCurLbl.textContent = `Kp${Math.round(current)} ▲ Nu`;
       awUpdateKpStatus(current);
       awDrawAuroraOval(current);
 
@@ -1425,13 +1442,23 @@
       const kpVals   = [];
       const siktVals = []; // cloud cover % (0=klart, 100=mulet)
 
-      rows.forEach(r => {
+      const dayBoundaries = [];
+      rows.forEach((r, i) => {
         const d = new Date(r[0]);
         labels.push(d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}));
         kpVals.push(parseFloat(r[1]) || 0);
 
+        // Detect day change for chart separator
+        if (i > 0) {
+          const prev = new Date(rows[i-1][0]);
+          if (d.getDate() !== prev.getDate()) {
+            const dayLbl = d.toLocaleDateString('sv-SE',{weekday:'short',day:'numeric',month:'short'});
+            dayBoundaries.push({ index: i, label: dayLbl });
+          }
+        }
+
         // Match cloud cover: look for exact hour or nearest
-        const iso = d.toISOString().substring(0,13) + ':00'; // YYYY-MM-DDTHH:00
+        const iso = d.toISOString().substring(0,13) + ':00';
         const localIso = new Date(d.getTime()).toLocaleDateString('sv-SE') + 'T' +
           String(d.getHours()).padStart(2,'0') + ':00';
         const cc = cloudMap[localIso] ?? cloudMap[iso] ?? null;
@@ -1444,7 +1471,7 @@
       document.getElementById('aw-fc3-delta').textContent =
         maxVal >= 5 ? '🟡 Förhöjd aktivitet' : maxVal >= 3 ? '🟢 Måttlig aktivitet' : '🔵 Låg aktivitet';
 
-      awBuildForecastChart(labels, kpVals, siktVals);
+      awBuildForecastChart(labels, kpVals, siktVals, dayBoundaries);
     } catch(e) { console.warn('Kp forecast error:', e); }
   }
 
@@ -1702,29 +1729,57 @@
     document.getElementById('aw-coords').textContent = `${lat.toFixed(1)}°N ${lon.toFixed(1)}°Ö`;
   }
 
-  // ── Aurora oval on map ────────────────────────────────────────────
+  // ── Aurora band on map (geomagnetic → geographic) ─────────────────
   function awDrawAuroraOval(kp) {
     awAuroraLayers.forEach(l => awMap.removeLayer(l));
     awAuroraLayers = [];
-    const eqLat = 90 - (kp*7 + 28); // equatorward edge
-    const poleLat = eqLat + 8;      // poleward edge
-    [[78,15,.99,200],[76,12,.97,220],[74,20,.95,240],[72,15,.97,290],
-     [71,25,.93,280],[70,28,.94,260],[69,18,.88,260],[68,15,.85,240],
-     [67,20,.82,230],[66,-14,.84,210],[65,25,.78,220],[65,-18,.90,220],
-     [64,22,.75,200],[64,-22,.88,240],[63,28,.72,200],
-     [62,15,.62,190],[61,-2,.60,170],[60,25,.55,180],[59,18,.48,155],
-     [58,20,.40,160],[58,-4,.55,160],[57,10,.35,145],[56,15,.25,135],
-     [55,10,.16,120],[55,-1,.14,110]].forEach(([lat,lon,p,r]) => {
-      const visible = lat >= eqLat - 5;
-      if (!visible) return;
-      const alpha = Math.min(p, (lat - (eqLat-5)) / 15);
-      const c = alpha>.7?['rgba(34,211,160,.45)','rgba(34,211,160,.7)']:
-               alpha>.5?['rgba(56,189,248,.35)','rgba(56,189,248,.6)']:
-               alpha>.3?['rgba(167,139,250,.25)','rgba(167,139,250,.5)']:
-                        ['rgba(251,191,36,.15)','rgba(251,191,36,.35)'];
-      const layer = L.circle([lat,lon],{radius:r*1000,color:c[1],fillColor:c[0],fillOpacity:1,weight:1}).addTo(awMap);
-      awAuroraLayers.push(layer);
-    });
+
+    const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+
+    // Geomagnetic north pole position (geographic)
+    const pLat = 80.4 * D2R, pLon = -72.7 * D2R;
+
+    // Angular distance from geomagnetic pole to oval centre
+    // At Kp=0 ≈ 20°, shifts equatorward ~2.5° per Kp unit
+    const cenDist = (20 + kp * 2.5) * D2R;
+    const halfW   = 4 * D2R; // half-width of auroral band
+
+    // Generate a ring of geographic lat/lon points at a given
+    // angular distance from the geomagnetic pole
+    function ring(angDist) {
+      const pts = [];
+      for (let b = 0; b <= 360; b += 3) {
+        const br = b * D2R;
+        const sp = Math.sin(pLat) * Math.cos(angDist) +
+                   Math.cos(pLat) * Math.sin(angDist) * Math.cos(br);
+        const lat = Math.asin(Math.max(-1, Math.min(1, sp))) * R2D;
+        const dL  = Math.atan2(
+          Math.sin(br) * Math.sin(angDist) * Math.cos(pLat),
+          Math.cos(angDist) - Math.sin(pLat) * sp
+        );
+        const lon = (((pLon + dL) * R2D) + 540) % 360 - 180;
+        pts.push([lat, lon]);
+      }
+      return pts;
+    }
+
+    const poleEdge = ring(Math.max(cenDist - halfW, 2 * D2R)); // poleward
+    const eqEdge   = ring(cenDist + halfW);                    // equatorward
+    const center   = ring(cenDist);
+
+    const color = kp >= 6 ? '#f87171' : kp >= 4 ? '#fbbf24' : '#22d3a0';
+
+    // Filled band between poleward and equatorward edges
+    const fill = L.polygon([...poleEdge, ...[...eqEdge].reverse()], {
+      color: 'transparent', fillColor: color, fillOpacity: 0.18, weight: 0
+    }).addTo(awMap);
+
+    // Bright centre line
+    const line = L.polyline(center, {
+      color, weight: 2.5, opacity: 0.85
+    }).addTo(awMap);
+
+    awAuroraLayers.push(fill, line);
   }
 
   // ── Gauge helper ──────────────────────────────────────────────────
@@ -1830,8 +1885,8 @@
     borderWidth:1, titleColor:'#94a3b8', bodyColor:'#e2e8f0', padding:10, cornerRadius:8
   };
 
-  // Mixed chart: Kp bars + free-sky % line
-  function awBuildForecastChart(labels, kpVals, siktVals) {
+  // Mixed chart: Kp bars + cloud % line + day separators
+  function awBuildForecastChart(labels, kpVals, siktVals, dayBoundaries = []) {
     const id = 'aw-c-kpfc3';
     if (awCharts[id]) awCharts[id].destroy();
     const colors = kpVals.map(v => v>=6?'#f87171':v>=5?'#fb923c':v>=4?'#fbbf24':'#38bdf8');
@@ -1845,16 +1900,59 @@
         type:'line', label:'Molnighet %', data:siktVals,
         borderColor:'rgba(255,255,255,.75)', backgroundColor:'rgba(255,255,255,.07)',
         fill:true, tension:.4, pointRadius:3, pointBackgroundColor:'rgba(255,255,255,.9)',
-        borderWidth:2, yAxisID:'ySikt', order:1,
-        spanGaps:true
+        borderWidth:2, yAxisID:'ySikt', order:1, spanGaps:true,
+        pointStyle:'line'
       });
     }
+
+    // Plugin: draw vertical dashed day-separator lines with day labels
+    const dayLinesPlugin = {
+      id:'dayLines',
+      afterDraw(chart) {
+        if (!dayBoundaries.length) return;
+        const { ctx, chartArea, scales } = chart;
+        ctx.save();
+        dayBoundaries.forEach(({ index, label }) => {
+          const x = scales.x.getPixelForTick(index);
+          if (x < chartArea.left || x > chartArea.right) return;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = 'rgba(255,255,255,.22)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, chartArea.top);
+          ctx.lineTo(x, chartArea.bottom);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(255,255,255,.55)';
+          ctx.font = '9px system-ui,sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(label, x + 3, chartArea.top + 11);
+        });
+        ctx.restore();
+      }
+    };
+
     awCharts[id] = new Chart(id, {
       data:{ labels, datasets },
+      plugins:[dayLinesPlugin],
       options:{ responsive:true, maintainAspectRatio:false,
         interaction:{ mode:'index', intersect:false },
         plugins:{
-          legend:{ display:hasSikt, labels:{color:awTC, font:{size:10}, boxWidth:10} },
+          legend:{ display:hasSikt,
+            labels:{ color:awTC, font:{size:10},
+              usePointStyle:true,
+              generateLabels(chart) {
+                return chart.data.datasets.map((ds, i) => ({
+                  text: ds.label,
+                  pointStyle: ds.type === 'line' ? 'line' : 'rect',
+                  strokeStyle: ds.type === 'line' ? ds.borderColor : 'transparent',
+                  fillStyle: ds.type === 'line' ? 'transparent' : (Array.isArray(ds.backgroundColor) ? ds.backgroundColor[0] : ds.backgroundColor),
+                  lineWidth: ds.type === 'line' ? 2 : 0,
+                  datasetIndex: i
+                }));
+              }
+            }
+          },
           tooltip:{ ...awTooltip,
             callbacks:{
               label: ctx => ctx.dataset.yAxisID === 'ySikt'
