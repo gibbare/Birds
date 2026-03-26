@@ -876,9 +876,9 @@ body {
 
 #legend-body { margin-top: 7px; }
 
-#map-style-btn {
+#map-style-btn, #radar-btn {
   position: absolute;
-  bottom: 16px; left: 10px;
+  left: 10px;
   z-index: 900;
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.12);
@@ -892,6 +892,14 @@ body {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   transition: background 0.2s;
+}
+#map-style-btn { bottom: 16px; }
+#radar-btn     { bottom: 50px; }
+#map-style-btn:hover, #radar-btn:hover { background: rgba(255,255,255,0.14); }
+#radar-btn.active {
+  background: rgba(126,184,247,0.18);
+  border-color: rgba(126,184,247,0.4);
+  color: #7eb8f7;
 }
 
 #map-style-btn:hover { background: rgba(255,255,255,0.14); }

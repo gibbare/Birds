@@ -220,6 +220,7 @@
         </div>
       </div>
 
+      <button id="radar-btn" onclick="toggleRadar()">🌧 Radar</button>
       <button id="map-style-btn" onclick="toggleMapStyle()">☀️ Ljus</button>
     </div>
 
@@ -778,6 +779,52 @@
       : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
     blitzTileLayer.setUrl(url);
     document.getElementById('map-style-btn').textContent = blitzDarkMode ? '☀️ Ljus' : '🌙 Mörk';
+  }
+
+  let radarLayer = null;
+  let radarOn    = false;
+  let radarTimer = null;
+
+  async function loadRadarFrame() {
+    try {
+      const resp = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+      const data = await resp.json();
+      const frames = data.radar && data.radar.past;
+      if (!frames || !frames.length) return;
+      const latest  = frames[frames.length - 1];
+      const tileUrl = `${data.host}${latest.path}/256/{z}/{x}/{y}/2/1_0.png`;
+      if (radarLayer) {
+        radarLayer.setUrl(tileUrl);
+      } else {
+        radarLayer = L.tileLayer(tileUrl, {
+          opacity: 0.45,
+          attribution: '© <a href="https://www.rainviewer.com" target="_blank">RainViewer</a>',
+          maxZoom: 19,
+          zIndex: 200,
+        }).addTo(blitzMap);
+      }
+    } catch (e) {
+      console.warn('[Radar] fetch failed:', e.message);
+    }
+  }
+
+  async function toggleRadar() {
+    const btn = document.getElementById('radar-btn');
+    if (radarOn) {
+      if (radarLayer) { blitzMap.removeLayer(radarLayer); radarLayer = null; }
+      clearInterval(radarTimer); radarTimer = null;
+      radarOn = false;
+      btn.textContent = '🌧 Radar';
+      btn.classList.remove('active');
+    } else {
+      radarOn = true;
+      btn.textContent = '🌧 Laddar...';
+      await loadRadarFrame();
+      btn.textContent = '🌧 Radar ✓';
+      btn.classList.add('active');
+      // Refresh every 10 minutes to match RainViewer's update cycle
+      radarTimer = setInterval(loadRadarFrame, 10 * 60 * 1000);
+    }
   }
 
   function blitzRecenter() {
