@@ -433,8 +433,8 @@ function renderDayDetailList(dayData, lat, lon) {
 
   el.innerHTML = `
     <div class="sun-info">
-      <span>🌅 ${sunriseStr}</span>
-      <span>🌇 ${sunsetStr}</span>
+      <span>&#9651; ${sunriseStr}</span>
+      <span>&#9661; ${sunsetStr}</span>
     </div>
     <div class="hour-header">
       <span class="hr-time">TID</span>
@@ -570,6 +570,13 @@ function renderWeather(data) {
   document.getElementById('precip').textContent       = precip != null ? precip.toFixed(1) : '--';
   document.getElementById('feels-like').textContent   = wind != null ? feelsLike(temp, wind) : Math.round(temp);
   document.getElementById('weather-desc').textContent = WEATHER_SYMBOLS[symbol] || '--';
+
+  // Sunrise/sunset in main card
+  const nowDate = new Date(data.timeSeries[0].validTime);
+  const { sunrise: sr0, sunset: ss0 } = sunriseSunset(nowDate, _currentLat, _currentLon);
+  const fmtT = d => d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '--';
+  document.getElementById('main-sun-times').innerHTML =
+    `<span>&#9651; ${fmtT(sr0)}</span><span>&#9661; ${fmtT(ss0)}</span>`;
 
   drawDaySummary(buildDaySummaries(data.timeSeries));
   drawForecastChart(data.timeSeries);

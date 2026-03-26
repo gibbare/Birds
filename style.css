@@ -270,6 +270,21 @@ body {
   display: flex;
   align-items: flex-start;
   line-height: 1;
+  gap: 6px;
+}
+
+.main-sun-times {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  margin-left: auto;
+  padding-top: 4px;
+  font-size: 0.78rem;
+  color: #f7c948;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 .temp-value {
