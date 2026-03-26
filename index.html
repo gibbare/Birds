@@ -1471,42 +1471,40 @@
     } catch(e) { console.warn('Kp forecast error:', e); }
   }
 
-  // ── Kp 7-day (3 dagar historik + upp till 4 dagar prognos) ────────
+  // ── Kp multi-day (3 dagar historik + alla prognosdagar från NOAA) ──
   async function awFetchKp7Day() {
     try {
       const r = await fetch(`${NOAA}/products/noaa-planetary-k-index-forecast.json`);
-      const raw = await r.json();
-      // raw: [[time_tag, Kp, type, ...], ...]  type = observed/estimated/predicted
-      // Group by calendar day over a 7-day window (-3 to +4 from today)
-      const now = new Date();
-      const todayStr = now.toDateString();
+      const raw = await r.json(); // [[time_tag, Kp, type], ...]
 
+      const now = new Date();
       const byDay   = {};
-      const dayMeta = {}; // is it observed or predicted?
+      const dayMeta = {};
       const dayOrder = [];
 
       raw.forEach(row => {
         const d = new Date(row[0]);
         if (isNaN(d)) return;
-        // Only keep rows within -3 to +4 days from today
         const diffDays = (d - now) / 86400000;
-        if (diffDays < -3.1 || diffDays > 4.1) return;
-        const key = d.toLocaleDateString('sv-SE',{weekday:'short', day:'numeric'});
-        if (!byDay[key]) { byDay[key] = []; dayOrder.push(key); dayMeta[key] = row[2]; }
-        const kp = parseFloat(row[1]) || 0;
-        byDay[key].push(kp);
+        if (diffDays < -3.1) return; // max 3 historiska dagar
+        // No upper cap — include all available predicted days
+        const type = row[2] || 'observed';
+        const key = d.toLocaleDateString('sv-SE', {weekday:'short', day:'numeric'});
+        if (!byDay[key]) { byDay[key] = []; dayOrder.push(key); }
+        if (!dayMeta[key]) dayMeta[key] = type;
+        byDay[key].push(parseFloat(row[1]) || 0);
       });
 
-      const days  = [...new Set(dayOrder)].slice(0, 7);
+      const days = [...new Set(dayOrder)];
       if (!days.length) return;
 
-      const mins    = days.map(d => Math.min(...byDay[d]));
-      const maxes   = days.map(d => Math.max(...byDay[d]));
-      const isPred  = days.map(d => dayMeta[d] === 'predicted');
+      const mins   = days.map(d => Math.min(...byDay[d]));
+      const maxes  = days.map(d => Math.max(...byDay[d]));
+      const isPred = days.map(d => dayMeta[d] === 'predicted');
 
       const predMaxes = maxes.filter((_, i) => isPred[i]);
-      const maxKp7 = predMaxes.length ? Math.max(...predMaxes) : Math.max(...maxes);
-      const maxDay7 = days[maxes.indexOf(maxKp7)];
+      const maxKp7  = predMaxes.length ? Math.max(...predMaxes) : Math.max(...maxes);
+      const maxDay7 = days[maxes.indexOf(Math.max(...maxes))];
       document.getElementById('aw-7d-val').textContent = `Max ${maxKp7.toFixed(1)}`;
       document.getElementById('aw-7d-day').textContent = maxDay7;
 
