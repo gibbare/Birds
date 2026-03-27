@@ -2130,37 +2130,42 @@
   }
 
   async function awToggleNotifications() {
+    console.log('[Push] awToggleNotifications called, awSwReg=', awSwReg);
     if (!awSwReg) {
-      console.warn('awSwReg is null — SW not registered');
       alert('Service Worker kunde inte registreras. Kontrollera konsolen (F12).');
       return;
     }
     const existing = await awSwReg.pushManager.getSubscription();
+    console.log('[Push] existing subscription:', existing ? 'JA' : 'NEJ');
     if (existing) {
-      // Unsubscribe
+      console.log('[Push] Avprenumererar...');
       await existing.unsubscribe();
       await fetch(`${AW_WORKER_URL}/unsubscribe`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription: existing })
-      }).catch(() => {});
+      }).catch(e => console.warn('[Push] unsubscribe fetch failed:', e));
       awUpdateNotifBtn('off');
+      console.log('[Push] Avprenumererad.');
     } else {
-      // Request permission + subscribe
       const perm = await Notification.requestPermission();
+      console.log('[Push] Notistillstånd:', perm);
       if (perm !== 'granted') { awUpdateNotifBtn('denied'); return; }
       try {
+        console.log('[Push] Prenumererar med VAPID key:', AW_VAPID_PUBLIC_KEY.substring(0, 20) + '...');
         const sub = await awSwReg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(AW_VAPID_PUBLIC_KEY)
         });
-        await fetch(`${AW_WORKER_URL}/subscribe`, {
+        console.log('[Push] Prenumeration OK, skickar till worker:', AW_WORKER_URL);
+        const res = await fetch(`${AW_WORKER_URL}/subscribe`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subscription: sub, lat: awUserLat || 59.33, lon: awUserLon || 18.07 })
         });
+        console.log('[Push] Worker svar:', res.status, res.ok ? 'OK' : 'FEL');
         awUpdateNotifBtn('active');
-      } catch(e) { console.warn('Push subscribe failed:', e); }
+      } catch(e) { console.warn('[Push] subscribe failed:', e.message, e); alert('Push-fel: ' + e.message); }
     }
   }
 
