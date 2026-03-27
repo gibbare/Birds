@@ -1,7 +1,6 @@
 name = "aurora-push"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
-compatibility_flags = ["nodejs_compat"]
 
 # KV namespace for storing push subscriptions
 # After creating: wrangler kv:namespace create SUBS
