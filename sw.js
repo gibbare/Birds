@@ -2,7 +2,8 @@
 const APP_ICON = '/icons/icon-192.png';
 
 self.addEventListener('push', event => {
-  const data = event.data?.json() ?? {};
+  let data = {};
+  try { data = event.data?.json() ?? {}; } catch {}
   event.waitUntil(
     self.registration.showNotification(data.title ?? '🌌 Aurora Alert', {
       body:      data.body   ?? '',
