@@ -1342,7 +1342,7 @@
     if ('speechSynthesis' in window) {
       document.getElementById('aw-tts-btn').classList.add('visible');
     }
-  }
+
 
   // Apply a location to map, UI and optionally save to localStorage
   function awApplyLocation(lat, lon, name, save = true) {
@@ -2110,9 +2110,9 @@
     });
   }
   // ── Push Notifications ───────────────────────────────────────────
-  // Replace these two values after running setup steps:
+  // Fyll i VAPID Public Key från vapidkeys.com efter att du deployat workern:
   const AW_VAPID_PUBLIC_KEY  = 'REPLACE_WITH_YOUR_VAPID_PUBLIC_KEY';
-  const AW_WORKER_URL        = 'REPLACE_WITH_YOUR_WORKER_URL'; // e.g. https://aurora-push.username.workers.dev
+  const AW_WORKER_URL        = 'https://aurora-push.gibbare.workers.dev';
 
   let awSwReg = null;
 
