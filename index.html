@@ -1435,15 +1435,24 @@
         cloudMap[t] = rawCloud.hourly.cloud_cover[i] ?? null;
       });
 
-      // Kp: next 36h of predicted values
-      const rows = rawKp.filter(r => r[2] === 'predicted').slice(0, 13);
+      // Kp: today's remaining hours + next 2 full days
+      const now = new Date();
+      const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3);
+      const rows = rawKp.filter(r => {
+        const d = new Date(r[0]);
+        return d >= now && d < cutoff;
+      });
       if (!rows.length) return;
 
       const labels   = [];
       const kpVals   = [];
       const siktVals = []; // cloud cover % (0=klart, 100=mulet)
 
+      // First day label at index 0
       const dayBoundaries = [];
+      const firstDate = new Date(rows[0][0]);
+      dayBoundaries.push({ index: 0, label: firstDate.toLocaleDateString('sv-SE',{weekday:'short',day:'numeric',month:'short'}) });
+
       rows.forEach((r, i) => {
         const d = new Date(r[0]);
         labels.push(d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}));
@@ -2050,7 +2059,9 @@
           }
         },
         scales:{
-          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}, maxRotation:0} , stacked:true },
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}, maxRotation:0,
+            callback(val, i) { const l = labels[i] || ''; return l[0]?.toUpperCase() || ''; }
+          }, stacked:true },
           y:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}, stepSize:3}, min:0, max:9, stacked:true }
         }}
     });
