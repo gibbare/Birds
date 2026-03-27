@@ -59,6 +59,13 @@
     }
     .aw-ml-item { display: flex; align-items: center; gap: 6px; }
     .aw-ml-swatch { width: 24px; height: 3px; border-radius: 2px; display: inline-block; }
+    #aw-notif-btn {
+      flex-shrink: 0; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13);
+      border-radius: 8px; padding: 5px 10px; color: #64748b;
+      font-size: 16px; cursor: pointer; transition: all .2s; line-height: 1;
+    }
+    #aw-notif-btn.active { color: #22d3a0; border-color: rgba(34,211,160,.4); background: rgba(34,211,160,.08); }
+    #aw-notif-btn.denied { color: #f87171; border-color: rgba(248,113,113,.3); }
     #aw-alert-btn {
       position: relative; flex-shrink: 0;
       background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3);
@@ -497,6 +504,7 @@
           <div id="aw-kp-status" class="aw-green"></div>
         </div>
       </div>
+      <button id="aw-notif-btn" onclick="awToggleNotifications()" title="Aktivera notiser">🔔</button>
       <button id="aw-alert-btn" onclick="awScrollToAlerts()">
         ⚠ Varningar<div id="aw-alert-badge">0</div>
       </button>
@@ -2101,6 +2109,74 @@
         }}
     });
   }
+  // ── Push Notifications ───────────────────────────────────────────
+  // Replace these two values after running setup steps:
+  const AW_VAPID_PUBLIC_KEY  = 'REPLACE_WITH_YOUR_VAPID_PUBLIC_KEY';
+  const AW_WORKER_URL        = 'REPLACE_WITH_YOUR_WORKER_URL'; // e.g. https://aurora-push.username.workers.dev
+
+  let awSwReg = null;
+
+  async function awInitNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    try {
+      awSwReg = await navigator.serviceWorker.register('/sw.js');
+      // Update button to reflect current state
+      const sub = await awSwReg.pushManager.getSubscription();
+      awUpdateNotifBtn(sub ? 'active' : 'off');
+    } catch(e) { console.warn('SW register failed:', e); }
+  }
+
+  async function awToggleNotifications() {
+    if (!awSwReg) return;
+    const existing = await awSwReg.pushManager.getSubscription();
+    if (existing) {
+      // Unsubscribe
+      await existing.unsubscribe();
+      await fetch(`${AW_WORKER_URL}/unsubscribe`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: existing })
+      }).catch(() => {});
+      awUpdateNotifBtn('off');
+    } else {
+      // Request permission + subscribe
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { awUpdateNotifBtn('denied'); return; }
+      try {
+        const sub = await awSwReg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(AW_VAPID_PUBLIC_KEY)
+        });
+        await fetch(`${AW_WORKER_URL}/subscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: sub, lat: awUserLat || 59.33, lon: awUserLon || 18.07 })
+        });
+        awUpdateNotifBtn('active');
+      } catch(e) { console.warn('Push subscribe failed:', e); }
+    }
+  }
+
+  function awUpdateNotifBtn(state) {
+    const btn = document.getElementById('aw-notif-btn');
+    if (!btn) return;
+    btn.className = state === 'active' ? 'active' : state === 'denied' ? 'denied' : '';
+    btn.title = state === 'active' ? 'Notiser aktiverade – klicka för att stänga av'
+              : state === 'denied' ? 'Notiser blockerade i webbläsaren'
+              : 'Aktivera notiser';
+    btn.textContent = state === 'active' ? '🔔' : state === 'denied' ? '🔕' : '🔔';
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  }
+
+  // Init service worker when aurora view loads
+  awInitNotifications();
+
   // ── END AURORA APP ───────────────────────────────────────────────
 
   // Start buffering strikes to localStorage immediately on page load
