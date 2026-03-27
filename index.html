@@ -133,16 +133,20 @@
     .aw-info-row { display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
     .aw-info-row span:last-child { color: #e2e8f0; font-weight: 500; }
 
+    /* Fokusdata – kombinerad lokal info + snabbvärden */
+    .aw-focus-layout { display: flex; gap: 12px; align-items: flex-start; }
+    .aw-focus-info { flex: 1; min-width: 0; }
+    .aw-focus-stats { flex: 0 0 47%; }
     /* Quick stats 2x2 */
-    .aw-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .aw-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .aw-stat-card {
       background: #121929; border: 1px solid rgba(255,255,255,.07);
-      border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: border-color .2s;
+      border-radius: 7px; padding: 7px 9px; cursor: pointer; transition: border-color .2s;
     }
     .aw-stat-card:hover { border-color: rgba(255,255,255,.15); }
-    .aw-stat-lbl { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
-    .aw-stat-val { font-size: 22px; font-weight: 700; margin: 3px 0 1px; line-height: 1; }
-    .aw-stat-unit { font-size: 10px; color: #94a3b8; }
+    .aw-stat-lbl { font-size: 9px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .aw-stat-val { font-size: 18px; font-weight: 700; margin: 2px 0 1px; line-height: 1; }
+    .aw-stat-unit { font-size: 9px; color: #94a3b8; }
 
     /* Collapsible */
     .aw-coll { margin-bottom: 10px; }
@@ -525,45 +529,46 @@
         <div class="aw-ch-wrap tall"><canvas id="aw-c-kpfc3"></canvas></div>
       </div>
 
-      <!-- 3. Lokal info -->
+      <!-- 3+5. Fokusdata (Lokal info + Snabbvärden) -->
       <div class="aw-card">
-        <div class="aw-card-title">🌅 Lokal info</div>
-        <div class="aw-info-row"><span>Solnedgång</span><span id="aw-sunset">—</span></div>
-        <div class="aw-info-row"><span>Soluppgång</span><span id="aw-sunrise">—</span></div>
-        <div class="aw-info-row"><span>Molntäcke</span><span id="aw-cloud">—</span></div>
-        <div class="aw-info-row"><span>Astronomisk mörker</span><span id="aw-astro">—</span></div>
-        <div class="aw-info-row" style="margin-bottom:0"><span>Koordinater</span><span id="aw-coords">—</span></div>
-      </div>
-
-      <!-- 5. Snabbvärden -->
-      <div class="aw-card">
-        <div class="aw-card-title">⚡ Snabbvärden</div>
-        <div class="aw-stats-grid">
-          <div class="aw-stat-card" onclick="awOpenColl('bz')">
-            <div class="aw-stat-lbl">Bz (IMF)</div>
-            <div class="aw-stat-val aw-green" id="aw-bz-val">—</div>
-            <div class="aw-stat-unit" id="aw-bz-dir">nT</div>
+        <div class="aw-card-title">📍 Fokusdata</div>
+        <div class="aw-focus-layout">
+          <div class="aw-focus-info">
+            <div class="aw-info-row"><span>Solnedgång</span><span id="aw-sunset">—</span></div>
+            <div class="aw-info-row"><span>Soluppgång</span><span id="aw-sunrise">—</span></div>
+            <div class="aw-info-row"><span>Molntäcke</span><span id="aw-cloud">—</span></div>
+            <div class="aw-info-row"><span>Astron. mörker</span><span id="aw-astro">—</span></div>
+            <div class="aw-info-row" style="margin-bottom:0"><span>Koordinater</span><span id="aw-coords">—</span></div>
           </div>
-          <div class="aw-stat-card" onclick="awOpenColl('wind')">
-            <div class="aw-stat-lbl">Solvind</div>
-            <div class="aw-stat-val aw-blue" id="aw-speed-val">—</div>
-            <div class="aw-stat-unit">km/s</div>
-          </div>
-          <div class="aw-stat-card" onclick="awOpenColl('dst')">
-            <div class="aw-stat-lbl">Dst-index</div>
-            <div class="aw-stat-val aw-purple" id="aw-dst-val">—</div>
-            <div class="aw-stat-unit">nT</div>
-          </div>
-          <div class="aw-stat-card" onclick="awOpenColl('wind')">
-            <div class="aw-stat-lbl">Densitet</div>
-            <div class="aw-stat-val aw-yellow" id="aw-dens-val">—</div>
-            <div class="aw-stat-unit">p/cm³</div>
+          <div class="aw-focus-stats">
+            <div class="aw-stats-grid">
+              <div class="aw-stat-card" onclick="awOpenColl('bz')">
+                <div class="aw-stat-lbl">Bz (IMF)</div>
+                <div class="aw-stat-val aw-green" id="aw-bz-val">—</div>
+                <div class="aw-stat-unit" id="aw-bz-dir">nT</div>
+              </div>
+              <div class="aw-stat-card" onclick="awOpenColl('wind')">
+                <div class="aw-stat-lbl">Solvind</div>
+                <div class="aw-stat-val aw-blue" id="aw-speed-val">—</div>
+                <div class="aw-stat-unit">km/s</div>
+              </div>
+              <div class="aw-stat-card" onclick="awOpenColl('dst')">
+                <div class="aw-stat-lbl">Dst-index</div>
+                <div class="aw-stat-val aw-purple" id="aw-dst-val">—</div>
+                <div class="aw-stat-unit">nT</div>
+              </div>
+              <div class="aw-stat-card" onclick="awOpenColl('wind')">
+                <div class="aw-stat-lbl">Densitet</div>
+                <div class="aw-stat-val aw-yellow" id="aw-dens-val">—</div>
+                <div class="aw-stat-unit">p/cm³</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- 6. 7-dagars Kp-prognos -->
-      <div class="aw-card">
+      <div class="aw-card" id="aw-card-kp7d">
         <div class="aw-card-title">📅 7-dagars Kp-prognos</div>
         <div class="aw-ch-meta">
           <div><div id="aw-7d-val" class="aw-ch-val aw-blue">—</div><div class="aw-ch-sub">Lång sikt · NOAA-modell</div></div>
@@ -1471,34 +1476,68 @@
     } catch(e) { console.warn('Kp forecast error:', e); }
   }
 
-  // ── Kp multi-day (3 dagar historik + alla prognosdagar från NOAA) ──
+  // ── Kp multi-day: 1 dag historik + upp till 27 dagar framåt (27-dagarsprognos) ──
   async function awFetchKp7Day() {
+    const card = document.getElementById('aw-card-kp7d');
     try {
-      const r = await fetch(`${NOAA}/products/noaa-planetary-k-index-forecast.json`);
-      const raw = await r.json(); // [[time_tag, Kp, type], ...]
+      const [fcR, outlookR] = await Promise.all([
+        fetch(`${NOAA}/products/noaa-planetary-k-index-forecast.json`),
+        fetch(`${NOAA}/text/27-day-outlook.txt`)
+      ]);
+      const fcRaw   = await fcR.json();
+      const outlook = await outlookR.text();
 
       const now = new Date();
       const byDay   = {};
       const dayMeta = {};
       const dayOrder = [];
 
-      raw.forEach(row => {
+      function key(d) { return d.toLocaleDateString('sv-SE', {weekday:'short', day:'numeric'}); }
+      function push(d, kp, type) {
+        const k = key(d);
+        if (!byDay[k]) { byDay[k] = []; dayOrder.push(k); }
+        if (!dayMeta[k]) dayMeta[k] = type;
+        byDay[k].push(kp);
+      }
+
+      // Past 1 day: 3-hourly observed/estimated from forecast JSON
+      fcRaw.forEach(row => {
         const d = new Date(row[0]);
         if (isNaN(d)) return;
-        const diffDays = (d - now) / 86400000;
-        if (diffDays < -3.1) return; // max 3 historiska dagar
-        // No upper cap — include all available predicted days
+        const diff = (d - now) / 86400000;
+        if (diff < -1.1 || diff > 0.1) return; // only yesterday
         const type = row[2] || 'observed';
-        const key = d.toLocaleDateString('sv-SE', {weekday:'short', day:'numeric'});
-        if (!byDay[key]) { byDay[key] = []; dayOrder.push(key); }
-        if (!dayMeta[key]) dayMeta[key] = type;
-        byDay[key].push(parseFloat(row[1]) || 0);
+        if (type === 'predicted') return;
+        push(d, parseFloat(row[1]) || 0, type);
+      });
+
+      // Future days: parse daily Kp from 27-day text outlook
+      // Format: "2026 03 27  130  8  3"  or  "2026 Mar 27  130  8  3"
+      // Columns: year month day flux aIndex kp
+      const monthNames = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      outlook.split('\n').forEach(line => {
+        if (!/^\d{4}\s+\S+\s+\d+/.test(line)) return;
+        const p = line.trim().split(/\s+/);
+        if (p.length < 6) return;
+        const yr = parseInt(p[0]);
+        const mo = isNaN(p[1]) ? (monthNames[p[1].toLowerCase()] ?? -1) : parseInt(p[1]) - 1;
+        const dy = parseInt(p[2]);
+        if (mo < 0 || isNaN(yr) || isNaN(dy)) return;
+        const d = new Date(yr, mo, dy);
+        if (isNaN(d)) return;
+        const diff = (d - now) / 86400000;
+        if (diff < 0.5 || diff > 27.5) return;
+        push(d, parseFloat(p[5]) || 0, 'predicted');
       });
 
       const days = [...new Set(dayOrder)];
-      if (!days.length) return;
+      const futureCount = days.filter((d, i) => dayMeta[d] === 'predicted').length;
 
-      const mins   = days.map(d => Math.min(...byDay[d]));
+      // Hide card if fewer than 3 forward days available
+      if (card) card.style.display = futureCount < 3 ? 'none' : '';
+      if (futureCount < 3) return;
+
+      const mins   = days.map(d => byDay[d].length > 1 ? Math.min(...byDay[d]) : 0);
       const maxes  = days.map(d => Math.max(...byDay[d]));
       const isPred = days.map(d => dayMeta[d] === 'predicted');
 
@@ -1509,7 +1548,7 @@
       document.getElementById('aw-7d-day').textContent = maxDay7;
 
       awBuild7DayChart(days, mins, maxes, isPred);
-    } catch(e) { console.warn('Kp 7-day error:', e); }
+    } catch(e) { console.warn('Kp 7-day error:', e); if (card) card.style.display = 'none'; }
   }
 
   // ── DST ───────────────────────────────────────────────────────────
@@ -1929,7 +1968,7 @@
         interaction:{ mode:'index', intersect:false },
         plugins:{
           legend:{ display:hasSikt,
-            labels:{ color:awTC, font:{size:10},
+            labels:{ color:'#cbd5e1', font:{size:10},
               usePointStyle:true,
               generateLabels(chart) {
                 return chart.data.datasets.map((ds, i) => ({
