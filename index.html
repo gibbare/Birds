@@ -2117,17 +2117,24 @@
   let awSwReg = null;
 
   async function awInitNotifications() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.warn('Push not supported in this browser');
+      return;
+    }
     try {
       awSwReg = await navigator.serviceWorker.register('/sw.js');
-      // Update button to reflect current state
+      console.log('SW registered, scope:', awSwReg.scope);
       const sub = await awSwReg.pushManager.getSubscription();
       awUpdateNotifBtn(sub ? 'active' : 'off');
-    } catch(e) { console.warn('SW register failed:', e); }
+    } catch(e) { console.warn('SW register failed:', e.message, e); }
   }
 
   async function awToggleNotifications() {
-    if (!awSwReg) return;
+    if (!awSwReg) {
+      console.warn('awSwReg is null — SW not registered');
+      alert('Service Worker kunde inte registreras. Kontrollera konsolen (F12).');
+      return;
+    }
     const existing = await awSwReg.pushManager.getSubscription();
     if (existing) {
       // Unsubscribe
