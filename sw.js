@@ -1,17 +1,24 @@
 // Aurora Push Notifications – Service Worker
-const APP_ICON = '/icons/icon-192.png';
+const WORKER_URL = 'https://aurora-push.gibbare.workers.dev';
 
 self.addEventListener('push', event => {
-  let data = {};
-  try { data = event.data?.json() ?? {}; } catch {}
-  event.waitUntil(
-    self.registration.showNotification(data.title ?? '🌌 Aurora Alert', {
-      body:     data.body ?? '',
-      tag:      data.tag  ?? 'aurora',
-      renotify: true,
-      data:     { url: '/' }
-    })
-  );
+  event.waitUntil((async () => {
+    let title = '🌌 Aurora Alert';
+    let body  = 'Öppna appen för att se uppdateringar.';
+    let tag   = 'aurora';
+    try {
+      const res = await fetch(`${WORKER_URL}/latest`);
+      if (res.ok) {
+        const d = await res.json();
+        title = d.title || title;
+        body  = d.body  || body;
+        tag   = d.tag   || tag;
+      }
+    } catch {}
+    await self.registration.showNotification(title, {
+      body, tag, renotify: true, data: { url: '/' }
+    });
+  })());
 });
 
 self.addEventListener('notificationclick', event => {
