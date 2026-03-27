@@ -6,13 +6,10 @@ self.addEventListener('push', event => {
   try { data = event.data?.json() ?? {}; } catch {}
   event.waitUntil(
     self.registration.showNotification(data.title ?? '🌌 Aurora Alert', {
-      body:      data.body   ?? '',
-      icon:      APP_ICON,
-      badge:     APP_ICON,
-      tag:       data.tag    ?? 'aurora',
-      renotify:  true,
-      vibrate:   [200, 100, 200],
-      data:      { url: '/' }
+      body:     data.body ?? '',
+      tag:      data.tag  ?? 'aurora',
+      renotify: true,
+      data:     { url: '/' }
     })
   );
 });
