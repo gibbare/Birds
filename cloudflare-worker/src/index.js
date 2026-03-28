@@ -66,11 +66,13 @@ export default {
 
   // ── Schemalagd körning var 10:e minut ─────────────────────────────────
   async scheduled(_event, env) {
-    const [kpRes, alertRes] = await Promise.all([
+    const [kpRes, fcRes, alertRes] = await Promise.all([
       fetch('https://services.swpc.noaa.gov/json/boulder_k_index_1m.json'),
+      fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json'),
       fetch('https://services.swpc.noaa.gov/products/alerts.json'),
     ]);
     const kpData    = await kpRes.json();
+    const fcData    = await fcRes.json();
     const alertData = await alertRes.json();
 
     const currentKp   = parseFloat(kpData.at(-1)?.[1] ?? 0);
@@ -78,12 +80,24 @@ export default {
       Date.now() - new Date(a.issue_datetime).getTime() < 11 * 60 * 1000
     );
 
+    // Kp-prognos: max-värde de närmaste 6 timmarna
+    const now = Date.now();
+    const forecastKp = fcData
+      .filter(row => {
+        const t = new Date(row[0]).getTime();
+        return t > now && t <= now + 6 * 3600 * 1000 && row[2] === 'predicted';
+      })
+      .reduce((max, row) => Math.max(max, parseFloat(row[1]) || 0), 0);
+
     const { keys } = await env.SUBS.list();
     if (!keys.length) return;
 
-    const lastKpAlert  = parseInt(await env.SUBS.get('__kp_last') ?? '0');
-    const kpCooledDown = Date.now() - lastKpAlert > KP_COOLDOWN_MS;
+    const lastKpAlert    = parseInt(await env.SUBS.get('__kp_last') ?? '0');
+    const lastFcAlert    = parseInt(await env.SUBS.get('__kp_fc_last') ?? '0');
+    const kpCooledDown   = Date.now() - lastKpAlert > KP_COOLDOWN_MS;
+    const fcCooledDown   = Date.now() - lastFcAlert > KP_COOLDOWN_MS;
     let sentKpAlert = false;
+    let sentFcAlert = false;
 
     for (const { name } of keys) {
       if (!name.startsWith('sub_')) continue;
@@ -98,7 +112,7 @@ export default {
         cloud = (await r.json()).current?.cloud_cover ?? 100;
       } catch {}
 
-      // Kp > 4 + molnighet < 20%
+      // Aktuellt Kp > 4 + molnighet < 20%
       if (currentKp > 4 && cloud < 20 && kpCooledDown) {
         const msg = {
           title: '🌌 Aurora möjlig!',
@@ -108,6 +122,18 @@ export default {
         await env.SUBS.put('__latest_alert', JSON.stringify(msg), { expirationTtl: 3600 });
         const ok = await sendPush(subscription, env);
         if (ok) sentKpAlert = true;
+      }
+
+      // Prognos: Kp > 4 inom 6 timmar
+      if (forecastKp > 4 && fcCooledDown) {
+        const msg = {
+          title: '🌌 Norrsken kan väntas!',
+          body:  `Kp-prognos ${forecastKp.toFixed(1)} inom 6 timmar. Förbered dig!`,
+          tag:   'kp-forecast-alert',
+        };
+        await env.SUBS.put('__latest_alert', JSON.stringify(msg), { expirationTtl: 3600 });
+        const ok = await sendPush(subscription, env);
+        if (ok) sentFcAlert = true;
       }
 
       // Rymdvädervarningar från NOAA
@@ -125,7 +151,8 @@ export default {
       }
     }
 
-    if (sentKpAlert) await env.SUBS.put('__kp_last', String(Date.now()));
+    if (sentKpAlert) await env.SUBS.put('__kp_last',    String(Date.now()));
+    if (sentFcAlert) await env.SUBS.put('__kp_fc_last', String(Date.now()));
   },
 };
 
