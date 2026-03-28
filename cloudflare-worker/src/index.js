@@ -44,7 +44,31 @@ export default {
       return cors(JSON.stringify(data), 200);
     }
 
-    // Ad Monitor: skicka push-notis för ny annons
+    // Ad Monitor: prenumerera på annonsnotiser (separerat från väderappen)
+    if (request.method === 'POST' && path === '/subscribe-ads') {
+      const { subscription } = await request.json();
+      const key = 'ad_' + (await subKey(subscription.endpoint));
+      await env.SUBS.put(key, JSON.stringify({ subscription }));
+      return cors('{"ok":true}', 200);
+    }
+
+    // Ad Monitor: avprenumerera
+    if (request.method === 'DELETE' && path === '/unsubscribe-ads') {
+      const { subscription } = await request.json();
+      await env.SUBS.delete('ad_' + (await subKey(subscription.endpoint)));
+      return cors('{"ok":true}', 200);
+    }
+
+    // Ad Monitor: service workern hämtar detta vid leverans
+    if (request.method === 'GET' && path === '/latest-ad') {
+      const latest = await env.SUBS.get('__latest_ad_alert');
+      const data = latest
+        ? JSON.parse(latest)
+        : { title: '📦 Ad Monitor', body: 'Öppna appen för detaljer.', tag: 'ad', url: '/' };
+      return cors(JSON.stringify(data), 200);
+    }
+
+    // Ad Monitor: skicka push-notis för ny annons – endast till ad_sub_*-prenumeranter
     // POST /notify  { secret, title, body, tag, url }
     if (request.method === 'POST' && path === '/notify') {
       const { secret, title, body, tag, url } = await request.json();
@@ -52,11 +76,11 @@ export default {
         return new Response('Unauthorized', { status: 401 });
       }
       const msg = { title, body, tag: tag || 'ad', url: url || '/' };
-      await env.SUBS.put('__latest_alert', JSON.stringify(msg), { expirationTtl: 3600 });
+      await env.SUBS.put('__latest_ad_alert', JSON.stringify(msg), { expirationTtl: 3600 });
       const { keys } = await env.SUBS.list();
       let sent = 0;
       for (const { name } of keys) {
-        if (!name.startsWith('sub_')) continue;
+        if (!name.startsWith('ad_sub_')) continue;
         const raw = await env.SUBS.get(name);
         if (!raw) continue;
         const { subscription } = JSON.parse(raw);
