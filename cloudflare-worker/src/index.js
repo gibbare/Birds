@@ -107,6 +107,23 @@ export default {
       return cors(JSON.stringify({ results }, null, 2), 200);
     }
 
+    // Prenumerationssida för Ad Monitor
+    if (request.method === 'GET' && path === '/subscribe') {
+      return new Response(subscribeHTML(env.VAPID_PUBLIC_KEY || 'BOkPa5xxrv4_txqeqZ6Dx5KDgfAlxdWG5LGyV1V76oFFzAqtzhww-VSsOiz1CMDxCJA8zAC1Z6yvhGhyGMo4qvs'), {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+      });
+    }
+
+    // Service worker för Ad Monitor (måste serveras från samma origin)
+    if (request.method === 'GET' && path === '/ad-sw.js') {
+      return new Response(adServiceWorker(), {
+        headers: {
+          'Content-Type': 'application/javascript',
+          'Service-Worker-Allowed': '/',
+        },
+      });
+    }
+
     return new Response('Not found', { status: 404 });
   },
 
@@ -255,6 +272,95 @@ function toB64u(a) { return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').r
 async function subKey(endpoint) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(endpoint));
   return 'sub_' + toB64u(new Uint8Array(buf)).substring(0, 22);
+}
+
+function adServiceWorker() {
+  return `
+const WORKER_URL = 'https://aurora-push.gibbare.workers.dev';
+self.addEventListener('push', event => {
+  event.waitUntil((async () => {
+    let title = '📦 Ny annons', body = 'Öppna för att se annonsen.', tag = 'ad', url = '/';
+    try {
+      const res = await fetch(WORKER_URL + '/latest-ad');
+      if (res.ok) { const d = await res.json(); title = d.title||title; body = d.body||body; tag = d.tag||tag; url = d.url||url; }
+    } catch {}
+    await self.registration.showNotification(title, { body, tag, renotify: true, data: { url } });
+  })());
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(clients.openWindow(url));
+});
+`.trim();
+}
+
+function subscribeHTML(vapidKey) {
+  return `<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ad Monitor – Prenumerera</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 420px; margin: 60px auto; padding: 0 20px; background: #0f0f0f; color: #f0f0f0; }
+    h1   { font-size: 1.3rem; margin-bottom: 0.3rem; }
+    p    { color: #aaa; font-size: 0.9rem; margin-top: 0; }
+    button { width: 100%; padding: 14px; margin-top: 20px; border: none; border-radius: 10px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    #btn-sub   { background: #4ade80; color: #000; }
+    #btn-unsub { background: #f87171; color: #000; margin-top: 10px; }
+    #status    { margin-top: 16px; font-size: 0.85rem; color: #aaa; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>📦 Ad Monitor</h1>
+  <p>Prenumerera för att få push-notiser när en ny annons dyker upp.</p>
+  <button id="btn-sub">Aktivera notiser</button>
+  <button id="btn-unsub" style="display:none">Avaktivera notiser</button>
+  <div id="status"></div>
+  <script>
+    const WORKER_URL = 'https://aurora-push.gibbare.workers.dev';
+    const VAPID_KEY  = '${vapidKey}';
+    const btnSub = document.getElementById('btn-sub');
+    const btnUnsub = document.getElementById('btn-unsub');
+    const status = document.getElementById('status');
+    function setStatus(m) { status.textContent = m; }
+    function b64(s) {
+      const p = '='.repeat((4 - s.length % 4) % 4);
+      return Uint8Array.from(atob((s+p).replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0));
+    }
+    async function getReg() { return navigator.serviceWorker.register('/ad-sw.js', { scope: '/' }); }
+    async function checkState() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) { setStatus('Push stöds inte i den här webbläsaren.'); btnSub.disabled = true; return; }
+      const sub = await (await getReg()).pushManager.getSubscription();
+      if (sub) { btnSub.style.display='none'; btnUnsub.style.display='block'; setStatus('✅ Notiser aktiverade på den här enheten.'); }
+      else      { btnSub.style.display='block'; btnUnsub.style.display='none'; setStatus('Notiser är inte aktiverade.'); }
+    }
+    btnSub.addEventListener('click', async () => {
+      btnSub.disabled = true; setStatus('Aktiverar...');
+      try {
+        if (await Notification.requestPermission() !== 'granted') { setStatus('Notiser nekades.'); btnSub.disabled=false; return; }
+        const sub = await (await getReg()).pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(VAPID_KEY) });
+        await fetch(WORKER_URL + '/subscribe-ads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ subscription: sub }) });
+        await checkState();
+      } catch(e) { setStatus('Fel: ' + e.message); btnSub.disabled=false; }
+    });
+    btnUnsub.addEventListener('click', async () => {
+      btnUnsub.disabled = true; setStatus('Avaktiverar...');
+      try {
+        const sub = await (await getReg()).pushManager.getSubscription();
+        if (sub) {
+          await fetch(WORKER_URL + '/unsubscribe-ads', { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ subscription: sub }) });
+          await sub.unsubscribe();
+        }
+        await checkState();
+      } catch(e) { setStatus('Fel: ' + e.message); btnUnsub.disabled=false; }
+    });
+    checkState();
+  </script>
+</body>
+</html>`;
 }
 
 function cors(body, status) {
