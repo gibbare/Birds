@@ -16,19 +16,20 @@ self.addEventListener('push', event => {
       }
     } catch {}
     await self.registration.showNotification(title, {
-      body, tag, renotify: true, data: { url: '/' }
+      body, tag, renotify: true, data: { url: d.url || '/' }
     });
   })());
 });
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
+  const url = event.notification.data?.url || '/';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const c of list) {
-        if ('focus' in c) return c.focus();
+        if (c.url === url && 'focus' in c) return c.focus();
       }
-      return clients.openWindow('/');
+      return clients.openWindow(url);
     })
   );
 });

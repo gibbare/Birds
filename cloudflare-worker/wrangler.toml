@@ -17,3 +17,4 @@ crons = ["*/10 * * * *"]
 # VAPID_PUBLIC_KEY
 # VAPID_PRIVATE_KEY
 # VAPID_EMAIL
+# NOTIFY_SECRET   ← lägg till: wrangler secret put NOTIFY_SECRET

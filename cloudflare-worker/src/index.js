@@ -44,6 +44,28 @@ export default {
       return cors(JSON.stringify(data), 200);
     }
 
+    // Ad Monitor: skicka push-notis för ny annons
+    // POST /notify  { secret, title, body, tag, url }
+    if (request.method === 'POST' && path === '/notify') {
+      const { secret, title, body, tag, url } = await request.json();
+      if (!env.NOTIFY_SECRET || secret !== env.NOTIFY_SECRET) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+      const msg = { title, body, tag: tag || 'ad', url: url || '/' };
+      await env.SUBS.put('__latest_alert', JSON.stringify(msg), { expirationTtl: 3600 });
+      const { keys } = await env.SUBS.list();
+      let sent = 0;
+      for (const { name } of keys) {
+        if (!name.startsWith('sub_')) continue;
+        const raw = await env.SUBS.get(name);
+        if (!raw) continue;
+        const { subscription } = JSON.parse(raw);
+        await sendPush(subscription, env);
+        sent++;
+      }
+      return cors(JSON.stringify({ ok: true, sent }), 200);
+    }
+
     // Testa push till alla prenumeranter
     if (request.method === 'GET' && path === '/test') {
       const msg = { title: '🌌 Testnotis', body: 'Push-notiser fungerar!', tag: 'test' };
