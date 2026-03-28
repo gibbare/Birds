@@ -7,7 +7,7 @@ compatibility_date = "2024-01-01"
 # Replace the id below with the one you get from that command
 [[kv_namespaces]]
 binding = "SUBS"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "97060c9926e545f5975615b9b5046f94"
 
 # Run every 10 minutes
 [triggers]
