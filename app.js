@@ -414,7 +414,8 @@ function renderDayDetailList(dayData, lat, lon) {
     const precipHtml = precip > 0
       ? `<span class="hr-precip">💧${precip.toFixed(1)}</span>`
       : '<span class="hr-precip"></span>';
-    const rowClass = idx % 2 === 0 ? 'hour-row' : 'hour-row hour-row-alt';
+    const isPast   = t < new Date();
+    const rowClass = ['hour-row', idx % 2 !== 0 ? 'hour-row-alt' : '', isPast ? 'hour-row-past' : ''].filter(Boolean).join(' ');
 
     return `<div class="${rowClass}">
       <span class="hr-time">${t.getHours().toString().padStart(2,'0')}:00</span>

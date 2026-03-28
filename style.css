@@ -263,6 +263,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  user-select: none;
 }
 
 .temp-center {
@@ -279,7 +281,7 @@ body {
 
 .main-sun-times {
   position: absolute;
-  right: 0;
+  right: 14px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -431,7 +433,8 @@ body {
   padding-bottom: 5px;
 }
 
-.hour-row-alt { background: rgba(255,255,255,0.03); }
+.hour-row-alt  { background: rgba(255,255,255,0.03); }
+.hour-row-past { opacity: 0.38; }
 
 .hour-row + .hour-row { border-top: 1px solid rgba(255,255,255,0.04); }
 
