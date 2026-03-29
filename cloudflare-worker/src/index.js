@@ -128,10 +128,12 @@ export default {
         const raw = await env.SUBS.get(name);
         if (!raw) continue;
         const { subscription } = JSON.parse(raw);
-        const status = await sendPush(subscription, env);
+        const result = await sendPush(subscription, env);
         sent++;
+        const status = typeof result === 'object' ? 0 : result;
+        const error = typeof result === 'object' ? result.error : null;
         if (status >= 200 && status < 300) accepted++;
-        results.push({ endpoint: subscription.endpoint.substring(0, 40) + '...', status });
+        results.push({ endpoint: subscription.endpoint.substring(0, 40) + '...', status, error });
       }
       return cors(JSON.stringify({ ok: true, sent, accepted, results }), 200);
     }
@@ -324,20 +326,20 @@ async function sendPush(subscription, env) {
     const audience = new URL(endpoint).origin;
     const jwt = await vapidJWT(audience, env.VAPID_EMAIL, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
 
-    const headers = {
-      'Authorization': `vapid t=${jwt},k=${env.VAPID_PUBLIC_KEY}`,
-      'TTL': '86400',
-      'Content-Type': 'application/octet-stream',
-    };
-
-    const res = await fetch(endpoint, { method: 'POST', headers, body: new Uint8Array(0) });
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `vapid t=${jwt},k=${env.VAPID_PUBLIC_KEY}`,
+        'TTL': '86400',
+      },
+    });
     if (res.status === 410 || res.status === 404) {
       await env.SUBS.delete(await subKey(endpoint));
     }
     return res.status;
   } catch (e) {
     console.error('sendPush error:', e.message);
-    return 0;
+    return { error: e.message };
   }
 }
 
