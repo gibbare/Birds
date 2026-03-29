@@ -113,6 +113,29 @@ export default {
       return cors(JSON.stringify({ ok: true, sent }), 200);
     }
 
+    // Ad Monitor: testa push till alla ad-prenumeranter (kräver secret)
+    if (request.method === 'POST' && path === '/test-notify') {
+      const body = await request.json();
+      if (!env.NOTIFY_SECRET || body.secret !== env.NOTIFY_SECRET)
+        return new Response('Unauthorized', { status: 401 });
+      const msg = { title: '📦 Test – Ad Monitor', body: 'Push-notiser fungerar!', tag: 'ad-test', url: '/' };
+      await env.SUBS.put('__latest_ad_alert', JSON.stringify(msg), { expirationTtl: 300 });
+      const { keys } = await env.SUBS.list();
+      let sent = 0, accepted = 0;
+      const results = [];
+      for (const { name } of keys) {
+        if (!name.startsWith('ad_sub_')) continue;
+        const raw = await env.SUBS.get(name);
+        if (!raw) continue;
+        const { subscription } = JSON.parse(raw);
+        const status = await sendPush(subscription, env);
+        sent++;
+        if (status >= 200 && status < 300) accepted++;
+        results.push({ endpoint: subscription.endpoint.substring(0, 40) + '...', status });
+      }
+      return cors(JSON.stringify({ ok: true, sent, accepted, results }), 200);
+    }
+
     // Testa push till alla prenumeranter
     if (request.method === 'GET' && path === '/test') {
       const msg = { title: '🌌 Testnotis', body: 'Push-notiser fungerar!', tag: 'test' };
@@ -145,6 +168,57 @@ export default {
           'Service-Worker-Allowed': '/',
         },
       });
+    }
+
+    // ── Found ads storage ─────────────────────────────────────────────────────
+
+    // GET /ads?secret=... – return all saved ads
+    if (request.method === 'GET' && path === '/ads') {
+      const secret = new URL(request.url).searchParams.get('secret');
+      if (!env.NOTIFY_SECRET || secret !== env.NOTIFY_SECRET)
+        return new Response('Unauthorized', { status: 401 });
+      const raw = await env.SUBS.get('__found_ads');
+      return cors(raw || '[]', 200);
+    }
+
+    // POST /ads – save a new found ad { secret, ad: {id,title,price,url,site,query} }
+    if (request.method === 'POST' && path === '/ads') {
+      const body = await request.json();
+      if (!env.NOTIFY_SECRET || body.secret !== env.NOTIFY_SECRET)
+        return new Response('Unauthorized', { status: 401 });
+      const raw = await env.SUBS.get('__found_ads');
+      const ads = raw ? JSON.parse(raw) : [];
+      if (!ads.find(a => a.id === body.ad.id)) {
+        ads.unshift({ ...body.ad, starred: false, foundAt: new Date().toISOString() });
+        if (ads.length > 500) ads.length = 500;
+        await env.SUBS.put('__found_ads', JSON.stringify(ads));
+      }
+      return cors('{"ok":true}', 200);
+    }
+
+    // PATCH /ads/star – toggle star { secret, id, starred }
+    if (request.method === 'PATCH' && path === '/ads/star') {
+      const body = await request.json();
+      if (!env.NOTIFY_SECRET || body.secret !== env.NOTIFY_SECRET)
+        return new Response('Unauthorized', { status: 401 });
+      const raw = await env.SUBS.get('__found_ads');
+      const ads = raw ? JSON.parse(raw) : [];
+      const ad = ads.find(a => a.id === body.id);
+      if (ad) ad.starred = body.starred;
+      await env.SUBS.put('__found_ads', JSON.stringify(ads));
+      return cors('{"ok":true}', 200);
+    }
+
+    // DELETE /ads – remove all unstarred ads { secret }
+    if (request.method === 'DELETE' && path === '/ads') {
+      const body = await request.json();
+      if (!env.NOTIFY_SECRET || body.secret !== env.NOTIFY_SECRET)
+        return new Response('Unauthorized', { status: 401 });
+      const raw = await env.SUBS.get('__found_ads');
+      const ads = raw ? JSON.parse(raw) : [];
+      const kept = ads.filter(a => a.starred);
+      await env.SUBS.put('__found_ads', JSON.stringify(kept));
+      return cors(JSON.stringify({ removed: ads.length - kept.length, kept: kept.length }), 200);
     }
 
     return new Response('Not found', { status: 404 });
@@ -249,20 +323,20 @@ async function sendPush(subscription, env) {
     const endpoint = subscription.endpoint;
     const audience = new URL(endpoint).origin;
     const jwt = await vapidJWT(audience, env.VAPID_EMAIL, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `vapid t=${jwt},k=${env.VAPID_PUBLIC_KEY}`,
-        'TTL': '86400',
-        'Content-Length': '0',
-      },
-    });
+
+    const headers = {
+      'Authorization': `vapid t=${jwt},k=${env.VAPID_PUBLIC_KEY}`,
+      'TTL': '86400',
+      'Content-Type': 'application/octet-stream',
+    };
+
+    const res = await fetch(endpoint, { method: 'POST', headers, body: new Uint8Array(0) });
     if (res.status === 410 || res.status === 404) {
       await env.SUBS.delete(await subKey(endpoint));
     }
     return res.status;
   } catch (e) {
-    console.error('sendPush error:', e);
+    console.error('sendPush error:', e.message);
     return 0;
   }
 }
