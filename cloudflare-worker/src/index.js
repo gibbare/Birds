@@ -20,6 +20,29 @@ export default {
 
     if (request.method === 'OPTIONS') return cors(null, 204);
 
+    // Ad Monitor: hämta config (autentiserat med secret query param)
+    if (request.method === 'GET' && path === '/config') {
+      const secret = new URL(request.url).searchParams.get('secret');
+      if (!env.NOTIFY_SECRET || secret !== env.NOTIFY_SECRET)
+        return new Response('Unauthorized', { status: 401 });
+      const raw = await env.SUBS.get('__adhunter_config');
+      const cfg = raw ? JSON.parse(raw) : {
+        terms: [], interval: 20,
+        sites: { blocket:true, mpb:true, kamerastore:true, scandinavianphoto:true, cyberphoto:true, goecker:true }
+      };
+      return cors(JSON.stringify(cfg), 200);
+    }
+
+    // Ad Monitor: spara config (autentiserat med secret i body)
+    if (request.method === 'POST' && path === '/config') {
+      const body = await request.json();
+      if (!env.NOTIFY_SECRET || body.secret !== env.NOTIFY_SECRET)
+        return new Response('Unauthorized', { status: 401 });
+      const { secret: _s, ...cfg } = body;
+      await env.SUBS.put('__adhunter_config', JSON.stringify(cfg));
+      return cors('{"ok":true}', 200);
+    }
+
     // Spara prenumeration
     if (request.method === 'POST' && path === '/subscribe') {
       const { subscription, lat, lon } = await request.json();
