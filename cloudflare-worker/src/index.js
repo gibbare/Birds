@@ -157,7 +157,7 @@ export default {
 
     // Prenumerationssida för Ad Monitor
     if (request.method === 'GET' && path === '/subscribe') {
-      return new Response(subscribeHTML(env.VAPID_PUBLIC_KEY || 'BOkPa5xxrv4_txqeqZ6Dx5KDgfAlxdWG5LGyV1V76oFFzAqtzhww-VSsOiz1CMDxCJA8zAC1Z6yvhGhyGMo4qvs'), {
+      return new Response(subscribeHTML(env.VAPID_PUBLIC_KEY || 'BPf6BDJ-aUndJukDbHMbxjpw5LOcQz2_JPJoEVfDmxNiyhFxQXKS7GADw9yCrKBiW_LY9Rbl5gupgRMFFLv05mY'), {
         headers: { 'Content-Type': 'text/html;charset=UTF-8' },
       });
     }
