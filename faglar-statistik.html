@@ -1450,7 +1450,7 @@ function onReporterClick(name) {
     infoBar.textContent = `${coords.length} platser · ${name} · ${selectedYear}`;
     const obs = coords.map(c => ({
       lat: c.lat, lon: c.lon, cnt: c.cnt,
-      sv: c.sv || '', sci: c.sci || '', date: '', reporter: name,
+      species: c.species || [], date: '', reporter: name,
     }));
     _renderMapMarkers(obs);
   } else {
@@ -1550,7 +1550,13 @@ function _renderMapMarkers(obs) {
         radius: 6, fillColor: '#2b6cb0', color: '#fff',
         weight: 1.5, opacity: 1, fillOpacity: 0.8,
       });
-      const pop = `<b>${esc(o.sv || o.sci)}</b>${o.date ? '<br>' + o.date : ''}${o.reporter ? '<br>' + esc(o.reporter) : ''}`;
+      let pop;
+      if (o.species && o.species.length) {
+        const spRows = o.species.map(s => `<div style="padding:.1rem 0;border-bottom:1px solid #f0f4f8;last-child:border:none">${esc(s.sv || s.sci)}<span style="color:#a0aec0;font-size:.8em;margin-left:.4em">${s.obs} obs</span></div>`).join('');
+        pop = `<div style="font-size:.82rem;max-height:160px;overflow-y:auto;min-width:160px">${spRows}</div>`;
+      } else {
+        pop = `<b>${esc(o.sv || o.sci)}</b>${o.date ? '<br>' + o.date : ''}${o.reporter ? '<br>' + esc(o.reporter) : ''}`;
+      }
       marker.bindPopup(pop);
       _markerLayer.addLayer(marker);
       bounds.push([o.lat, o.lon]);

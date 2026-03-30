@@ -1097,7 +1097,7 @@ def _new_agg_state():
         'rep_species':    _defaultdict(lambda: _defaultdict(lambda: {'obs': 0, 'sv': '', 'sci': ''})),
         'rep_places':     _defaultdict(lambda: _defaultdict(int)),  # name → locality → count
         'rep_days':       _defaultdict(set),                # name → set of date-strings
-        'rep_coords':     _defaultdict(lambda: _defaultdict(lambda: {'cnt':0,'sv':'','sci':''})),  # name → (lat3,lon3) → {cnt,sv,sci}
+        'rep_coords':     _defaultdict(lambda: _defaultdict(lambda: {'cnt':0,'sp':{}})),  # name → (lat3,lon3) → {cnt, sp:{key:{sv,sci,obs}}}
     }
 
 
@@ -1177,9 +1177,11 @@ def _agg_add_records(state, records):
                 coord_key = (round(float(lat), 3), round(float(lon), 3))
                 entry = state['rep_coords'][reporter][coord_key]
                 entry['cnt'] += 1
-                if sv_name and not entry['sv']:
-                    entry['sv']  = sv_name
-                    entry['sci'] = sci_name
+                if key not in entry['sp']:
+                    entry['sp'][key] = {'sv': sv_name or '', 'sci': sci_name or '', 'obs': 0}
+                entry['sp'][key]['obs'] += 1
+                if sv_name:  entry['sp'][key]['sv']  = sv_name
+                if sci_name: entry['sp'][key]['sci'] = sci_name
 
         state['total_ind'] += count
 
@@ -1300,8 +1302,13 @@ def _agg_finalize(state):
             state['rep_coords'][rep_name].items(),
             key=lambda x: -x[1]['cnt']
         )
-        coords = [{'lat': k[0], 'lon': k[1], 'cnt': v['cnt'], 'sv': v['sv'], 'sci': v['sci']}
-                  for k, v in coords_sorted]
+        coords = []
+        for k, v in coords_sorted:
+            sp_list = sorted(v['sp'].values(), key=lambda s: -s['obs'])
+            coords.append({
+                'lat': k[0], 'lon': k[1], 'cnt': v['cnt'],
+                'species': [{'sv': s['sv'], 'sci': s['sci'], 'obs': s['obs']} for s in sp_list],
+            })
         reporter_details[rep_name] = {
             'monthly':  state['rep_monthly'][rep_name],
             'species':  species_sorted,

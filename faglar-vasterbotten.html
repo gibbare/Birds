@@ -742,6 +742,19 @@
   </div>
 </div>
 
+<!-- iOS "Lägg till på hemskärmen"-banner -->
+<div id="iosBanner" style="display:none;margin:1rem 1rem .5rem;background:#ebf8ff;border:1px solid #bee3f8;border-radius:10px;padding:.85rem 1rem;font-size:.83rem;color:#2c5282;line-height:1.5">
+  <div style="display:flex;align-items:flex-start;gap:.7rem">
+    <div style="font-size:1.4rem;flex-shrink:0">📱</div>
+    <div>
+      <div style="font-weight:700;margin-bottom:.3rem">Lägg till som app på hemskärmen</div>
+      <div>Tryck på <b>Dela-knappen</b> <span style="font-size:1em">⎙</span> längst ned i Safari, välj sedan <b>"Lägg till på hemskärmen"</b> – då fungerar sidan som en riktig app utan adressfält.</div>
+    </div>
+    <button onclick="document.getElementById('iosBanner').style.display='none';localStorage.setItem('ios_banner_dismissed','1')"
+      style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#4a5568;flex-shrink:0;padding:0;line-height:1">✕</button>
+  </div>
+</div>
+
 <div><a href="#" class="btn-top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ Gå till toppen</a></div>
 <footer>
   Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span>
@@ -2109,6 +2122,22 @@ fetch(`${PROXY}/api/version`, { signal: abortAfter(5000) })
     document.getElementById('footerVersion').textContent = `v${v.version} · Startad ${started}`;
   })
   .catch(() => {});
+
+// ── iOS "Lägg till på hemskärmen"-banner ──────────────────────────────────
+(function() {
+  const isStandalone = navigator.standalone === true ||
+                       window.matchMedia('(display-mode: standalone)').matches;
+  if (isStandalone) return;                         // Kör redan som webb-app
+
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  const isSafari = isIOS && /Safari/.test(ua) && !/CriOS|FxiOS|OPiOS/.test(ua);
+  if (!isSafari) return;                            // Inte iOS Safari
+
+  if (localStorage.getItem('ios_banner_dismissed')) return;  // Stängd av användaren
+
+  document.getElementById('iosBanner').style.display = '';
+})();
 </script>
 </body>
 </html>
