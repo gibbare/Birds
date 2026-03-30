@@ -1753,34 +1753,61 @@ function renderMapMarkers() {
   requestAnimationFrame(() => requestAnimationFrame(() => {
     leafletMap.invalidateSize();
 
-    const bounds = [];
+    // Gruppera observationer per plats (3 decimaler ≈ 100m precision)
+    const groups = {};
     for (const row of withCoords) {
-      const name  = row.vernacularName || row.scientificName;
-      // Färg: verifierad=grön, osäker=orange, normal=blå
-      const color = row.verified ? '#276749' : row.uncertainId ? '#e07b39' : '#2b6cb0';
+      const key = `${row.lat.toFixed(3)}_${row.lng.toFixed(3)}`;
+      if (!groups[key]) groups[key] = { lat: row.lat, lng: row.lng, rows: [] };
+      groups[key].rows.push(row);
+    }
 
-      const marker = L.circleMarker([row.lat, row.lng], {
-        radius: 7, fillColor: color, color: '#fff',
+    const bounds = [];
+    for (const g of Object.values(groups)) {
+      const rows = g.rows;
+      // Färg: verifierad=grön, osäker=orange, normal=blå (prioritet på grön)
+      const color = rows.some(r => r.verified)      ? '#276749'
+                  : rows.some(r => r.uncertainId)   ? '#e07b39'
+                  : '#2b6cb0';
+      const radius = rows.length > 1 ? 8 : 7;
+
+      const marker = L.circleMarker([g.lat, g.lng], {
+        radius, fillColor: color, color: '#fff',
         weight: 1.5, opacity: 1, fillOpacity: 0.85,
       });
 
-      const apLink = row.artportalenId
-        ? `<br><a href="https://www.artportalen.se/sighting/${row.artportalenId}"
-               target="_blank" style="color:#2b6cb0">Visa i Artportalen ↗</a>`
-        : '';
-      const uncertainty = row.coordUncertainty
-        ? `<br><span style="color:#718096;font-size:.75em">±${row.coordUncertainty} m</span>`
-        : '';
+      // Popup: en rad per art om flera obs på samma plats
+      let popHtml;
+      if (rows.length === 1) {
+        const row = rows[0];
+        const apLink = row.artportalenId
+          ? `<br><a href="https://www.artportalen.se/sighting/${row.artportalenId}" target="_blank" style="color:#2b6cb0">Visa i Artportalen ↗</a>`
+          : '';
+        popHtml = `<b>${escHtml(row.vernacularName || row.scientificName)}</b><br>
+          ${row.individualCount} ${escHtml(row.unit)}
+          ${row.reporter ? `<br>${escHtml(row.reporter)}` : ''}
+          ${row.startDT  ? `<br>${escHtml(row.startDT)}`  : ''}
+          ${apLink}`;
+      } else {
+        const spRows = rows.map(row => {
+          const apLink = row.artportalenId
+            ? ` <a href="https://www.artportalen.se/sighting/${row.artportalenId}" target="_blank" style="color:#2b6cb0;font-size:.8em">↗</a>`
+            : '';
+          return `<div style="padding:.15rem 0;border-bottom:1px solid #f0f4f8">
+            <b>${escHtml(row.vernacularName || row.scientificName)}</b>
+            <span style="color:#718096;font-size:.85em"> ${row.individualCount} ${escHtml(row.unit)}</span>${apLink}
+          </div>`;
+        }).join('');
+        const reporter = rows[0].reporter || '';
+        const date     = rows[0].startDT  || '';
+        popHtml = `<div style="font-size:.82rem;max-height:200px;overflow-y:auto;min-width:170px">
+          ${reporter ? `<div style="color:#718096;margin-bottom:.25rem">${escHtml(reporter)}${date ? ' · ' + escHtml(date) : ''}</div>` : ''}
+          ${spRows}
+        </div>`;
+      }
 
-      marker.bindPopup(`
-        <b>${escHtml(name)}</b><br>
-        ${row.individualCount} ${escHtml(row.unit)}
-        ${row.reporter  ? `<br>${escHtml(row.reporter)}`  : ''}
-        ${row.startDT   ? `<br>${escHtml(row.startDT)}`   : ''}
-        ${uncertainty}${apLink}
-      `);
+      marker.bindPopup(popHtml);
       mapMarkerLayer.addLayer(marker);
-      bounds.push([row.lat, row.lng]);
+      bounds.push([g.lat, g.lng]);
     }
 
     if (bounds.length) {
