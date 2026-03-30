@@ -1775,35 +1775,36 @@ function renderMapMarkers() {
         weight: 1.5, opacity: 1, fillOpacity: 0.85,
       });
 
-      // Popup: en rad per art om flera obs på samma plats
-      let popHtml;
-      if (rows.length === 1) {
-        const row = rows[0];
-        const apLink = row.artportalenId
-          ? `<br><a href="https://www.artportalen.se/sighting/${row.artportalenId}" target="_blank" style="color:#2b6cb0">Visa i Artportalen ↗</a>`
-          : '';
-        popHtml = `<b>${escHtml(row.vernacularName || row.scientificName)}</b><br>
-          ${row.individualCount} ${escHtml(row.unit)}
-          ${row.reporter ? `<br>${escHtml(row.reporter)}` : ''}
-          ${row.startDT  ? `<br>${escHtml(row.startDT)}`  : ''}
-          ${apLink}`;
-      } else {
-        const spRows = rows.map(row => {
-          const apLink = row.artportalenId
-            ? ` <a href="https://www.artportalen.se/sighting/${row.artportalenId}" target="_blank" style="color:#2b6cb0;font-size:.8em">↗</a>`
+      // Gruppera rader per observatör+tid
+      const byObserver = {};
+      for (const row of rows) {
+        const time = (row.startDT || '').slice(11, 16); // "07:40"
+        const okey = `${row.reporter || '?'}__${time}`;
+        if (!byObserver[okey]) byObserver[okey] = { reporter: row.reporter || '', time, species: [] };
+        byObserver[okey].species.push(row);
+      }
+      const observers = Object.values(byObserver);
+
+      const popStyle = 'font-family:system-ui,sans-serif;font-size:.82rem;min-width:190px;max-width:260px;max-height:260px;overflow-y:auto';
+
+      const popHtml = `<div style="${popStyle}">${observers.map((obs, oi) => {
+        const header = `<div style="display:flex;align-items:baseline;gap:.4rem;padding:${oi > 0 ? '.55rem' : '0'} 0 .2rem;${oi > 0 ? 'border-top:1px solid #e2e8f0;margin-top:.1rem' : ''}">
+          <span style="font-weight:700;color:#1a365d">${escHtml(obs.reporter)}</span>
+          ${obs.time ? `<span style="color:#a0aec0;font-size:.78rem">${escHtml(obs.time)}</span>` : ''}
+        </div>`;
+        const spRows = obs.species.map(row => {
+          const name = row.vernacularName || row.scientificName;
+          const ap   = row.artportalenId
+            ? `<a href="https://www.artportalen.se/sighting/${row.artportalenId}" target="_blank"
+                 style="color:#90cdf4;margin-left:.35rem;text-decoration:none;font-size:.8em">↗</a>`
             : '';
-          return `<div style="padding:.15rem 0;border-bottom:1px solid #f0f4f8">
-            <b>${escHtml(row.vernacularName || row.scientificName)}</b>
-            <span style="color:#718096;font-size:.85em"> ${row.individualCount} ${escHtml(row.unit)}</span>${apLink}
+          return `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:.18rem 0 .18rem .6rem;gap:.5rem">
+            <span style="color:#2d3748">${escHtml(name)}${ap}</span>
+            <span style="color:#718096;white-space:nowrap;font-size:.78rem">${row.individualCount} ${escHtml(row.unit)}</span>
           </div>`;
         }).join('');
-        const reporter = rows[0].reporter || '';
-        const date     = rows[0].startDT  || '';
-        popHtml = `<div style="font-size:.82rem;max-height:200px;overflow-y:auto;min-width:170px">
-          ${reporter ? `<div style="color:#718096;margin-bottom:.25rem">${escHtml(reporter)}${date ? ' · ' + escHtml(date) : ''}</div>` : ''}
-          ${spRows}
-        </div>`;
-      }
+        return header + spRows;
+      }).join('')}</div>`;
 
       marker.bindPopup(popHtml);
       mapMarkerLayer.addLayer(marker);
