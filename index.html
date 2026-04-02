@@ -1,0 +1,2198 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Väder</title>
+  <link rel="apple-touch-icon" sizes="180x180" href="weather_ico.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="weather_ico.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Väder" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ══ AURORA VIEW ══════════════════════════════════════════════════ */
+    #view-aurora {
+      height: 100%;
+      overflow-y: auto; overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      background: #080c14; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #view-aurora.hidden { display: none !important; }
+
+    /* top bar: location pill + alerts button */
+    #aw-topbar {
+      position: sticky; top: 0; z-index: 200;
+      display: flex; align-items: center;
+      justify-content: space-between; padding: 8px 12px;
+      background: rgba(8,12,20,.97); border-bottom: 1px solid rgba(255,255,255,.07);
+      gap: 8px; min-height: 48px;
+    }
+    #aw-loc-row {
+      display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+    }
+    #aw-loc-name {
+      font-size: 1.3rem; font-weight: 700; color: #e0eaff; cursor: pointer;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+      transition: color .2s;
+    }
+    #aw-loc-name:hover { color: #22d3a0; }
+    #aw-search-btn {
+      font-size: 15px; cursor: pointer; flex-shrink: 0; opacity: .6;
+      transition: opacity .2s; user-select: none;
+    }
+    #aw-search-btn:hover { opacity: 1; }
+    #aw-pin-btn {
+      font-size: 15px; cursor: pointer; flex-shrink: 0; opacity: .6;
+      transition: opacity .2s; user-select: none;
+    }
+    #aw-pin-btn:hover { opacity: 1; }
+    /* map legend */
+    #aw-map-legend {
+      position: absolute; bottom: 8px; right: 8px; z-index: 500;
+      background: rgba(8,12,20,.85); border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px; padding: 6px 10px; font-size: 10px; color: #94a3b8;
+      display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+    }
+    .aw-ml-item { display: flex; align-items: center; gap: 6px; }
+    .aw-ml-swatch { width: 24px; height: 3px; border-radius: 2px; display: inline-block; }
+    #aw-notif-btn {
+      flex-shrink: 0; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.13);
+      border-radius: 8px; padding: 5px 10px; color: #64748b;
+      font-size: 16px; cursor: pointer; transition: all .2s; line-height: 1;
+    }
+    #aw-notif-btn.active { color: #22d3a0; border-color: rgba(34,211,160,.4); background: rgba(34,211,160,.08); }
+    #aw-notif-btn.denied { color: #f87171; border-color: rgba(248,113,113,.3); }
+    #aw-alert-btn {
+      position: relative; flex-shrink: 0;
+      background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3);
+      border-radius: 8px; padding: 5px 12px; color: #f87171;
+      font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    #aw-alert-badge {
+      position: absolute; top: -7px; right: -7px; width: 17px; height: 17px;
+      background: #f87171; border-radius: 50%; font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; color: #fff;
+    }
+    #aw-kp-pill {
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+      background: rgba(34,211,160,.08); border: 1px solid rgba(34,211,160,.2);
+      border-radius: 8px; padding: 5px 10px;
+    }
+    #aw-kp-big { font-size: 20px; font-weight: 700; color: #22d3a0; line-height: 1; }
+    #aw-kp-lbl { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+    #aw-kp-status { font-size: 10px; font-weight: 600; color: #22d3a0; }
+
+    /* map */
+    #aw-map-wrap { height: 38vh; min-height: 220px; position: relative; }
+    #aw-map { width: 100%; height: 100%; }
+    .leaflet-tile { filter: brightness(.6) saturate(.4) hue-rotate(195deg); }
+
+    /* scrollable content */
+    #aw-scroll {
+      padding: 12px 12px 80px;
+    }
+
+    /* section cards */
+    .aw-card {
+      background: rgba(16,24,40,.9); border: 1px solid rgba(255,255,255,.07);
+      border-radius: 12px; padding: 14px; margin-bottom: 10px;
+      overflow: hidden; min-width: 0;
+    }
+    .aw-card-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: #64748b; margin-bottom: 10px; display: flex;
+      align-items: center; gap: 6px;
+    }
+    .aw-badge {
+      font-size: 10px; font-weight: 600; padding: 1px 8px; border-radius: 20px;
+      margin-left: auto;
+    }
+    .aw-badge-g { background: rgba(34,211,160,.15); color: #22d3a0; border: 1px solid rgba(34,211,160,.3); }
+    .aw-badge-b { background: rgba(56,189,248,.15); color: #38bdf8; border: 1px solid rgba(56,189,248,.3); }
+    .aw-badge-r { background: rgba(248,113,113,.15); color: #f87171; border: 1px solid rgba(248,113,113,.3); }
+    .aw-badge-y { background: rgba(251,191,36,.15); color: #fbbf24; border: 1px solid rgba(251,191,36,.3); }
+
+    /* visibility bars */
+    .aw-vis-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+    .aw-vis-label { font-size: 11px; color: #94a3b8; width: 108px; flex-shrink: 0; }
+    .aw-vis-track { flex: 1; height: 6px; background: rgba(255,255,255,.07); border-radius: 3px; overflow: hidden; }
+    .aw-vis-fill { height: 100%; border-radius: 3px; }
+    .aw-vis-pct { font-size: 11px; width: 30px; text-align: right; font-weight: 600; }
+
+    /* chart wrap */
+    .aw-ch-wrap { position: relative; height: 160px; }
+    .aw-ch-wrap.tall { height: 185px; }
+    .aw-ch-meta { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .aw-ch-val { font-size: 20px; font-weight: 700; line-height: 1; }
+    .aw-ch-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .aw-ch-delta { font-size: 11px; color: #64748b; text-align: right; }
+
+    /* Kp scale */
+    .aw-kp-scale { display: flex; gap: 3px; margin-top: 4px; }
+    .aw-kp-bar { flex: 1; height: 8px; border-radius: 2px; }
+    .aw-kp-labels { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 4px; }
+
+    /* Local info */
+    .aw-info-row { display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
+    .aw-info-row span:last-child { color: #e2e8f0; font-weight: 500; }
+
+    /* Fokusdata – kombinerad lokal info + snabbvärden */
+    .aw-focus-layout { display: flex; gap: 12px; align-items: flex-start; }
+    .aw-focus-info { flex: 1; min-width: 0; }
+    .aw-focus-stats { flex: 0 0 47%; }
+    /* Quick stats 2x2 */
+    .aw-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .aw-stat-card {
+      background: #121929; border: 1px solid rgba(255,255,255,.07);
+      border-radius: 7px; padding: 7px 9px; cursor: pointer; transition: border-color .2s;
+    }
+    .aw-stat-card:hover { border-color: rgba(255,255,255,.15); }
+    .aw-stat-lbl { font-size: 9px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .aw-stat-val { font-size: 18px; font-weight: 700; margin: 2px 0 1px; line-height: 1; }
+    .aw-stat-unit { font-size: 9px; color: #94a3b8; }
+
+    /* Collapsible */
+    .aw-coll { margin-bottom: 10px; }
+    .aw-coll-btn {
+      width: 100%; display: flex; align-items: center; justify-content: space-between;
+      background: rgba(16,24,40,.9); border: 1px solid rgba(255,255,255,.07);
+      border-radius: 12px; padding: 13px 16px; cursor: pointer;
+      font-family: inherit; color: #e2e8f0; transition: border-color .2s;
+    }
+    .aw-coll-btn:hover { border-color: rgba(255,255,255,.14); }
+    .aw-coll-btn.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
+    .aw-coll-left { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+    .aw-coll-arrow { font-size: 11px; color: #64748b; transition: transform .3s; }
+    .aw-coll-arrow.open { transform: rotate(180deg); }
+    .aw-coll-body {
+      overflow: hidden; max-height: 0; transition: max-height .4s ease;
+      background: rgba(16,24,40,.9); border: 1px solid rgba(255,255,255,.07);
+      border-top: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
+    }
+    .aw-coll-body.open { max-height: 600px; }
+    .aw-coll-inner { padding: 14px; }
+
+    /* Alerts */
+    .aw-alert-item {
+      background: #121929; border: 1px solid rgba(255,255,255,.07);
+      border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .aw-alert-item.high { border-left: 3px solid #fb923c; }
+    .aw-alert-item.warn { border-left: 3px solid #fbbf24; }
+    .aw-alert-item.info { border-left: 3px solid #38bdf8; }
+    .aw-alert-icon { font-size: 18px; flex-shrink: 0; }
+    .aw-alert-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .aw-alert-desc { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+    .aw-alert-time { font-size: 10px; color: #64748b; margin-top: 5px; }
+
+    /* Loading pulse */
+    .aw-loading { text-align: center; padding: 20px; color: #64748b; font-size: 13px; }
+
+    /* wind gauges */
+    .aw-wind-gauges { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 12px; }
+    .aw-gauge { text-align: center; }
+    .aw-gauge-ring {
+      width: 68px; height: 68px; border-radius: 50%; margin: 0 auto 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; position: relative;
+    }
+    .aw-gauge-ring::before { content:''; position:absolute; inset:5px; border-radius:50%; background:#121929; }
+    .aw-gauge-v { position: relative; z-index: 1; }
+    .aw-gauge-lbl { font-size: 10px; color: #64748b; }
+
+    /* Search modal */
+    #aw-search-modal {
+      display: none; position: fixed; inset: 0; z-index: 3000;
+      background: rgba(0,0,0,.78); backdrop-filter: blur(6px);
+      align-items: flex-start; justify-content: center; padding-top: 80px;
+    }
+    #aw-search-modal.open { display: flex; }
+    #aw-search-box {
+      background: #0d1220; border: 1px solid rgba(255,255,255,.1);
+      border-radius: 14px; width: min(480px,92vw); overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.7);
+    }
+    #aw-search-input-row {
+      display: flex; align-items: center; padding: 14px 18px; gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    #aw-search-input {
+      flex: 1; background: none; border: none; outline: none; color: #e2e8f0;
+      font-size: 15px; font-family: inherit;
+    }
+    #aw-search-input::placeholder { color: #64748b; }
+    #aw-search-close { background: none; border: none; color: #64748b; cursor: pointer; font-size: 18px; }
+    #aw-search-results { max-height: 300px; overflow-y: auto; }
+    .aw-search-item {
+      padding: 12px 18px; display: flex; align-items: center; gap: 10px;
+      cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.05); transition: background .15s;
+    }
+    .aw-search-item:hover { background: rgba(255,255,255,.05); }
+    .aw-si-name { font-weight: 500; font-size: 14px; }
+    .aw-si-country { font-size: 11px; color: #64748b; }
+
+    /* colors */
+    .aw-green { color: #22d3a0; } .aw-blue { color: #38bdf8; }
+    .aw-purple { color: #a78bfa; } .aw-yellow { color: #fbbf24; }
+    .aw-orange { color: #fb923c; } .aw-red { color: #f87171; }
+
+    /* update timestamp */
+    #aw-updated { font-size: 10px; color: #64748b; text-align: right; margin-bottom: 8px; }
+
+    /* read-alerts floating btn */
+    #aw-tts-btn {
+      position: fixed; bottom: 70px; right: 14px; z-index: 500;
+      width: 42px; height: 42px; border-radius: 50%;
+      background: rgba(34,211,160,.15); border: 1px solid rgba(34,211,160,.4);
+      display: none; align-items: center; justify-content: center;
+      font-size: 18px; cursor: pointer; transition: background .2s;
+    }
+    #aw-tts-btn.visible { display: flex; }
+    #aw-tts-btn:hover { background: rgba(34,211,160,.3); }
+  </style>
+</head>
+<body>
+
+  <!-- ── Shared nav ── -->
+  <nav id="app-nav">
+    <button class="nav-tab active" id="tab-weather" onclick="switchView('weather')">🌤 Väder</button>
+    <button class="nav-tab" id="tab-lightning" onclick="switchView('lightning')">⚡ Blixt</button>
+    <button class="nav-tab" id="tab-aurora" onclick="switchView('aurora')">🌌 Aurora</button>
+  </nav>
+
+  <!-- ══════════════ WEATHER VIEW ══════════════ -->
+  <div id="view-weather">
+    <header>
+      <p id="app-label">Väder</p>
+      <div id="location-row">
+        <h1 id="location-name">Hämtar din position...</h1>
+        <span id="app-title">🔍</span>
+      </div>
+    </header>
+
+    <!-- Install banner (browser only – hidden in PWA/standalone mode) -->
+    <div id="install-banner" class="browser-only hidden">
+      <span>📲 Lägg till på hemskärmen för bästa upplevelse</span>
+      <button id="install-btn" onclick="showInstallModal()">Hur?</button>
+      <button id="install-dismiss" onclick="dismissInstallBanner()" aria-label="Stäng">✕</button>
+    </div>
+
+    <!-- Install instructions modal -->
+    <div id="install-modal" class="hidden">
+      <div id="install-backdrop" onclick="closeInstallModal()"></div>
+      <div id="install-box">
+        <button class="install-close" onclick="closeInstallModal()">✕</button>
+        <div id="install-ios" class="hidden">
+          <div class="install-icon">📱</div>
+          <h2>Lägg till på hemskärmen</h2>
+          <ol>
+            <li>Tryck på <strong>tre prickarna</strong> <span class="install-share-icon">•••</span> längst ned i Safari</li>
+            <li>Tryck på <strong>dela-ikonen</strong> <span class="install-share-icon">⬆</span></li>
+            <li>Välj <strong>"Lägg till på hemskärmen"</strong></li>
+            <li>Tryck <strong>"Lägg till"</strong> uppe till höger</li>
+          </ol>
+          <p class="install-note">Appen öppnas då i helskärm utan adressfält.</p>
+        </div>
+        <div id="install-android" class="hidden">
+          <div class="install-icon">📱</div>
+          <h2>Installera app</h2>
+          <p>Tryck på knappen nedan för att installera appen direkt på din enhet.</p>
+          <button id="install-android-btn" onclick="triggerAndroidInstall()">Installera</button>
+          <p class="install-note">Eller öppna webbläsarens meny och välj <strong>"Lägg till på hemskärmen"</strong>.</p>
+        </div>
+        <div id="install-generic" class="hidden">
+          <div class="install-icon">📱</div>
+          <h2>Lägg till på hemskärmen</h2>
+          <p>Öppna webbläsarens meny och välj <strong>"Lägg till på hemskärmen"</strong> eller <strong>"Installera app"</strong>.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search modal -->
+    <div id="search-modal" class="hidden">
+      <div id="search-backdrop"></div>
+      <div id="search-box">
+        <div id="search-input-row">
+          <input id="search-input" type="text" placeholder="Sök stad eller ort..." autocomplete="off" />
+          <button id="search-close">✕</button>
+        </div>
+        <ul id="search-results"></ul>
+      </div>
+    </div>
+
+    <main>
+      <div id="loading" class="status">
+        <div class="spinner"></div>
+        <p>Hämtar väderdata...</p>
+      </div>
+      <div id="error" class="status hidden">
+        <p id="error-msg"></p>
+        <button onclick="init()">Försök igen</button>
+      </div>
+      <div id="weather" class="hidden">
+        <div class="card main-temp" onclick="openDayDetail(0)">
+          <div class="temp-center">
+            <div class="temp-row">
+              <div class="temp-value" id="temperature">--</div>
+              <div class="temp-label">°C</div>
+              <div class="weather-desc" id="weather-desc">--</div>
+            </div>
+          </div>
+          <div class="main-sun-times" id="main-sun-times"></div>
+        </div>
+        <div class="cards-grid">
+          <div class="card small">
+            <div class="card-icon">💨</div>
+            <div class="card-value" id="wind">--</div>
+            <div class="card-label">Vind (m/s)</div>
+          </div>
+          <div class="card small">
+            <div class="card-icon">💧</div>
+            <div class="card-value" id="humidity">--</div>
+            <div class="card-label">Luftfuktighet (%)</div>
+          </div>
+          <div class="card small">
+            <div class="card-icon">🌧️</div>
+            <div class="card-value" id="precip">--</div>
+            <div class="card-label">Nederbörd (mm/h)</div>
+          </div>
+          <div class="card small">
+            <div class="card-icon">🌡️</div>
+            <div class="card-value" id="feels-like">--</div>
+            <div class="card-label">Känns som (°C)</div>
+          </div>
+        </div>
+        <div class="card forecast-card">
+          <h2>Dygnsprognos</h2>
+          <div id="day-summary"></div>
+          <div class="chart-wrap">
+            <canvas id="forecast-chart"></canvas>
+          </div>
+        </div>
+      </div>
+      <!-- Day detail view -->
+      <div id="day-detail" class="hidden">
+        <div id="day-detail-header">
+          <button id="day-detail-back" onclick="closeDayDetail()">← Tillbaka</button>
+          <h2 id="day-detail-title"></h2>
+        </div>
+        <div class="card forecast-card" style="margin-bottom:0;padding:0 0 4px;">
+          <div id="detail-list"></div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p style="color:#3a4a60;margin-bottom:3px;">weathervb.up.railway.app</p>
+      <p>Data från <a href="https://opendata.smhi.se" target="_blank">SMHI Open Data</a></p>
+      <p>Utvecklad av Jonas Karlsson &middot; v3.2</p>
+    </footer>
+  </div>
+
+  <!-- ══════════════ LIGHTNING VIEW ══════════════ -->
+  <div id="view-lightning" class="hidden">
+    <header>
+      <p class="app-sublabel">Åskväderspårning</p>
+      <div id="blixt-location-row">
+        <span class="lightning-icon">⚡</span>
+        <h1 id="blixt-location-name">Hämtar position...</h1>
+        <button id="blixt-recenter-btn" onclick="blitzRecenter()" title="Centrera på min position">📍</button>
+      </div>
+    </header>
+
+    <div id="status-bar">
+      <div class="stat">
+        <div id="conn-dot" class="demo"></div>
+        <span id="conn-label">Ansluter...</span>
+      </div>
+      <div class="stat">
+        ⚡ <span class="stat-value" id="strike-count">0</span>&nbsp;(30 min)
+      </div>
+      <div class="stat">
+        🗂 <span class="stat-value" id="cache-minutes">0</span>&nbsp;min cache
+      </div>
+    </div>
+
+    <div id="map-wrap">
+      <div id="map"></div>
+
+      <div id="demo-badge">Hämtar position och data...</div>
+
+      <div id="legend" class="panel">
+        <div class="legend-header" onclick="toggleLegend()">
+          <span class="legend-title">Förklaring</span>
+          <span id="legend-arrow">▾</span>
+        </div>
+        <div id="legend-body">
+          <div class="leg-row">
+            <div class="leg-dot" style="background:#ffe066;box-shadow:0 0 7px #ffe066"></div>
+            <span>&lt;5 min</span>
+          </div>
+          <div class="leg-row">
+            <div class="leg-dot" style="background:#ff9933"></div>
+            <span>5–15 min</span>
+          </div>
+          <div class="leg-row">
+            <div class="leg-dot" style="background:#ff4444;opacity:0.6"></div>
+            <span>15–30 min</span>
+          </div>
+          <div class="leg-row">
+            <div class="leg-line" style="background:#7eb8f7"></div>
+            <span>Prognos</span>
+          </div>
+          <div class="leg-row">
+            <div class="leg-dot" style="border:2px solid rgba(126,184,247,0.6);background:transparent"></div>
+            <span>30 km-radie</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="predict-panel" class="panel">
+        <div class="panel-header" onclick="togglePredict()">
+          <span class="panel-title">⟶ Rörelseprognos</span>
+          <span id="predict-arrow">▾</span>
+        </div>
+        <div id="predict-body">
+          <div class="panel-row"><span>Riktning</span><span class="panel-val" id="pred-dir">–</span></div>
+          <div class="panel-row"><span>Hastighet</span><span class="panel-val" id="pred-speed">–</span></div>
+          <div class="panel-row"><span>Avstånd</span><span class="panel-val" id="pred-dist">–</span></div>
+          <div class="panel-row"><span>Trend</span><span class="panel-val" id="pred-trend">–</span></div>
+        </div>
+      </div>
+
+      <button id="radar-btn" onclick="toggleRadar()">🌧 Radar</button>
+      <button id="map-style-btn" onclick="toggleMapStyle()">☀️ Ljus</button>
+    </div>
+
+    <footer>
+      <p>Data från <a href="https://www.blitzortung.org" target="_blank">Blitzortung.org</a></p>
+      <p>Utvecklad av Jonas Karlsson &middot; v3.2</p>
+    </footer>
+  </div>
+
+  <!-- ══════════════ AURORA VIEW ══════════════ -->
+  <div id="view-aurora" class="hidden">
+
+    <!-- Search modal -->
+    <div id="aw-search-modal" onclick="if(event.target===this)awCloseSearch()">
+      <div id="aw-search-box">
+        <div id="aw-search-input-row">
+          <span style="font-size:16px">🔍</span>
+          <input id="aw-search-input" placeholder="Sök stad eller plats…" oninput="awFilterSearch(this.value)" autocomplete="off"/>
+          <button id="aw-search-close" onclick="awCloseSearch()">✕</button>
+        </div>
+        <div id="aw-search-results"></div>
+      </div>
+    </div>
+
+    <!-- Top bar -->
+    <div id="aw-topbar">
+      <div id="aw-loc-row">
+        <h2 id="aw-loc-name" onclick="awOpenSearch()">—</h2>
+        <span id="aw-search-btn" onclick="awOpenSearch()" title="Sök plats">🔍</span>
+        <span id="aw-pin-btn" onclick="awReturnHome()" title="Min position">📍</span>
+      </div>
+      <div id="aw-kp-pill">
+        <div>
+          <div id="aw-kp-lbl">Kp-index</div>
+          <div id="aw-kp-big">—</div>
+          <div id="aw-kp-status" class="aw-green"></div>
+        </div>
+      </div>
+      <button id="aw-notif-btn" onclick="awToggleNotifications()" title="Aktivera notiser">🔔</button>
+      <button id="aw-alert-btn" onclick="awScrollToAlerts()">
+        ⚠ Varningar<div id="aw-alert-badge">0</div>
+      </button>
+    </div>
+
+    <!-- Map -->
+    <div id="aw-map-wrap">
+      <div id="aw-map"></div>
+      <div id="aw-map-legend">
+        <div class="aw-ml-item"><span class="aw-ml-swatch" style="background:#22d3a0"></span>Norrsken (Kp &lt; 4)</div>
+        <div class="aw-ml-item"><span class="aw-ml-swatch" style="background:#fbbf24"></span>Aktiv (Kp 4–5)</div>
+        <div class="aw-ml-item"><span class="aw-ml-swatch" style="background:#f87171"></span>Geomagnetisk storm (Kp 6+)</div>
+      </div>
+    </div>
+
+    <!-- TTS floating button -->
+    <button id="aw-tts-btn" onclick="awReadAlerts()" title="Läs upp varningar">🔊</button>
+
+    <!-- Scrollable content -->
+    <div id="aw-scroll">
+      <div id="aw-updated">Uppdaterar…</div>
+
+      <!-- 1. Kp-prognos 3 dagar -->
+      <div class="aw-card">
+        <div class="aw-card-title">📈 Kp-prognos · 3 dagar</div>
+        <div class="aw-ch-meta">
+          <div><div id="aw-fc3-val" class="aw-ch-val aw-yellow">—</div><div class="aw-ch-sub">NOAA SWPC</div></div>
+          <div class="aw-ch-delta" id="aw-fc3-delta"></div>
+        </div>
+        <div class="aw-ch-wrap tall"><canvas id="aw-c-kpfc3"></canvas></div>
+      </div>
+
+      <!-- 3+5. Fokusdata (Lokal info + Snabbvärden) -->
+      <div class="aw-card">
+        <div class="aw-card-title">📍 Fokusdata</div>
+        <div class="aw-focus-layout">
+          <div class="aw-focus-info">
+            <div class="aw-info-row"><span>Solnedgång</span><span id="aw-sunset">—</span></div>
+            <div class="aw-info-row"><span>Soluppgång</span><span id="aw-sunrise">—</span></div>
+            <div class="aw-info-row"><span>Molntäcke</span><span id="aw-cloud">—</span></div>
+            <div class="aw-info-row"><span>Astron. mörker</span><span id="aw-astro">—</span></div>
+            <div class="aw-info-row" style="margin-bottom:0"><span>Koordinater</span><span id="aw-coords">—</span></div>
+          </div>
+          <div class="aw-focus-stats">
+            <div class="aw-stats-grid">
+              <div class="aw-stat-card" onclick="awOpenColl('bz')">
+                <div class="aw-stat-lbl">Bz (IMF)</div>
+                <div class="aw-stat-val aw-green" id="aw-bz-val">—</div>
+                <div class="aw-stat-unit" id="aw-bz-dir">nT</div>
+              </div>
+              <div class="aw-stat-card" onclick="awOpenColl('wind')">
+                <div class="aw-stat-lbl">Solvind</div>
+                <div class="aw-stat-val aw-blue" id="aw-speed-val">—</div>
+                <div class="aw-stat-unit">km/s</div>
+              </div>
+              <div class="aw-stat-card" onclick="awOpenColl('dst')">
+                <div class="aw-stat-lbl">Dst-index</div>
+                <div class="aw-stat-val aw-purple" id="aw-dst-val">—</div>
+                <div class="aw-stat-unit">nT</div>
+              </div>
+              <div class="aw-stat-card" onclick="awOpenColl('wind')">
+                <div class="aw-stat-lbl">Densitet</div>
+                <div class="aw-stat-val aw-yellow" id="aw-dens-val">—</div>
+                <div class="aw-stat-unit">p/cm³</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. 7-dagars Kp-prognos -->
+      <div class="aw-card" id="aw-card-kp7d">
+        <div class="aw-card-title">📅 7-dagars Kp-prognos</div>
+        <div class="aw-ch-meta">
+          <div><div id="aw-7d-val" class="aw-ch-val aw-blue">—</div><div class="aw-ch-sub">Lång sikt · NOAA-modell</div></div>
+          <div class="aw-ch-delta" id="aw-7d-day"></div>
+        </div>
+        <div class="aw-ch-wrap tall"><canvas id="aw-c-kp7d"></canvas></div>
+      </div>
+
+      <!-- 7. Kp-Index Historik -->
+      <div class="aw-card">
+        <div class="aw-card-title">🕐 Kp-index · Historik (24h)</div>
+        <div class="aw-ch-meta">
+          <div><div id="aw-hist-val" class="aw-ch-val aw-green">—</div><div class="aw-ch-sub">3h-intervall</div></div>
+          <div class="aw-ch-delta" id="aw-hist-delta"></div>
+        </div>
+        <div class="aw-ch-wrap"><canvas id="aw-c-kphist"></canvas></div>
+      </div>
+
+      <!-- 8. Bz (collapsible, closed) -->
+      <div class="aw-coll">
+        <button class="aw-coll-btn" id="aw-btn-bz" onclick="awToggleColl('bz')">
+          <div class="aw-coll-left">🧲 Bz-komponent (IMF)<span class="aw-badge aw-badge-g" id="aw-bz-badge"></span></div>
+          <span class="aw-coll-arrow" id="aw-arr-bz">▼</span>
+        </button>
+        <div class="aw-coll-body" id="aw-bd-bz">
+          <div class="aw-coll-inner">
+            <div class="aw-ch-meta">
+              <div><div class="aw-ch-sub">Söderut (negativ Bz) gynnar norrsken</div></div>
+            </div>
+            <div class="aw-ch-wrap"><canvas id="aw-c-bz"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 9. Dst (collapsible, closed) -->
+      <div class="aw-coll">
+        <button class="aw-coll-btn" id="aw-btn-dst" onclick="awToggleColl('dst')">
+          <div class="aw-coll-left">🌍 Dst-index · Geomagnetisk storm<span class="aw-badge aw-badge-y" id="aw-dst-badge"></span></div>
+          <span class="aw-coll-arrow" id="aw-arr-dst">▼</span>
+        </button>
+        <div class="aw-coll-body" id="aw-bd-dst">
+          <div class="aw-coll-inner">
+            <div class="aw-ch-sub" style="margin-bottom:8px">Senaste 48h · Negativa värden = störning</div>
+            <div class="aw-ch-wrap"><canvas id="aw-c-dst"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 10. Solvinddata (collapsible, closed) -->
+      <div class="aw-coll">
+        <button class="aw-coll-btn" id="aw-btn-wind" onclick="awToggleColl('wind')">
+          <div class="aw-coll-left">💨 Solvinddata — Hastighet, Densitet &amp; Temperatur<span class="aw-badge aw-badge-b">Live 5-min</span></div>
+          <span class="aw-coll-arrow" id="aw-arr-wind">▼</span>
+        </button>
+        <div class="aw-coll-body" id="aw-bd-wind">
+          <div class="aw-coll-inner">
+            <div class="aw-wind-gauges">
+              <div class="aw-gauge">
+                <div class="aw-gauge-ring" id="aw-g-speed" style="background:conic-gradient(#38bdf8 0%,rgba(255,255,255,.06) 0)">
+                  <div class="aw-gauge-v aw-blue" id="aw-g-speed-v">—</div></div>
+                <div class="aw-gauge-lbl">Hastighet</div><div class="aw-gauge-lbl">km/s</div>
+              </div>
+              <div class="aw-gauge">
+                <div class="aw-gauge-ring" id="aw-g-dens" style="background:conic-gradient(#fbbf24 0%,rgba(255,255,255,.06) 0)">
+                  <div class="aw-gauge-v aw-yellow" id="aw-g-dens-v">—</div></div>
+                <div class="aw-gauge-lbl">Densitet</div><div class="aw-gauge-lbl">p/cm³</div>
+              </div>
+              <div class="aw-gauge">
+                <div class="aw-gauge-ring" id="aw-g-temp" style="background:conic-gradient(#fb923c 0%,rgba(255,255,255,.06) 0)">
+                  <div class="aw-gauge-v aw-orange" id="aw-g-temp-v">—</div></div>
+                <div class="aw-gauge-lbl">Temperatur</div><div class="aw-gauge-lbl">kK</div>
+              </div>
+            </div>
+            <div class="aw-ch-wrap tall"><canvas id="aw-c-wind"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 11. Aktiva varningar -->
+      <div id="aw-alerts-sec">
+        <div class="aw-card-title" style="margin-bottom:8px">⚠️ Aktiva rymdvädervarningar<span id="aw-alerts-count" class="aw-badge aw-badge-r" style="margin-left:8px">0 aktiva</span></div>
+        <div id="aw-alerts-list"><div class="aw-loading">Hämtar varningar…</div></div>
+      </div>
+
+      <div style="text-align:center;padding:16px 0 4px;font-size:11px;color:#334155">
+        AuroraWatch · Källa: NOAA SWPC · Uppdateras var 10:e minut
+      </div>
+    </div><!-- /aw-scroll -->
+  </div><!-- /view-aurora -->
+
+  <script src="app.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+  // ── VIEW SWITCHER ─────────────────────────────────────────────────────────────
+  // ── INSTALL BANNER ─────────────────────────────────────────────────────────
+  const isPWA = window.navigator.standalone === true ||
+                window.matchMedia('(display-mode: standalone)').matches;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+  let deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+  });
+
+  function initInstallBanner() {
+    if (isPWA) return; // running as installed app – hide everything
+    if (localStorage.getItem('install_dismissed')) return;
+    document.getElementById('install-banner').classList.remove('hidden');
+  }
+
+  function dismissInstallBanner() {
+    document.getElementById('install-banner').classList.add('hidden');
+    localStorage.setItem('install_dismissed', '1');
+  }
+
+  function showInstallModal() {
+    document.getElementById('install-modal').classList.remove('hidden');
+    if (isIOS) {
+      document.getElementById('install-ios').classList.remove('hidden');
+    } else if (deferredInstallPrompt) {
+      document.getElementById('install-android').classList.remove('hidden');
+    } else {
+      document.getElementById('install-generic').classList.remove('hidden');
+    }
+  }
+
+  function closeInstallModal() {
+    document.getElementById('install-modal').classList.add('hidden');
+    document.getElementById('install-ios').classList.add('hidden');
+    document.getElementById('install-android').classList.add('hidden');
+    document.getElementById('install-generic').classList.add('hidden');
+  }
+
+  async function triggerAndroidInstall() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') {
+      dismissInstallBanner();
+      closeInstallModal();
+    }
+    deferredInstallPrompt = null;
+  }
+
+  document.addEventListener('DOMContentLoaded', initInstallBanner);
+
+  let lightningInitialized = false;
+  let auroraInitialized   = false;
+
+  function switchView(view) {
+    ['weather','lightning','aurora'].forEach(v => {
+      document.getElementById(`view-${v}`)?.classList.toggle('hidden', v !== view);
+      document.getElementById(`tab-${v}`)?.classList.toggle('active', v === view);
+    });
+
+    if (view === 'lightning') {
+      if (!lightningInitialized) { lightningInitialized = true; blitzInit(); }
+      else if (blitzMap) setTimeout(() => blitzMap.invalidateSize(), 50);
+    }
+    if (view === 'aurora') {
+      if (!auroraInitialized) { auroraInitialized = true; auroraInit(); }
+      else if (awMap) setTimeout(() => awMap.invalidateSize(), 50);
+    }
+  }
+
+  // ── LIGHTNING APP ─────────────────────────────────────────────────────────────
+  const STRIKE_TTL_MS        = 30 * 60 * 1000;
+  const MIN_STRIKES_FOR_PRED = 20;
+  const PRED_MINUTES         = 15;
+  const WARNING_RADIUS_M     = 30000;
+  const WS_SERVERS = [
+    'wss://ws1.blitzortung.org/',
+    'wss://ws3.blitzortung.org/',
+    'wss://ws7.blitzortung.org/',
+    'wss://ws8.blitzortung.org/',
+  ];
+
+  function blitzDecode(data) {
+    const e = {};
+    const d = [...data];
+    let c = d[0], f = c;
+    const g = [c];
+    const h = 256;
+    let o = h;
+    for (let i = 1; i < d.length; i++) {
+      const code = d[i].charCodeAt(0);
+      const a = code < h ? d[i] : (e.hasOwnProperty(code) ? e[code] : (f + c));
+      g.push(a);
+      c = a[0];
+      e[o++] = f + c;
+      f = a;
+    }
+    return g.join('');
+  }
+
+  let blitzMap, predLayer, radiusCircle, blitzTileLayer;
+  let blitzDarkMode = true;
+  let blitzLat = null, blitzLon = null;
+  let strikes = [];
+  let blitzWs = null;
+  let blitzWsIndex = 0;
+  let blitzDemoTimer = null;
+  let blitzLive = false;
+  let blitzStormLat, blitzStormLon, blitzStormVLat, blitzStormVLon;
+
+  const BLITZ_HISTORY_KEY = 'blitz_strike_history';
+
+  // ── BACKGROUND PRE-FETCH ───────────────────────────────────────────────────
+  // Connects to Blitzortung immediately (even on weather tab) and caches
+  // incoming strikes to localStorage so the lightning map has data ready.
+  let _bgWs = null;
+  let _bgWsIdx = 0;
+
+  function blitzCacheToStorage(lat, lon, data, time) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(BLITZ_HISTORY_KEY) || '[]');
+      const now = Date.now();
+      saved.push({ lat, lon, time, data });
+      localStorage.setItem(
+        BLITZ_HISTORY_KEY,
+        JSON.stringify(saved.filter(s => now - s.time < STRIKE_TTL_MS))
+      );
+    } catch {}
+  }
+
+  function blitzStartBackground() {
+    if (_bgWsIdx >= WS_SERVERS.length) return;
+    try { _bgWs = new WebSocket(WS_SERVERS[_bgWsIdx]); } catch {
+      _bgWsIdx++; blitzStartBackground(); return;
+    }
+    const timer = setTimeout(() => {
+      _bgWs && _bgWs.close(); _bgWsIdx++; blitzStartBackground();
+    }, 8000);
+    _bgWs.onopen  = () => _bgWs.send(JSON.stringify({ "a": 111 }));
+    _bgWs.onmessage = e => {
+      clearTimeout(timer);
+      try {
+        const d = JSON.parse(blitzDecode(e.data));
+        if (d.lat && d.lon) blitzCacheToStorage(d.lat, d.lon, d, Date.now());
+      } catch {}
+    };
+    _bgWs.onerror = () => { clearTimeout(timer); _bgWsIdx++; blitzStartBackground(); };
+    _bgWs.onclose = () => {};
+  }
+
+  function blitzInitMap(lat, lon) {
+    blitzMap = L.map('map', { zoomControl: true, closePopupOnClick: true });
+    const km = 35;
+    const latD = km / 111;
+    const lonD = km / (111 * Math.cos(lat * Math.PI / 180));
+    blitzMap.fitBounds([[lat - latD, lon - lonD], [lat + latD, lon + lonD]]);
+
+    blitzTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap © CARTO',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(blitzMap);
+
+    radiusCircle = L.circle([lat, lon], {
+      radius: WARNING_RADIUS_M,
+      color: 'rgba(126,184,247,0.5)',
+      fillColor: 'rgba(126,184,247,0.04)',
+      weight: 1.5,
+      dashArray: '6 4'
+    }).addTo(blitzMap);
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:13px;height:13px;border-radius:50%;
+        border:3px solid #7eb8f7;background:rgba(126,184,247,0.25);
+        box-shadow:0 0 10px #7eb8f7"></div>`,
+      iconSize: [13, 13], iconAnchor: [6, 6]
+    });
+    L.marker([lat, lon], { icon }).addTo(blitzMap).bindPopup('📍 Din position');
+
+    predLayer = L.layerGroup().addTo(blitzMap);
+
+    blitzMap.on('moveend zoomend', () => {
+      document.getElementById('strike-count').textContent = blitzVisibleStrikes().length;
+      blitzUpdatePrediction();
+    });
+  }
+
+  function blitzGetLocation() {
+    if (!navigator.geolocation) { blitzFallback(); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        blitzLat = pos.coords.latitude;
+        blitzLon = pos.coords.longitude;
+        blitzInitMap(blitzLat, blitzLon);
+        blitzRestoreHistory();
+        blitzGeocode(blitzLat, blitzLon);
+        blitzConnect();
+      },
+      () => blitzFallback(),
+      { timeout: 8000 }
+    );
+  }
+
+  function blitzFallback() {
+    blitzLat = 59.33; blitzLon = 18.07;
+    document.getElementById('blixt-location-name').textContent = 'Stockholm (standard)';
+    blitzInitMap(blitzLat, blitzLon);
+    blitzRestoreHistory();
+    blitzConnect();
+  }
+
+  async function blitzGeocode(lat, lon) {
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+        { headers: { 'Accept-Language': 'sv' } }
+      );
+      const d = await r.json();
+      const a = d.address;
+      document.getElementById('blixt-location-name').textContent =
+        a.city || a.town || a.village || a.municipality || a.county || 'Okänd plats';
+    } catch {
+      document.getElementById('blixt-location-name').textContent =
+        `${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`;
+    }
+  }
+
+  function blitzConnect() {
+    if (blitzWsIndex >= WS_SERVERS.length) { blitzStartDemo(); return; }
+    const url = WS_SERVERS[blitzWsIndex];
+    let connected = false;
+    try { blitzWs = new WebSocket(url); } catch { blitzNextServer(); return; }
+
+    const timeout = setTimeout(() => {
+      if (!connected) { blitzWs.close(); blitzNextServer(); }
+    }, 6000);
+
+    blitzWs.onopen = () => { blitzWs.send(JSON.stringify({ "a": 111 })); };
+    blitzWs.onmessage = e => {
+      clearTimeout(timeout);
+      if (!connected) {
+        connected = true;
+        blitzLive = true;
+        document.getElementById('conn-dot').className = 'live';
+        document.getElementById('conn-label').textContent = 'Live – Blitzortung';
+        document.getElementById('demo-badge').classList.add('hidden');
+      }
+      try {
+        const raw = blitzDecode(e.data);
+        const d = JSON.parse(raw);
+        if (d.lat && d.lon) { blitzAddStrike(d.lat, d.lon, d); blitzUpdateDisplay(); }
+      } catch {}
+    };
+    blitzWs.onerror = () => { if (!connected) { clearTimeout(timeout); blitzNextServer(); } };
+    blitzWs.onclose = () => {
+      if (blitzLive) {
+        setTimeout(() => { blitzWsIndex = 0; blitzConnect(); }, 5000);
+        document.getElementById('conn-dot').className = '';
+        document.getElementById('conn-label').textContent = 'Återansluter...';
+        blitzLive = false;
+      }
+    };
+  }
+
+  function blitzNextServer() { blitzWsIndex++; blitzConnect(); }
+
+  function blitzStartDemo() {
+    document.getElementById('conn-dot').className = 'demo';
+    document.getElementById('conn-label').textContent = 'Demo (simulerad storm)';
+    const badge = document.getElementById('demo-badge');
+    badge.textContent = 'DEMO-DATA';
+    badge.classList.add('demo');
+    const offLat = (Math.random() - 0.5) * 1.2;
+    const offLon = (Math.random() - 0.5) * 1.2;
+    blitzStormLat = blitzLat + offLat;
+    blitzStormLon = blitzLon + offLon;
+    blitzStormVLat = (-offLat * 0.003) + (Math.random() - 0.5) * 0.001;
+    blitzStormVLon = (-offLon * 0.003) + (Math.random() - 0.5) * 0.001;
+    blitzDemoTimer = setInterval(blitzDemoTick, 2500);
+  }
+
+  function blitzDemoTick() {
+    blitzStormLat += blitzStormVLat;
+    blitzStormLon += blitzStormVLon;
+    blitzStormVLat += (Math.random() - 0.5) * 0.0002;
+    blitzStormVLon += (Math.random() - 0.5) * 0.0002;
+    const n = Math.floor(Math.random() * 3) + 1;
+    for (let i = 0; i < n; i++) {
+      blitzAddStrike(
+        blitzStormLat + (Math.random() - 0.5) * 0.18,
+        blitzStormLon + (Math.random() - 0.5) * 0.18
+      );
+    }
+    blitzUpdateDisplay();
+  }
+
+  function blitzStrikeIcon(ageMs) {
+    const mins = ageMs / 60000;
+    let color, glow, size;
+    if (mins < 5)       { color = '#ffe066'; glow = `0 0 9px #ffe066`; size = 10; }
+    else if (mins < 15) { color = '#ff9933'; glow = `0 0 5px #ff9933`; size = 8;  }
+    else                { color = '#ff4444'; glow = 'none';             size = 6;  }
+    return L.divIcon({
+      className: '',
+      html: `<div style="width:${size}px;height:${size}px;border-radius:50%;
+        background:${color};box-shadow:${glow};opacity:${mins < 15 ? 1 : 0.55}"></div>`,
+      iconSize: [size, size], iconAnchor: [size / 2, size / 2]
+    });
+  }
+
+  function blitzVisibleStrikes() {
+    if (!blitzMap) return strikes;
+    const bounds = blitzMap.getBounds();
+    return strikes.filter(s => bounds.contains([s.lat, s.lon]));
+  }
+
+  function blitzDistKm(lat, lon) {
+    const cosLat = Math.cos(blitzLat * Math.PI / 180);
+    return Math.sqrt(((lat - blitzLat) * 111) ** 2 + ((lon - blitzLon) * 111 * cosLat) ** 2);
+  }
+
+  function blitzBuildPopup(lat, lon, now, data) {
+    const timeStr = new Date(now).toLocaleTimeString('sv-SE');
+    const dist = Math.round(blitzDistKm(lat, lon));
+    const rows = [`<div class="strike-popup-row"><span>Tid</span><span class="strike-popup-val">${timeStr}</span></div>`];
+    rows.push(`<div class="strike-popup-row"><span>Avstånd</span><span class="strike-popup-val">${dist} km</span></div>`);
+    if (data) {
+      const pol = data.pol === 1 ? '＋ Positiv' : '－ Negativ';
+      rows.push(`<div class="strike-popup-row"><span>Polaritet</span><span class="strike-popup-val">${pol}</span></div>`);
+      if (data.alt != null && data.alt > 0)
+        rows.push(`<div class="strike-popup-row"><span>Höjd ö.h.</span><span class="strike-popup-val">${data.alt} m</span></div>`);
+      if (data.delay != null)
+        rows.push(`<div class="strike-popup-row"><span>Fördröjning</span><span class="strike-popup-val">${data.delay.toFixed(1)} s</span></div>`);
+      if (data.sig && data.sig.length)
+        rows.push(`<div class="strike-popup-row"><span>Stationer</span><span class="strike-popup-val">${data.sig.length}</span></div>`);
+    }
+    return `<div class="strike-popup"><div class="strike-popup-title">⚡ Blixtnedslag</div>${rows.join('')}</div>`;
+  }
+
+  // ── HISTORY (localStorage) ───────────────────────────────────────────────────
+
+  function blitzSaveHistory() {
+    const now = Date.now();
+    const payload = strikes
+      .filter(s => now - s.time < STRIKE_TTL_MS)
+      .map(s => ({ lat: s.lat, lon: s.lon, time: s.time, data: s.data }));
+    try { localStorage.setItem(BLITZ_HISTORY_KEY, JSON.stringify(payload)); } catch {}
+  }
+
+  function blitzLoadHistory() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(BLITZ_HISTORY_KEY) || '[]');
+      const now = Date.now();
+      return saved.filter(s => now - s.time < STRIKE_TTL_MS);
+    } catch { return []; }
+  }
+
+  async function blitzRestoreHistory() {
+    let history = [];
+
+    // 1. Try server buffer (30 min of global data, always fresh)
+    try {
+      const resp = await fetch('/api/strikes');
+      if (resp.ok) {
+        history = await resp.json();
+        // Keep localStorage in sync with server data
+        try { localStorage.setItem(BLITZ_HISTORY_KEY, JSON.stringify(history)); } catch {}
+        console.log(`[History] Loaded ${history.length} strikes from server`);
+      }
+    } catch { /* server unreachable – fall through */ }
+
+    // 2. Fall back to localStorage if server returned nothing
+    if (history.length === 0) {
+      history = blitzLoadHistory();
+      if (history.length > 0)
+        console.log(`[History] Loaded ${history.length} strikes from localStorage`);
+    }
+
+    for (const h of history) blitzAddStrike(h.lat, h.lon, h.data, h.time);
+    if (history.length > 0) { blitzUpdateDisplay(); blitzUpdatePrediction(); }
+    blitzUpdateCacheMinutes();
+  }
+
+  // ── STRIKES ───────────────────────────────────────────────────────────────────
+  // timestamp is optional – omit for live strikes, pass stored time for history
+  function blitzAddStrike(lat, lon, data, timestamp) {
+    const now = timestamp || Date.now();
+    const s = {
+      lat, lon, time: now, data,
+      marker: L.marker([lat, lon], { icon: blitzStrikeIcon(Date.now() - now) })
+        .addTo(blitzMap)
+        .bindPopup(blitzBuildPopup(lat, lon, now, data), { maxWidth: 260 })
+    };
+    strikes.push(s);
+    if (!timestamp && blitzDistKm(lat, lon) <= 30) {
+      document.getElementById('pred-trend').textContent = '⚠️ Blixt inom 30 km!';
+    }
+  }
+
+  function blitzUpdateCacheMinutes() {
+    if (!strikes.length) { document.getElementById('cache-minutes').textContent = '0'; return; }
+    const oldest = Math.min(...strikes.map(s => s.time));
+    const mins = Math.floor((Date.now() - oldest) / 60000);
+    document.getElementById('cache-minutes').textContent = mins;
+  }
+
+  function blitzUpdateDisplay() {
+    const now = Date.now();
+    strikes = strikes.filter(s => {
+      if (now - s.time > STRIKE_TTL_MS) { blitzMap.removeLayer(s.marker); return false; }
+      s.marker.setIcon(blitzStrikeIcon(now - s.time));
+      return true;
+    });
+    document.getElementById('strike-count').textContent = blitzVisibleStrikes().length;
+    blitzUpdateCacheMinutes();
+    blitzSaveHistory();
+  }
+
+  // ── PREDICTION (centroid of new vs old strikes) ──────────────────────────────
+  function blitzUpdatePrediction() {
+    predLayer.clearLayers();
+    const visible = blitzVisibleStrikes();
+
+    const setPredEmpty = hint => {
+      document.getElementById('pred-dir').textContent   = '–';
+      document.getElementById('pred-speed').textContent = hint;
+      document.getElementById('pred-dist').textContent  = '–';
+      document.getElementById('pred-trend').textContent = '–';
+    };
+
+    if (visible.length < MIN_STRIKES_FOR_PRED) {
+      setPredEmpty(blitzMap.getZoom() < 7 ? 'Zooma in på storm' : visible.length > 0 ? 'Väntar på data...' : '–');
+      return;
+    }
+
+    const now = Date.now();
+    const avg = (arr, key) => arr.reduce((a, s) => a + s[key], 0) / arr.length;
+
+    // New strikes = yellow (0–10 min) → WHERE the storm is NOW
+    // Old strikes = red   (15–30 min) → WHERE the storm WAS
+    const binNew = visible.filter(s => now - s.time <  10 * 60000);
+    const binOld = visible.filter(s => now - s.time >= 15 * 60000);
+
+    if (binNew.length < 5 || binOld.length < 5) {
+      setPredEmpty('Väntar på data...');
+      return;
+    }
+
+    // Centroids of each time window
+    const curLat = avg(binNew, 'lat');
+    const curLon = avg(binNew, 'lon');
+    const oldLat = avg(binOld, 'lat');
+    const oldLon = avg(binOld, 'lon');
+
+    // Actual time gap between the two window centres
+    const tNew  = avg(binNew, 'time');
+    const tOld  = avg(binOld, 'time');
+    const dtMin = (tNew - tOld) / 60000;
+
+    if (dtMin < 5) { setPredEmpty('Beräknar...'); return; }
+
+    const dLat      = curLat - oldLat;
+    const dLon      = curLon - oldLon;
+    const dLatPerMin = dLat / dtMin;
+    const dLonPerMin = dLon / dtMin;
+
+    const cosLat   = Math.cos(curLat * Math.PI / 180);
+    const speedKmh = Math.sqrt((dLatPerMin * 111) ** 2 + (dLonPerMin * 111 * cosLat) ** 2) * 60;
+    const bear     = ((Math.atan2(dLonPerMin, dLatPerMin) * 180 / Math.PI) + 360) % 360;
+
+    // Predicted position PRED_MINUTES ahead
+    const predLat = curLat + dLatPerMin * PRED_MINUTES;
+    const predLon = curLon + dLonPerMin * PRED_MINUTES;
+
+    // Speed sanity – storm cells rarely exceed 150 km/h
+    if (speedKmh > 200) {
+      setPredEmpty('Otillräcklig data');
+      return;
+    }
+
+    const distFromUser = blitzDistKm(curLat, curLon);
+    const prevDist     = blitzDistKm(oldLat, oldLon);
+
+    const closeStrike = visible.some(s => blitzDistKm(s.lat, s.lon) <= 30);
+    document.getElementById('pred-trend').textContent = closeStrike
+      ? '⚠️ Blixt inom 30 km!'
+      : distFromUser < prevDist ? '⚠️ Närmar sig' : '✅ Rör sig bort';
+
+    // Dashed trail: old centroid (red strikes) → current centroid (yellow strikes)
+    L.polyline([[oldLat, oldLon], [curLat, curLon]], {
+      color: '#7eb8f7', weight: 2, opacity: 0.4, dashArray: '5 5'
+    }).addTo(predLayer);
+
+    // Solid line: current → predicted position
+    L.polyline([[curLat, curLon], [predLat, predLon]], {
+      color: '#7eb8f7', weight: 3, opacity: 0.9
+    }).addTo(predLayer);
+
+    // Arrow marker at predicted position – rotated to bear (degrees from North CW)
+    const arrowSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <polygon points="14,2 22,24 14,18 6,24"
+               fill="#7eb8f7" opacity="0.95"
+               transform="rotate(${Math.round(bear)},14,14)"/>
+    </svg>`;
+    L.marker([predLat, predLon], {
+      icon: L.divIcon({ className: '', html: arrowSvg, iconSize: [28, 28], iconAnchor: [14, 14] }),
+      interactive: true
+    }).addTo(predLayer).bindPopup(`⟶ Prognos +${PRED_MINUTES} min`);
+
+    // Dashed ring at current storm centroid
+    L.circleMarker([curLat, curLon], {
+      radius: 16, color: 'rgba(255,160,0,0.55)',
+      fillColor: 'rgba(255,160,0,0.06)', weight: 1.5, dashArray: '4 3'
+    }).addTo(predLayer);
+
+    const dirs = ['N','NNO','NO','ONO','O','OSO','SO','SSO','S','SSV','SV','VSV','V','VNV','NV','NNV'];
+    document.getElementById('pred-dir').textContent   = `${dirs[Math.round(bear / 22.5) % 16]} (${Math.round(bear)}°)`;
+    document.getElementById('pred-speed').textContent = `${Math.round(speedKmh)} km/h`;
+    document.getElementById('pred-dist').textContent  = `${Math.round(distFromUser)} km`;
+  }
+
+  function toggleLegend() {
+    const body = document.getElementById('legend-body');
+    const arrow = document.getElementById('legend-arrow');
+    const collapsed = body.classList.toggle('hidden');
+    arrow.textContent = collapsed ? '▸' : '▾';
+  }
+
+  function togglePredict() {
+    const body = document.getElementById('predict-body');
+    const arrow = document.getElementById('predict-arrow');
+    const collapsed = body.classList.toggle('hidden');
+    arrow.textContent = collapsed ? '▸' : '▾';
+  }
+
+  function toggleMapStyle() {
+    blitzDarkMode = !blitzDarkMode;
+    const url = blitzDarkMode
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    blitzTileLayer.setUrl(url);
+    document.getElementById('map-style-btn').textContent = blitzDarkMode ? '☀️ Ljus' : '🌙 Mörk';
+  }
+
+  let radarLayer = null;
+  let radarOn    = false;
+  let radarTimer = null;
+
+  async function loadRadarFrame() {
+    try {
+      const resp = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+      const data = await resp.json();
+      const frames = data.radar && data.radar.past;
+      if (!frames || !frames.length) return;
+      const latest  = frames[frames.length - 1];
+      const tileUrl = `${data.host}${latest.path}/256/{z}/{x}/{y}/2/1_0.png`;
+      if (radarLayer) {
+        radarLayer.setUrl(tileUrl);
+      } else {
+        radarLayer = L.tileLayer(tileUrl, {
+          opacity: 0.45,
+          attribution: '© <a href="https://www.rainviewer.com" target="_blank">RainViewer</a>',
+          maxZoom: 19,
+          zIndex: 200,
+        }).addTo(blitzMap);
+      }
+    } catch (e) {
+      console.warn('[Radar] fetch failed:', e.message);
+    }
+  }
+
+  async function toggleRadar() {
+    const btn = document.getElementById('radar-btn');
+    if (radarOn) {
+      if (radarLayer) { blitzMap.removeLayer(radarLayer); radarLayer = null; }
+      clearInterval(radarTimer); radarTimer = null;
+      radarOn = false;
+      btn.textContent = '🌧 Radar';
+      btn.classList.remove('active');
+    } else {
+      radarOn = true;
+      btn.textContent = '🌧 Laddar...';
+      // RainViewer max zoom is 7 – zoom out if needed before loading tiles
+      if (blitzMap.getZoom() > 7) blitzMap.setZoom(7);
+      await loadRadarFrame();
+      btn.textContent = '🌧 Radar ✓';
+      btn.classList.add('active');
+      // Refresh every 10 minutes to match RainViewer's update cycle
+      radarTimer = setInterval(loadRadarFrame, 10 * 60 * 1000);
+    }
+  }
+
+  function blitzRecenter() {
+    if (!blitzMap || blitzLat === null) return;
+    blitzMap.flyTo([blitzLat, blitzLon], Math.max(blitzMap.getZoom(), 9), { duration: 0.8 });
+  }
+
+  function blitzInit() {
+    // Stop background connection – the live connection takes over
+    if (_bgWs) { _bgWs.onclose = null; _bgWs.close(); _bgWs = null; }
+    setInterval(blitzUpdateDisplay,    10000);
+    setInterval(blitzUpdatePrediction, 30000);
+    blitzGetLocation();
+  }
+
+  // Start buffering strikes to localStorage immediately on page load
+  blitzStartBackground();
+
+  // ══════════════════════════════════════════════════════════════════
+  // ── AURORA APP ────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════
+  let awMap = null;
+  let awUserLat = null, awUserLon = null;
+  let awUserMarker = null, awAuroraLayers = [], awOvationLayer = null;
+  let awCharts = {};
+  let awAlertTexts = [];
+  const NOAA = 'https://services.swpc.noaa.gov';
+
+  // ── Places ────────────────────────────────────────────────────────
+  const awPlaces = [
+    {n:'Stockholm',c:'Sverige',lat:59.33,lon:18.07},
+    {n:'Göteborg',c:'Sverige',lat:57.71,lon:11.97},
+    {n:'Malmö',c:'Sverige',lat:55.60,lon:13.00},
+    {n:'Kiruna',c:'Sverige',lat:67.86,lon:20.23},
+    {n:'Luleå',c:'Sverige',lat:65.58,lon:22.16},
+    {n:'Umeå',c:'Sverige',lat:63.83,lon:20.26},
+    {n:'Abisko',c:'Sverige',lat:68.35,lon:18.83},
+    {n:'Oslo',c:'Norge',lat:59.91,lon:10.75},
+    {n:'Tromsø',c:'Norge',lat:69.65,lon:18.96},
+    {n:'Bodø',c:'Norge',lat:67.28,lon:14.38},
+    {n:'Reykjavik',c:'Island',lat:64.14,lon:-21.94},
+    {n:'Helsinki',c:'Finland',lat:60.17,lon:24.93},
+    {n:'Rovaniemi',c:'Finland',lat:66.50,lon:25.73},
+    {n:'Longyearbyen',c:'Svalbard',lat:78.22,lon:15.63},
+    {n:'Nuuk',c:'Grönland',lat:64.18,lon:-51.73},
+    {n:'Fairbanks',c:'Alaska, USA',lat:64.84,lon:-147.72},
+    {n:'Yellowknife',c:'Kanada',lat:62.45,lon:-114.37},
+  ];
+
+  // ── Init ──────────────────────────────────────────────────────────
+  function auroraInit() {
+    // Map
+    awMap = L.map('aw-map', {zoomControl: true, attributionControl: false}).setView([65, 15], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(awMap);
+
+    // Try saved location first (shared with weather app), otherwise GPS
+    try {
+      const saved = localStorage.getItem('wx_location');
+      if (saved) {
+        const { lat, lon, name } = JSON.parse(saved);
+        awApplyLocation(lat, lon, name, false);
+      } else {
+        awGpsLocate();
+      }
+    } catch {
+      awGpsLocate();
+    }
+
+    // Fetch all data (includes OVATION aurora map)
+    awFetchAll();
+
+    // Auto-refresh every 10 minutes
+    setInterval(awFetchAll, 10 * 60 * 1000);
+
+    // TTS button visible if speech available
+    if ('speechSynthesis' in window) {
+      document.getElementById('aw-tts-btn').classList.add('visible');
+    }
+  }
+
+  // Apply a location to map, UI and optionally save to localStorage
+  function awApplyLocation(lat, lon, name, save = true) {
+    awUserLat = lat;
+    awUserLon = lon;
+    awMap.setView([lat, lon], 5);
+    if (awUserMarker) awUserMarker.remove();
+    awUserMarker = L.circleMarker([lat, lon],
+      {radius:8, color:'#22d3a0', fillColor:'#22d3a0', fillOpacity:.95, weight:2})
+      .addTo(awMap).bindPopup('<b>📍 Din position</b>');
+    document.getElementById('aw-loc-name').textContent = name;
+    document.getElementById('aw-coords').textContent =
+      `${lat.toFixed(1)}°N ${lon.toFixed(1)}°Ö`;
+    awUpdateLocalInfo(lat, lon);
+    if (save) {
+      try { localStorage.setItem('wx_location', JSON.stringify({lat, lon, name})); } catch {}
+    }
+    // Refresh cloud cover for new location
+    awFetchKpForecast();
+  }
+
+  // Geolocate via GPS — same options as the weather app
+  function awGpsLocate() {
+    if (!navigator.geolocation) {
+      awApplyLocation(59.33, 18.07, 'Stockholm', false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        const { latitude: lat, longitude: lon } = coords;
+        const name = await reverseGeocode(lat, lon);
+        awApplyLocation(lat, lon, name);
+      },
+      () => { awApplyLocation(59.33, 18.07, 'Stockholm', false); },
+      { timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
+  // ── Fetch all NOAA data ───────────────────────────────────────────
+  async function awFetchAll() {
+    const ts = new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('aw-updated').textContent = `Uppdaterad ${ts}`;
+
+    await Promise.allSettled([
+      awFetchKpHistory(),
+      awFetchKpForecast(),
+      awFetchKp7Day(),
+      awFetchDst(),
+      awFetchSolarWind(),
+      awFetchAlerts(),
+      awFetchOvation(),
+    ]);
+  }
+
+  // ── Kp History ────────────────────────────────────────────────────
+  async function awFetchKpHistory() {
+    try {
+      const r = await fetch(`${NOAA}/products/noaa-planetary-k-index.json`);
+      const raw = await r.json();
+      // raw: [[time_tag, Kp, a_running, station_count], ...]
+      // Take last 8 entries (24h at 3h intervals)
+      const rows = raw.slice(-8);
+      const labels = rows.map(r => {
+        const d = new Date(r[0]); return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+      });
+      const vals = rows.map(r => parseFloat(r[1]) || 0);
+      const current = vals[vals.length - 1];
+      const prev = vals[vals.length - 2] || current;
+
+      document.getElementById('aw-hist-val').textContent = current.toFixed(1);
+      const diff = current - prev;
+      document.getElementById('aw-hist-delta').textContent =
+        `${diff >= 0 ? '↑' : '↓'} ${Math.abs(diff).toFixed(1)} vs föregående`;
+      document.getElementById('aw-kp-big').textContent = current.toFixed(1);
+      const kpCurLbl = document.getElementById('aw-kp-cur-lbl');
+      if (kpCurLbl) kpCurLbl.textContent = `Kp${Math.round(current)} ▲ Nu`;
+      awUpdateKpStatus(current);
+      awBuildBarChart('aw-c-kphist', labels, vals, true);
+    } catch(e) { console.warn('Kp history error:', e); }
+  }
+
+  // ── Kp Forecast + Cloud cover ─────────────────────────────────────
+  async function awFetchKpForecast() {
+    try {
+      const lat = awUserLat || 59.33, lon = awUserLon || 18.07;
+
+      // Fetch Kp forecast and cloud cover in parallel
+      const [kpR, cloudR] = await Promise.all([
+        fetch(`${NOAA}/products/noaa-planetary-k-index-forecast.json`),
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&hourly=cloud_cover&timezone=auto&forecast_days=4&timeformat=iso8601`)
+      ]);
+      const rawKp    = await kpR.json();
+      const rawCloud = await cloudR.json();
+
+      // Build hourly cloud map: ISO-time → cloud_cover %
+      const cloudMap = {};
+      (rawCloud.hourly?.time || []).forEach((t, i) => {
+        cloudMap[t] = rawCloud.hourly.cloud_cover[i] ?? null;
+      });
+
+      // Kp: today's remaining hours + next 2 full days
+      const now = new Date();
+      const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3);
+      const rows = rawKp.filter(r => {
+        const d = new Date(r[0]);
+        return d >= now && d < cutoff;
+      });
+      if (!rows.length) return;
+
+      const labels   = [];
+      const kpVals   = [];
+      const siktVals = []; // cloud cover % (0=klart, 100=mulet)
+
+      // First day label at index 0
+      const dayBoundaries = [];
+      const firstDate = new Date(rows[0][0]);
+      dayBoundaries.push({ index: 0, label: firstDate.toLocaleDateString('sv-SE',{weekday:'short',day:'numeric',month:'short'}) });
+
+      rows.forEach((r, i) => {
+        const d = new Date(r[0]);
+        labels.push(d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}));
+        kpVals.push(parseFloat(r[1]) || 0);
+
+        // Detect day change for chart separator
+        if (i > 0) {
+          const prev = new Date(rows[i-1][0]);
+          if (d.getDate() !== prev.getDate()) {
+            const dayLbl = d.toLocaleDateString('sv-SE',{weekday:'short',day:'numeric',month:'short'});
+            dayBoundaries.push({ index: i, label: dayLbl });
+          }
+        }
+
+        // Match cloud cover: look for exact hour or nearest
+        const iso = d.toISOString().substring(0,13) + ':00';
+        const localIso = new Date(d.getTime()).toLocaleDateString('sv-SE') + 'T' +
+          String(d.getHours()).padStart(2,'0') + ':00';
+        const cc = cloudMap[localIso] ?? cloudMap[iso] ?? null;
+        siktVals.push(cc !== null ? Math.round(cc) : null);
+      });
+
+      const maxVal = Math.max(...kpVals);
+      document.getElementById('aw-fc3-val').textContent =
+        `${Math.min(...kpVals).toFixed(0)}–${maxVal.toFixed(0)}`;
+      document.getElementById('aw-fc3-delta').textContent =
+        maxVal >= 5 ? '🟡 Förhöjd aktivitet' : maxVal >= 3 ? '🟢 Måttlig aktivitet' : '🔵 Låg aktivitet';
+
+      awBuildForecastChart(labels, kpVals, siktVals, dayBoundaries);
+    } catch(e) { console.warn('Kp forecast error:', e); }
+  }
+
+  // ── Kp multi-day: 1 dag historik + upp till 27 dagar framåt (27-dagarsprognos) ──
+  async function awFetchKp7Day() {
+    const card = document.getElementById('aw-card-kp7d');
+    try {
+      const [fcR, outlookR] = await Promise.all([
+        fetch(`${NOAA}/products/noaa-planetary-k-index-forecast.json`),
+        fetch(`${NOAA}/text/27-day-outlook.txt`)
+      ]);
+      const fcRaw   = await fcR.json();
+      const outlook = await outlookR.text();
+
+      const now = new Date();
+      const byDay   = {};
+      const dayMeta = {};
+      const dayOrder = [];
+
+      function key(d) { return d.toLocaleDateString('sv-SE', {weekday:'short', day:'numeric'}); }
+      function push(d, kp, type) {
+        const k = key(d);
+        if (!byDay[k]) { byDay[k] = []; dayOrder.push(k); }
+        if (!dayMeta[k]) dayMeta[k] = type;
+        byDay[k].push(kp);
+      }
+
+      // Past 1 day: 3-hourly observed/estimated from forecast JSON
+      fcRaw.forEach(row => {
+        const d = new Date(row[0]);
+        if (isNaN(d)) return;
+        const diff = (d - now) / 86400000;
+        if (diff < -1.1 || diff > 0.1) return; // only yesterday
+        const type = row[2] || 'observed';
+        if (type === 'predicted') return;
+        push(d, parseFloat(row[1]) || 0, type);
+      });
+
+      // Future days: parse daily Kp from 27-day text outlook
+      // Format: "2026 03 27  130  8  3"  or  "2026 Mar 27  130  8  3"
+      // Columns: year month day flux aIndex kp
+      const monthNames = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+      outlook.split('\n').forEach(line => {
+        if (!/^\d{4}\s+\S+\s+\d+/.test(line)) return;
+        const p = line.trim().split(/\s+/);
+        if (p.length < 6) return;
+        const yr = parseInt(p[0]);
+        const mo = isNaN(p[1]) ? (monthNames[p[1].toLowerCase()] ?? -1) : parseInt(p[1]) - 1;
+        const dy = parseInt(p[2]);
+        if (mo < 0 || isNaN(yr) || isNaN(dy)) return;
+        const d = new Date(yr, mo, dy);
+        if (isNaN(d)) return;
+        const diff = (d - now) / 86400000;
+        if (diff < 0.5 || diff > 27.5) return;
+        push(d, parseFloat(p[5]) || 0, 'predicted');
+      });
+
+      const days = [...new Set(dayOrder)];
+      const futureCount = days.filter((d, i) => dayMeta[d] === 'predicted').length;
+
+      // Hide card if fewer than 3 forward days available
+      if (card) card.style.display = futureCount < 3 ? 'none' : '';
+      if (futureCount < 3) return;
+
+      const mins   = days.map(d => byDay[d].length > 1 ? Math.min(...byDay[d]) : 0);
+      const maxes  = days.map(d => Math.max(...byDay[d]));
+      const isPred = days.map(d => dayMeta[d] === 'predicted');
+
+      const predMaxes = maxes.filter((_, i) => isPred[i]);
+      const maxKp7  = predMaxes.length ? Math.max(...predMaxes) : Math.max(...maxes);
+      const maxDay7 = days[maxes.indexOf(Math.max(...maxes))];
+      document.getElementById('aw-7d-val').textContent = `Max ${maxKp7.toFixed(1)}`;
+      document.getElementById('aw-7d-day').textContent = maxDay7;
+
+      awBuild7DayChart(days, mins, maxes, isPred);
+    } catch(e) { console.warn('Kp 7-day error:', e); if (card) card.style.display = 'none'; }
+  }
+
+  // ── DST ───────────────────────────────────────────────────────────
+  async function awFetchDst() {
+    try {
+      const r = await fetch(`${NOAA}/json/geospace/geospace_dst_1_hour.json`);
+      const raw = await r.json();
+      // raw: [{time_tag, dst}, ...]
+      const rows = raw.slice(-48);
+      const labels = rows.map(r => {
+        const d = new Date(r.time_tag);
+        return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+      });
+      const vals = rows.map(r => parseFloat(r.dst) || 0);
+      const cur = vals[vals.length - 1];
+      document.getElementById('aw-dst-val').textContent = cur.toFixed(0);
+      const badge = document.getElementById('aw-dst-badge');
+      badge.textContent = cur < -100 ? 'Stor storm' : cur < -50 ? 'Moderat' : cur < -25 ? 'Svag störning' : 'Lugnt';
+
+      awBuildLineChart('aw-c-dst', labels, vals, '#a78bfa', 'rgba(167,139,250,.12)');
+    } catch(e) { console.warn('DST error:', e); }
+  }
+
+  // ── Solar Wind ────────────────────────────────────────────────────
+  async function awFetchSolarWind() {
+    try {
+      const [magR, plasmaR] = await Promise.all([
+        fetch(`${NOAA}/products/solar-wind/mag-5-minute.json`),
+        fetch(`${NOAA}/products/solar-wind/plasma-5-minute.json`),
+      ]);
+      const mag    = await magR.json();
+      const plasma = await plasmaR.json();
+
+      // mag: [[time, bx, by, bz, bt, lat, lon], ...]  (first row is header)
+      // plasma: [[time, density, speed, temperature], ...]
+      const magRows    = mag.slice(-13);
+      const plasmaRows = plasma.slice(-13);
+
+      const bzVals    = magRows.map(r => parseFloat(r[3]) || 0);
+      const speedVals = plasmaRows.map(r => parseFloat(r[2]) || 0);
+      const densVals  = plasmaRows.map(r => parseFloat(r[1]) || 0);
+      const tempVals  = plasmaRows.map(r => parseFloat(r[3]) || 0);
+      const labels    = magRows.map(r => {
+        const d = new Date(r[0]); return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+      });
+
+      const curBz    = bzVals[bzVals.length - 1];
+      const curSpeed = speedVals[speedVals.length - 1];
+      const curDens  = densVals[densVals.length - 1];
+      const curTemp  = tempVals[tempVals.length - 1];
+
+      document.getElementById('aw-bz-val').textContent = curBz.toFixed(1);
+      document.getElementById('aw-bz-dir').textContent =
+        curBz < -5 ? 'nT · Söderut ✓' : curBz < 0 ? 'nT · Svagt söderut' : 'nT · Norrut ✗';
+      document.getElementById('aw-bz-val').className =
+        'aw-stat-val ' + (curBz < -5 ? 'aw-green' : curBz < 0 ? 'aw-yellow' : 'aw-red');
+      document.getElementById('aw-bz-badge').textContent = `${curBz.toFixed(1)} nT`;
+
+      document.getElementById('aw-speed-val').textContent = Math.round(curSpeed);
+      document.getElementById('aw-dens-val').textContent  = curDens.toFixed(1);
+
+      // Gauges (% of max expected: speed 800, density 30, temp 200k)
+      awSetGauge('aw-g-speed', curSpeed/800, '#38bdf8', Math.round(curSpeed));
+      awSetGauge('aw-g-dens',  curDens/30,   '#fbbf24', curDens.toFixed(1));
+      awSetGauge('aw-g-temp',  curTemp/200000,'#fb923c', Math.round(curTemp/1000)+'k');
+
+      // Bz chart
+      awBuildLineChart('aw-c-bz', labels, bzVals, '#22d3a0', 'rgba(34,211,160,.1)');
+
+      // Wind chart (dual axis)
+      awBuildWindChart(labels, speedVals, densVals);
+
+    } catch(e) { console.warn('Solar wind error:', e); }
+  }
+
+  // ── Alerts ────────────────────────────────────────────────────────
+  async function awFetchAlerts() {
+    try {
+      const r = await fetch(`${NOAA}/products/alerts.json`);
+      const raw = await r.json();
+      // Keep active alerts from last 24h
+      const cutoff = Date.now() - 24 * 3600 * 1000;
+      const active = raw.filter(a => {
+        const t = new Date(a.issue_time || a.issuedAt || 0).getTime();
+        return t > cutoff;
+      }).slice(0, 8);
+
+      document.getElementById('aw-alert-badge').textContent = active.length;
+      document.getElementById('aw-alerts-count').textContent = `${active.length} aktiva`;
+
+      awAlertTexts = active.map(a => {
+        const msg = a.message || a.messageBody || '';
+        return msg.replace(/<[^>]+>/g,'').substring(0, 300);
+      });
+
+      const list = document.getElementById('aw-alerts-list');
+      if (!active.length) {
+        list.innerHTML = '<div class="aw-loading">Inga aktiva rymdvädervarningar 🟢</div>';
+        return;
+      }
+      list.innerHTML = active.map(a => {
+        const msg = (a.message || a.messageBody || '').replace(/<[^>]+>/g,'');
+        const lines = msg.split('\n').filter(l => l.trim());
+        const heading = lines[0] || 'Rymdvädervarning';
+        const body = lines.slice(1,4).join(' ');
+        const when = new Date(a.issue_time || a.issuedAt || 0)
+          .toLocaleString('sv-SE',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+        const level = heading.toLowerCase().includes('warning') || heading.toLowerCase().includes('storm') ? 'high'
+                    : heading.toLowerCase().includes('watch') ? 'warn' : 'info';
+        const icon = level==='high' ? '🌩️' : level==='warn' ? '☀️' : '📡';
+        return `<div class="aw-alert-item ${level}">
+          <div class="aw-alert-icon">${icon}</div>
+          <div>
+            <div class="aw-alert-title ${level==='high'?'aw-orange':level==='warn'?'aw-yellow':'aw-blue'}">${heading}</div>
+            <div class="aw-alert-desc">${body}</div>
+            <div class="aw-alert-time">🕐 ${when} UTC · NOAA SWPC</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Auto-read alerts (TTS) on first load
+      if (awAlertTexts.length && !awAlerts_spoken) {
+        awAlerts_spoken = true;
+        setTimeout(awReadAlerts, 1500);
+      }
+    } catch(e) { console.warn('Alerts error:', e); }
+  }
+  let awAlerts_spoken = false;
+
+  // ── TTS ───────────────────────────────────────────────────────────
+  function awReadAlerts() {
+    if (!('speechSynthesis' in window) || !awAlertTexts.length) return;
+    window.speechSynthesis.cancel();
+    const intro = new SpeechSynthesisUtterance('Aktiva rymdvädervarningar:');
+    intro.lang = 'sv-SE'; intro.rate = 1.0;
+    window.speechSynthesis.speak(intro);
+    awAlertTexts.forEach((txt, i) => {
+      const u = new SpeechSynthesisUtterance(`Varning ${i+1}: ${txt}`);
+      u.lang = 'en-US'; u.rate = 0.9;
+      window.speechSynthesis.speak(u);
+    });
+  }
+
+  // ── Scroll to alerts ──────────────────────────────────────────────
+  function awScrollToAlerts() {
+    const el = document.getElementById('aw-alerts-sec');
+    el?.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  // ── Kp status label ───────────────────────────────────────────────
+  function awUpdateKpStatus(kp) {
+    const el = document.getElementById('aw-kp-status');
+    if (kp >= 8)      el.textContent = '🔴 G4–G5 Extrem storm';
+    else if (kp >= 6) el.textContent = '🟠 G2–G3 Stark storm';
+    else if (kp >= 5) el.textContent = '🟡 G1 Geomagnetisk storm';
+    else if (kp >= 4) el.textContent = '🟢 Aktiv';
+    else if (kp >= 3) el.textContent = '🔵 Svagt aktiv';
+    else              el.textContent = '⚪ Lugnt';
+    el.className = kp >= 5 ? 'aw-orange' : kp >= 3 ? 'aw-green' : '';
+  }
+
+
+  // ── Astronomical twilight end (sun 18° below horizon) ────────────
+  function awAstroTwilightEnd(lat, lon, date) {
+    const rad = Math.PI / 180;
+    const doy = Math.floor((date - new Date(date.getFullYear(),0,0)) / 86400000);
+    const decl = 23.45 * Math.sin(rad * (360/365) * (doy - 81));
+    const cosH = (Math.sin(rad*-18) - Math.sin(rad*lat)*Math.sin(rad*decl))
+               / (Math.cos(rad*lat)*Math.cos(rad*decl));
+    if (cosH < -1 || cosH > 1) return null;
+    const H = Math.acos(cosH) / rad;
+    const B = rad * (360/365) * (doy - 81);
+    const eot = 9.87*Math.sin(2*B) - 7.53*Math.cos(B) - 1.5*Math.sin(B);
+    const tzOff = -date.getTimezoneOffset();
+    const endMin = Math.round(720 - eot + (tzOff - lon*4) + H*4);
+    const hh = Math.floor(endMin/60) % 24;
+    const mm = endMin % 60;
+    return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+  }
+
+  // ── Local info (sunrise/sunset approx) ───────────────────────────
+  function awUpdateLocalInfo(lat, lon) {
+    const now = new Date();
+    const rad = Math.PI/180;
+    const doy = Math.floor((now - new Date(now.getFullYear(),0,0)) / 86400000);
+    const decl = 23.45 * Math.sin(rad*(360/365)*(doy-81));
+    const cosHS = (Math.sin(rad*-0.833) - Math.sin(rad*lat)*Math.sin(rad*decl))
+                / (Math.cos(rad*lat)*Math.cos(rad*decl));
+    const B = rad*(360/365)*(doy-81);
+    const eot = 9.87*Math.sin(2*B) - 7.53*Math.cos(B) - 1.5*Math.sin(B);
+    const tzOff = -now.getTimezoneOffset();
+    const noon = 720 - eot + (tzOff - lon*4);
+    const HS = Math.acos(Math.max(-1,Math.min(1,cosHS)))/rad;
+    const fmtM = m => `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(Math.round(m%60)).padStart(2,'0')}`;
+    document.getElementById('aw-sunset').textContent = fmtM(noon + HS*4);
+    document.getElementById('aw-sunrise').textContent = fmtM(noon - HS*4);
+
+    const astroEnd = awAstroTwilightEnd(lat, lon, now);
+    const astroStart = (() => {
+      // morning: sun 18° below horizon on the AM side
+      const cosHA = (Math.sin(rad*-18)-Math.sin(rad*lat)*Math.sin(rad*decl))
+                  / (Math.cos(rad*lat)*Math.cos(rad*decl));
+      if (cosHA < -1 || cosHA > 1) return null;
+      const HA = Math.acos(cosHA)/rad;
+      const m = Math.round(noon - HA*4);
+      return `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+    })();
+    document.getElementById('aw-astro').textContent =
+      (astroEnd && astroStart) ? `${astroEnd}–${astroStart}` : 'Ej astronomisk mörker';
+    document.getElementById('aw-cloud').textContent = '—';
+    document.getElementById('aw-coords').textContent = `${lat.toFixed(1)}°N ${lon.toFixed(1)}°Ö`;
+  }
+
+  // ── Aurora map: real NOAA OVATION probability data ───────────────
+  async function awFetchOvation() {
+    try {
+      const r = await fetch('https://services.swpc.noaa.gov/json/ovation_aurora_latest.json');
+      const data = await r.json();
+
+      // Remove previous overlay
+      if (awOvationLayer) { awMap.removeLayer(awOvationLayer); awOvationLayer = null; }
+      awAuroraLayers.forEach(l => awMap.removeLayer(l));
+      awAuroraLayers = [];
+
+      // Build a 720×362 canvas (2 px per degree) covering -180..180, -90..90
+      // OVATION lon 0-359 → geographic lon: lon ≤ 180 ? lon : lon - 360
+      const W = 720, H = 362;
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+
+      data.coordinates.forEach(([lon, lat, prob]) => {
+        if (prob <= 0) return;
+        const geoLon = lon <= 180 ? lon : lon - 360;
+        const x = Math.round((geoLon + 180) / 360 * W);
+        const y = Math.round((90 - lat) / 180 * H);
+        // Scale alpha so even 5% probability is somewhat visible
+        const a = Math.min(0.15 + (prob / 100) * 0.75, 0.9);
+        const rgb = prob > 70 ? '248,113,113' : prob > 40 ? '251,191,36' : '34,211,160';
+        ctx.fillStyle = `rgba(${rgb},${a})`;
+        ctx.fillRect(x - 1, y - 1, 4, 4); // 4×4 px blob per data point
+      });
+
+      awOvationLayer = L.imageOverlay(canvas.toDataURL(), [[-90, -180], [90, 180]], {
+        opacity: 0.9, interactive: false, className: 'aw-ovation'
+      }).addTo(awMap);
+
+      // Apply CSS blur for a natural glow effect
+      const ovEl = document.querySelector('.leaflet-image-layer.aw-ovation') ||
+                   document.querySelector('.aw-ovation');
+      if (ovEl) ovEl.style.filter = 'blur(4px)';
+
+      // Show forecast time
+      if (data['Forecast Time']) {
+        const ft = new Date(data['Forecast Time']);
+        const ts = ft.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+        document.getElementById('aw-updated').textContent =
+          `Uppdaterad ${new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'})} · OVATION-prognos ${ts}`;
+      }
+    } catch(e) { console.warn('OVATION error:', e); }
+  }
+
+  // ── Gauge helper ──────────────────────────────────────────────────
+  function awSetGauge(id, pct, color, label) {
+    pct = Math.min(1, Math.max(0, pct));
+    const el = document.getElementById(id);
+    if (el) el.style.background = `conic-gradient(${color} ${(pct*100).toFixed(0)}%,rgba(255,255,255,.06) 0)`;
+    const v = document.getElementById(id+'-v');
+    if (v) v.textContent = label;
+  }
+
+  // ── Collapsible ───────────────────────────────────────────────────
+  function awToggleColl(id) {
+    const body = document.getElementById(`aw-bd-${id}`);
+    const arr  = document.getElementById(`aw-arr-${id}`);
+    const btn  = document.getElementById(`aw-btn-${id}`);
+    body?.classList.toggle('open');
+    arr?.classList.toggle('open');
+    btn?.classList.toggle('open');
+    // Resize chart if inside
+    if (body?.classList.contains('open')) {
+      setTimeout(() => { if(awCharts[id]) awCharts[id].resize(); }, 350);
+    }
+  }
+  function awOpenColl(id) {
+    const body = document.getElementById(`aw-bd-${id}`);
+    if (body && !body.classList.contains('open')) awToggleColl(id);
+    document.getElementById(`aw-btn-${id}`)?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+
+  // ── Search ────────────────────────────────────────────────────────
+  function awOpenSearch() {
+    document.getElementById('aw-search-modal').classList.add('open');
+    awRenderStaticPlaces('');
+    setTimeout(() => document.getElementById('aw-search-input').focus(), 60);
+  }
+  function awCloseSearch() {
+    document.getElementById('aw-search-modal').classList.remove('open');
+    document.getElementById('aw-search-input').value = '';
+  }
+  let _awSearchTimer;
+  function awFilterSearch(q) {
+    clearTimeout(_awSearchTimer);
+    if (!q.trim()) { awRenderStaticPlaces(''); return; }
+    document.getElementById('aw-search-results').innerHTML =
+      '<div style="padding:12px;color:#64748b;text-align:center;font-size:13px">Söker…</div>';
+    _awSearchTimer = setTimeout(async () => {
+      try {
+        const results = await searchPlaces(q); // from app.js (Nominatim)
+        awRenderNominatimResults(results);
+      } catch {
+        awRenderStaticPlaces(q);
+      }
+    }, 350);
+  }
+  function awRenderStaticPlaces(q) {
+    const res = q ? awPlaces.filter(p =>
+      p.n.toLowerCase().includes(q.toLowerCase()) || p.c.toLowerCase().includes(q.toLowerCase())
+    ) : awPlaces;
+    document.getElementById('aw-search-results').innerHTML = res.map(p =>
+      `<div class="aw-search-item" onclick="awGoTo(${p.lat},${p.lon},'${p.n.replace(/'/g,"\\'")}','${p.c.replace(/'/g,"\\'")}')">
+        <span style="font-size:15px">📍</span>
+        <div><div class="aw-si-name">${p.n}</div><div class="aw-si-country">${p.c}</div></div>
+      </div>`).join('');
+  }
+  function awRenderNominatimResults(results) {
+    const el = document.getElementById('aw-search-results');
+    if (!results.length) {
+      el.innerHTML = '<div style="padding:12px;color:#64748b;text-align:center;font-size:13px">Inga platser hittades</div>';
+      return;
+    }
+    function pName(r) {
+      const a = r.address || {};
+      return a.city || a.town || a.village || a.hamlet ||
+             a.suburb || a.quarter || a.locality ||
+             r.display_name.split(',')[0];
+    }
+    el.innerHTML = results.map(r => {
+      const a = r.address || {};
+      const name = pName(r);
+      const country = a.country || '';
+      const detail = [a.municipality, a.county, country].filter(Boolean).join(', ');
+      const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+      return `<div class="aw-search-item" onclick="awGoTo(${lat},${lon},'${name.replace(/'/g,"\\'")}','${country.replace(/'/g,"\\'")}')">
+        <span style="font-size:15px">📍</span>
+        <div><div class="aw-si-name">${name}</div><div class="aw-si-country">${detail}</div></div>
+      </div>`;
+    }).join('');
+  }
+  function awGoTo(lat, lon, name, country) {
+    const fullName = country ? `${name}, ${country}` : name;
+    awApplyLocation(lat, lon, fullName);
+    awCloseSearch();
+  }
+  function awReturnHome() {
+    awGpsLocate();
+  }
+
+  // ── Chart builders ────────────────────────────────────────────────
+  const awGC = 'rgba(255,255,255,.05)', awTC = '#64748b';
+  const awTooltip = {
+    backgroundColor:'rgba(8,12,20,.95)', borderColor:'rgba(255,255,255,.1)',
+    borderWidth:1, titleColor:'#94a3b8', bodyColor:'#e2e8f0', padding:10, cornerRadius:8
+  };
+
+  // Mixed chart: Kp bars + cloud % line + day separators
+  function awBuildForecastChart(labels, kpVals, siktVals, dayBoundaries = []) {
+    const id = 'aw-c-kpfc3';
+    if (awCharts[id]) awCharts[id].destroy();
+    const colors = kpVals.map(v => v>=6?'#f87171':v>=5?'#fb923c':v>=4?'#fbbf24':'#38bdf8');
+    const hasSikt = siktVals.some(v => v !== null);
+    const datasets = [
+      { type:'bar', label:'Kp', data:kpVals, backgroundColor:colors,
+        borderRadius:4, borderSkipped:false, yAxisID:'yKp', order:2 }
+    ];
+    if (hasSikt) {
+      datasets.push({
+        type:'line', label:'Molnighet %', data:siktVals,
+        borderColor:'rgba(255,255,255,.75)', backgroundColor:'rgba(255,255,255,.07)',
+        fill:true, tension:.4, pointRadius:3, pointBackgroundColor:'rgba(255,255,255,.9)',
+        borderWidth:2, yAxisID:'ySikt', order:1, spanGaps:true,
+        pointStyle:'line'
+      });
+    }
+
+    // Plugin: draw vertical dashed day-separator lines with day labels
+    const dayLinesPlugin = {
+      id:'dayLines',
+      afterDraw(chart) {
+        if (!dayBoundaries.length) return;
+        const { ctx, chartArea, scales } = chart;
+        ctx.save();
+        dayBoundaries.forEach(({ index, label }) => {
+          const x = scales.x.getPixelForTick(index);
+          if (x < chartArea.left || x > chartArea.right) return;
+          ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = 'rgba(255,255,255,.22)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, chartArea.top);
+          ctx.lineTo(x, chartArea.bottom);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(255,255,255,.55)';
+          ctx.font = '9px system-ui,sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(label, x + 3, chartArea.top + 11);
+        });
+        ctx.restore();
+      }
+    };
+
+    awCharts[id] = new Chart(id, {
+      data:{ labels, datasets },
+      plugins:[dayLinesPlugin],
+      options:{ responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:'index', intersect:false },
+        plugins:{
+          legend:{ display:hasSikt,
+            labels:{ color:'#cbd5e1', font:{size:10},
+              usePointStyle:true,
+              generateLabels(chart) {
+                return chart.data.datasets.map((ds, i) => ({
+                  text: ds.label,
+                  pointStyle: ds.type === 'line' ? 'line' : 'rect',
+                  strokeStyle: ds.type === 'line' ? ds.borderColor : 'transparent',
+                  fillStyle: ds.type === 'line' ? 'transparent' : (Array.isArray(ds.backgroundColor) ? ds.backgroundColor[0] : ds.backgroundColor),
+                  lineWidth: ds.type === 'line' ? 2 : 0,
+                  datasetIndex: i
+                }));
+              }
+            }
+          },
+          tooltip:{ ...awTooltip,
+            callbacks:{
+              label: ctx => ctx.dataset.yAxisID === 'ySikt'
+                ? `Molnighet: ${ctx.raw ?? '—'}%`
+                : `Kp: ${ctx.raw?.toFixed(1)}`
+            }
+          }
+        },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:9}} },
+          yKp:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}},
+                min:0, max:9, position:'left',
+                title:{display:true, text:'Kp', color:awTC, font:{size:10}} },
+          ySikt: hasSikt ? {
+            grid:{display:false}, ticks:{color:'rgba(255,255,255,.5)', font:{size:10}},
+            min:0, max:100, position:'right',
+            title:{display:true, text:'Molnighet %', color:'rgba(255,255,255,.5)', font:{size:10}}
+          } : { display:false }
+        }}
+    });
+  }
+
+  function awBuildBarChart(canvasId, labels, vals, colorByKp) {
+    if (awCharts[canvasId]) awCharts[canvasId].destroy();
+    const colors = colorByKp
+      ? vals.map(v => v>=6?'#f87171':v>=5?'#fb923c':v>=4?'#fbbf24':'#38bdf8')
+      : vals.map(() => '#38bdf8');
+    awCharts[canvasId] = new Chart(canvasId, {
+      type:'bar',
+      data:{ labels, datasets:[{data:vals, backgroundColor:colors, borderRadius:4, borderSkipped:false}]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:awTooltip },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:9}} },
+          y:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}}, min:0, max:9 }
+        }}
+    });
+  }
+
+  function awBuild7DayChart(labels, mins, maxes, isPred) {
+    const id = 'aw-c-kp7d';
+    if (awCharts[id]) awCharts[id].destroy();
+    isPred = isPred || labels.map(() => true);
+
+    // Color: grey for observed history, Kp-colored for forecast
+    const maxColors = maxes.map((v, i) => isPred[i]
+      ? (v>=6?'rgba(248,113,113,.65)':v>=5?'rgba(251,146,60,.6)':v>=4?'rgba(251,191,36,.55)':'rgba(56,189,248,.5)')
+      : 'rgba(148,163,184,.25)');
+    const minColors = mins.map((_, i) => isPred[i]
+      ? 'rgba(56,189,248,.15)' : 'rgba(148,163,184,.1)');
+
+    awCharts[id] = new Chart(id, {
+      type:'bar',
+      data:{ labels, datasets:[
+        {label:'Min', data:mins, backgroundColor:minColors, borderRadius:4, borderSkipped:false},
+        {label:'Max', data:maxes, backgroundColor:maxColors, borderRadius:4, borderSkipped:false}
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{ display:false },
+          tooltip:{ ...awTooltip,
+            callbacks:{
+              title: items => `${labels[items[0].dataIndex]}${isPred[items[0].dataIndex] ? ' (prognos)' : ' (observerat)'}`,
+              label: ctx => `${ctx.dataset.label}: Kp ${ctx.raw?.toFixed(1)}`
+            }
+          }
+        },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}, maxRotation:0,
+            callback(val, i) { const l = labels[i] || ''; return l[0]?.toUpperCase() || ''; }
+          }, stacked:true },
+          y:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}, stepSize:3}, min:0, max:9, stacked:true }
+        }}
+    });
+  }
+
+  function awBuildLineChart(canvasId, labels, vals, borderColor, bgColor) {
+    if (awCharts[canvasId]) awCharts[canvasId].destroy();
+    awCharts[canvasId] = new Chart(canvasId, {
+      type:'line',
+      data:{ labels, datasets:[{data:vals, borderColor, backgroundColor:bgColor, fill:true, tension:.4, pointRadius:2, borderWidth:2}]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:awTooltip },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:9}} },
+          y:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:10}} }
+        }}
+    });
+  }
+
+  function awBuildWindChart(labels, speeds, dens) {
+    const id = 'aw-c-wind';
+    if (awCharts[id]) awCharts[id].destroy();
+    awCharts[id] = new Chart(id, {
+      type:'line',
+      data:{ labels, datasets:[
+        {label:'Hastighet (km/s)', data:speeds, borderColor:'#38bdf8', fill:false, tension:.3, pointRadius:2, borderWidth:2, yAxisID:'yS'},
+        {label:'Densitet (p/cm³)', data:dens,   borderColor:'#fbbf24', fill:false, tension:.3, pointRadius:2, borderWidth:2, yAxisID:'yD'}
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:true, labels:{color:awTC, font:{size:10}, boxWidth:10}}, tooltip:awTooltip },
+        scales:{
+          x:{ grid:{color:awGC}, ticks:{color:awTC, font:{size:9}} },
+          yS:{ grid:{color:awGC}, ticks:{color:'#38bdf8', font:{size:10}}, position:'left',
+               title:{display:true, text:'km/s', color:'#38bdf8', font:{size:10}} },
+          yD:{ grid:{display:false}, ticks:{color:'#fbbf24', font:{size:10}}, position:'right',
+               title:{display:true, text:'p/cm³', color:'#fbbf24', font:{size:10}} }
+        }}
+    });
+  }
+  // ── Push Notifications ───────────────────────────────────────────
+  // Fyll i VAPID Public Key från vapidkeys.com efter att du deployat workern:
+  const AW_VAPID_PUBLIC_KEY  = 'BOkPa5xxrv4_txqeqZ6Dx5KDgfAlxdWG5LGyV1V76oFFzAqtzhww-VSsOiz1CMDxCJA8zAC1Z6yvhGhyGMo4qvs';
+  const AW_WORKER_URL        = 'https://aurora-push.gibbare.workers.dev';
+
+  let awSwReg = null;
+
+  async function awInitNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.warn('Push not supported in this browser');
+      return;
+    }
+    try {
+      awSwReg = await navigator.serviceWorker.register('/sw.js');
+      console.log('SW registered, scope:', awSwReg.scope);
+      const sub = await awSwReg.pushManager.getSubscription();
+      awUpdateNotifBtn(sub ? 'active' : 'off');
+    } catch(e) { console.warn('SW register failed:', e.message, e); }
+  }
+
+  async function awToggleNotifications() {
+    console.log('[Push] awToggleNotifications called, awSwReg=', awSwReg);
+    if (!awSwReg) {
+      alert('Service Worker kunde inte registreras. Kontrollera konsolen (F12).');
+      return;
+    }
+    const existing = await awSwReg.pushManager.getSubscription();
+    console.log('[Push] existing subscription:', existing ? 'JA' : 'NEJ');
+    if (existing) {
+      console.log('[Push] Avprenumererar...');
+      await existing.unsubscribe();
+      await fetch(`${AW_WORKER_URL}/unsubscribe`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: existing })
+      }).catch(e => console.warn('[Push] unsubscribe fetch failed:', e));
+      awUpdateNotifBtn('off');
+      console.log('[Push] Avprenumererad.');
+    } else {
+      const perm = await Notification.requestPermission();
+      console.log('[Push] Notistillstånd:', perm);
+      if (perm !== 'granted') { awUpdateNotifBtn('denied'); return; }
+      try {
+        console.log('[Push] Prenumererar med VAPID key:', AW_VAPID_PUBLIC_KEY.substring(0, 20) + '...');
+        const sub = await awSwReg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(AW_VAPID_PUBLIC_KEY)
+        });
+        console.log('[Push] Prenumeration OK, skickar till worker:', AW_WORKER_URL);
+        const res = await fetch(`${AW_WORKER_URL}/subscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: sub, lat: awUserLat || 59.33, lon: awUserLon || 18.07 })
+        });
+        console.log('[Push] Worker svar:', res.status, res.ok ? 'OK' : 'FEL');
+        awUpdateNotifBtn('active');
+      } catch(e) { console.warn('[Push] subscribe failed:', e.message, e); alert('Push-fel: ' + e.message); }
+    }
+  }
+
+  function awUpdateNotifBtn(state) {
+    const btn = document.getElementById('aw-notif-btn');
+    if (!btn) return;
+    btn.className = state === 'active' ? 'active' : state === 'denied' ? 'denied' : '';
+    btn.title = state === 'active' ? 'Notiser aktiverade – klicka för att stänga av'
+              : state === 'denied' ? 'Notiser blockerade i webbläsaren'
+              : 'Aktivera notiser';
+    btn.textContent = state === 'active' ? '🔔' : state === 'denied' ? '🔕' : '🔔';
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  }
+
+  // Init service worker when aurora view loads
+  awInitNotifications();
+
+  // ── END AURORA APP ───────────────────────────────────────────────
+
+  // Start buffering strikes to localStorage immediately on page load
+  blitzStartBackground();
+  </script>
+</body>
+</html>
