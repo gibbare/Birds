@@ -26,9 +26,24 @@ const WEATHER_EMOJI = {
   22: '🌨️', 23: '🌨️', 24: '🌨️', 25: '❄️', 26: '❄️', 27: '❄️',
 };
 
+// Parameter name map: old pmp3g names → new snow1g names
+const PARAM_MAP = {
+  't':        'air_temperature',
+  'ws':       'wind_speed',
+  'wd':       'wind_from_direction',
+  'gust':     'wind_speed_of_gust',
+  'r':        'relative_humidity',
+  'msl':      'air_pressure_at_mean_sea_level',
+  'pmean':    'precipitation_amount_mean',
+  'pmin':     'precipitation_amount_min',
+  'pmax':     'precipitation_amount_max',
+  'Wsymb2':   'symbol_code',
+  'tcc_mean': 'cloud_area_fraction',
+};
+
 function getParam(ts, name) {
-  const p = ts.parameters.find(p => p.name === name);
-  return p ? p.values[0] : null;
+  const key = PARAM_MAP[name] || name;
+  return ts.data?.[key] ?? null;
 }
 
 function feelsLike(temp, windMs) {
@@ -124,11 +139,11 @@ function smoothPath(ctx, pts) {
 
 // Groups timeSeries into days and returns [{date, label, emoji, tMin, tMax}]
 function buildDaySummaries(timeSeries) {
-  const now    = new Date(timeSeries[0].validTime);
+  const now    = new Date(timeSeries[0].time);
   const days = {};
 
   timeSeries.forEach(ts => {
-    const d = new Date(ts.validTime);
+    const d = new Date(ts.time);
     const key = d.toDateString();
     if (!days[key]) days[key] = { date: d, temps: [], symbols: [] };
     const t = getParam(ts, 't');
@@ -166,20 +181,20 @@ function drawForecastChart(timeSeries) {
   // ── 2 punkter per dag: UTC 06+18 (morgon/kväll) eller UTC 00+12 som fallback ─
   const byDay = {};
   timeSeries.forEach(ts => {
-    const key = new Date(ts.validTime).toDateString();
+    const key = new Date(ts.time).toDateString();
     if (!byDay[key]) byDay[key] = [];
     byDay[key].push(ts);
   });
   const pts3h = [];
   Object.values(byDay).forEach(dayPts => {
-    const utcHours = new Set(dayPts.map(ts => new Date(ts.validTime).getUTCHours()));
+    const utcHours = new Set(dayPts.map(ts => new Date(ts.time).getUTCHours()));
     const targets  = (utcHours.has(6) || utcHours.has(18)) ? [6, 18] : [0, 12];
     targets.forEach(t => {
-      const match = dayPts.find(ts => new Date(ts.validTime).getUTCHours() === t);
+      const match = dayPts.find(ts => new Date(ts.time).getUTCHours() === t);
       if (match) pts3h.push(match);
     });
   });
-  pts3h.sort((a, b) => new Date(a.validTime) - new Date(b.validTime));
+  pts3h.sort((a, b) => new Date(a.time) - new Date(b.time));
   if (pts3h.length < 2) return;
 
   // ── canvas dimensions ───────────────────────────────────────────────────────
@@ -202,7 +217,7 @@ function drawForecastChart(timeSeries) {
   const temps   = pts3h.map(ts => getParam(ts, 't')      ?? 0);
   const precips = pts3h.map(ts => getParam(ts, 'pmean')  ?? 0);
   const symbols = pts3h.map(ts => getParam(ts, 'Wsymb2') ?? 1);
-  const times   = pts3h.map(ts => new Date(ts.validTime));
+  const times   = pts3h.map(ts => new Date(ts.time));
 
   const tMin   = Math.floor(Math.min(...temps)) - 2;
   const tMax   = Math.ceil(Math.max(...temps))  + 3;
@@ -354,14 +369,14 @@ function openDayDetail(dayIndex) {
   if (!_currentTimeSeries) return;
   const days = {};
   _currentTimeSeries.forEach(ts => {
-    const key = new Date(ts.validTime).toDateString();
+    const key = new Date(ts.time).toDateString();
     if (!days[key]) days[key] = [];
     days[key].push(ts);
   });
   const dayKey = Object.keys(days)[dayIndex];
   if (!dayKey) return;
-  const dayData = days[dayKey].sort((a, b) => new Date(a.validTime) - new Date(b.validTime));
-  const dayDate = new Date(dayData[0].validTime);
+  const dayData = days[dayKey].sort((a, b) => new Date(a.time) - new Date(b.time));
+  const dayDate = new Date(dayData[0].time);
   document.getElementById('day-detail-title').textContent =
     dayDate.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
   renderDayDetailList(dayData, _currentLat, _currentLon);
@@ -376,14 +391,14 @@ function closeDayDetail() {
 
 function renderDayDetailList(dayData, lat, lon) {
   const el = document.getElementById('detail-list');
-  dayData = [...dayData].sort((a, b) => new Date(a.validTime) - new Date(b.validTime));
+  dayData = [...dayData].sort((a, b) => new Date(a.time) - new Date(b.time));
   if (!dayData.length) return;
 
   // Sunrise/sunset — use a midday timestamp to avoid UTC-date edge cases
-  const noonTs = dayData.find(ts => new Date(ts.validTime).getHours() >= 10) || dayData[Math.floor(dayData.length / 2)];
+  const noonTs = dayData.find(ts => new Date(ts.time).getHours() >= 10) || dayData[Math.floor(dayData.length / 2)];
   let sunriseStr = '--', sunsetStr = '--';
   if (lat != null && lon != null) {
-    const { sunrise: sr, sunset: ss } = sunriseSunset(new Date(noonTs.validTime), lat, lon);
+    const { sunrise: sr, sunset: ss } = sunriseSunset(new Date(noonTs.time), lat, lon);
     const fmt = d => d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '--';
     sunriseStr = fmt(sr);
     sunsetStr  = fmt(ss);
@@ -392,7 +407,7 @@ function renderDayDetailList(dayData, lat, lon) {
   const DIRS = ['N','NO','O','SO','S','SV','V','NV'];
 
   const rows = dayData.map((ts, idx) => {
-    const t      = new Date(ts.validTime);
+    const t      = new Date(ts.time);
     const temp   = getParam(ts, 't')        ?? 0;
     const wind   = getParam(ts, 'ws')       ?? 0;
     const wdir   = getParam(ts, 'wd')       ?? 0;
@@ -573,7 +588,7 @@ function renderWeather(data) {
   document.getElementById('weather-desc').textContent = WEATHER_SYMBOLS[symbol] || '--';
 
   // Sunrise/sunset in main card
-  const nowDate = new Date(data.timeSeries[0].validTime);
+  const nowDate = new Date(data.timeSeries[0].time);
   const { sunrise: sr0, sunset: ss0 } = sunriseSunset(nowDate, _currentLat, _currentLon);
   const fmtT = d => d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '--';
   document.getElementById('main-sun-times').innerHTML =
