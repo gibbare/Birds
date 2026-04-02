@@ -1,5 +1,5 @@
 const SMHI_URL = (lon, lat) =>
-  `https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/${lon}/lat/${lat}/data.json`;
+  `https://opendata-download-metfcst.smhi.se/api/category/snow1g/version/1/geotype/point/lon/${lon}/lat/${lat}/data.json`;
 
 let _currentTimeSeries = null;
 let _currentLat = null;
