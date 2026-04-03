@@ -330,6 +330,8 @@ async function sendPush(subscription, env) {
       method: 'POST',
       headers: {
         'Authorization': `vapid t=${jwt},k=${env.VAPID_PUBLIC_KEY}`,
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': '0',
         'TTL': '86400',
       },
     });
