@@ -811,7 +811,7 @@
     const timer = setTimeout(() => {
       _bgWs && _bgWs.close(); _bgWsIdx++; blitzStartBackground();
     }, 8000);
-    _bgWs.onopen  = () => _bgWs.send(JSON.stringify({ "a": 111 }));
+    _bgWs.onopen  = () => { try { _bgWs.send(JSON.stringify({ "a": 111 })); } catch {} };
     _bgWs.onmessage = e => {
       clearTimeout(timer);
       try {
