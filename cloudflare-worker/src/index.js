@@ -237,7 +237,7 @@ export default {
     const fcData    = await fcRes.json();
     const alertData = await alertRes.json();
 
-    const currentKp   = parseFloat(kpData.at(-1)?.[1] ?? 0);
+    const currentKp   = parseFloat(kpData.at(-1)?.k_index ?? 0);
     const freshAlerts = alertData.filter(a =>
       Date.now() - new Date(a.issue_datetime).getTime() < 11 * 60 * 1000
     );
@@ -246,10 +246,10 @@ export default {
     const now = Date.now();
     const forecastKp = fcData
       .filter(row => {
-        const t = new Date(row[0]).getTime();
-        return t > now && t <= now + 6 * 3600 * 1000 && row[2] === 'predicted';
+        const t = new Date(row.time_tag).getTime();
+        return t > now && t <= now + 6 * 3600 * 1000 && row.observed === 'predicted';
       })
-      .reduce((max, row) => Math.max(max, parseFloat(row[1]) || 0), 0);
+      .reduce((max, row) => Math.max(max, parseFloat(row.kp) || 0), 0);
 
     const { keys } = await env.SUBS.list();
     if (!keys.length) return;
