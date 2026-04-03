@@ -564,28 +564,65 @@ function scaleXY(xExtra={},yExtra={}){
          y:{grid:{color:gc},ticks:{color:tc,font:{size:10}},...yExtra}};
 }
 
-// KP HISTORY
-new Chart('cKpHist',{type:'bar',
-  data:{labels:['−21h','−18h','−15h','−12h','−9h','−6h','−3h','Nu'],
-    datasets:[{data:[1.7,2.2,1.9,2.8,3.3,4.1,4.8,5.3],
-      backgroundColor:['#38bdf8','#38bdf8','#38bdf8','#38bdf8','#fbbf24','#fbbf24','#fb923c','#f87171'],
-      borderRadius:5,borderSkipped:false}]},
-  options:{responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false},tooltip},
-    scales:scaleXY({},{min:0,max:9})}
-});
-
-// KP FORECAST 3-day
-const fc3d=[5.3,5.7,6.1,6.3,5.8,5.2,4.6,4.0,3.5,3.0,2.7,2.4,2.1];
-new Chart('cKpFc3',{type:'bar',
-  data:{labels:['Nu','3h','6h','9h','12h','15h','18h','21h','24h','27h','30h','33h','36h'],
-    datasets:[{data:fc3d,
-      backgroundColor:fc3d.map(v=>v>=6?'#f87171':v>=5?'#fb923c':'#fbbf24'),
-      borderRadius:4,borderSkipped:false}]},
+// KP HISTORY — live NOAA data
+const kpHistChart = new Chart('cKpHist',{type:'bar',
+  data:{labels:[],datasets:[{data:[],backgroundColor:[],borderRadius:5,borderSkipped:false}]},
   options:{responsive:true,maintainAspectRatio:false,
     plugins:{legend:{display:false},tooltip},
     scales:scaleXY({ticks:{color:tc,font:{size:9}}},{min:0,max:9})}
 });
+
+// KP FORECAST 3-day — live NOAA data
+const kpFcChart = new Chart('cKpFc3',{type:'bar',
+  data:{labels:[],datasets:[{data:[],backgroundColor:[],borderRadius:4,borderSkipped:false}]},
+  options:{responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip},
+    scales:scaleXY({ticks:{color:tc,font:{size:9}}},{min:0,max:9})}
+});
+
+const KP_DAYS = ['Sön','Mån','Tis','Ons','Tor','Fre','Lör'];
+function kpColor(v){return v>=7?'#c02020':v>=6?'#f87171':v>=5?'#fb923c':v>=4?'#fbbf24':'#38bdf8';}
+
+async function loadKpData() {
+  try {
+    const [hist, fc] = await Promise.all([
+      fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json').then(r=>r.json()),
+      fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json').then(r=>r.json())
+    ]);
+
+    // History: last 10 entries (~30 h)
+    const hEntries = hist.slice(-10);
+    kpHistChart.data.labels = hEntries.map(e=>{const d=new Date(e.time_tag);return String(d.getHours()).padStart(2,'0')+':00';});
+    kpHistChart.data.datasets[0].data = hEntries.map(e=>Math.round(e.Kp*10)/10);
+    kpHistChart.data.datasets[0].backgroundColor = hEntries.map(e=>kpColor(e.Kp));
+    kpHistChart.update();
+
+    // Update live Kp value in card header
+    const latestKp = hEntries[hEntries.length-1]?.Kp ?? null;
+    const histCard = document.getElementById('cKpHist').closest('.chart-card');
+    if(latestKp!=null && histCard){
+      histCard.querySelector('.ch-val').textContent = latestKp.toFixed(1);
+      histCard.querySelector('.ch-sub').textContent = 'Senaste 30h · 3h-intervall';
+    }
+
+    // Forecast: next 24 predicted/estimated entries from now
+    const now = new Date();
+    const fEntries = fc.filter(e=>new Date(e.time_tag)>=now).slice(0,24);
+    kpFcChart.data.labels = fEntries.map(e=>{const d=new Date(e.time_tag);return KP_DAYS[d.getDay()]+' '+String(d.getHours()).padStart(2,'0')+':00';});
+    kpFcChart.data.datasets[0].data = fEntries.map(e=>Math.round(e.kp*10)/10);
+    kpFcChart.data.datasets[0].backgroundColor = fEntries.map(e=>kpColor(e.kp));
+    kpFcChart.update();
+
+    // Update forecast card header
+    const maxFc = fEntries.length ? Math.max(...fEntries.map(e=>e.kp)) : null;
+    const fcCard = document.getElementById('cKpFc3').closest('.chart-card');
+    if(maxFc!=null && fcCard) fcCard.querySelector('.ch-val').textContent = 'Max '+maxFc.toFixed(1);
+
+  } catch(e) { console.error('KP fetch failed:', e); }
+}
+
+loadKpData();
+setInterval(loadKpData, 5*60*1000);
 
 // BZ
 new Chart('cBz',{type:'line',
