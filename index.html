@@ -1402,13 +1402,13 @@
     try {
       const r = await fetch(`${NOAA}/products/noaa-planetary-k-index.json`);
       const raw = await r.json();
-      // raw: [[time_tag, Kp, a_running, station_count], ...]
+      // raw: [{time_tag, Kp, a_running, station_count}, ...]
       // Take last 8 entries (24h at 3h intervals)
       const rows = raw.slice(-8);
       const labels = rows.map(r => {
-        const d = new Date(r[0]); return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+        const d = new Date(r.time_tag); return d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
       });
-      const vals = rows.map(r => parseFloat(r[1]) || 0);
+      const vals = rows.map(r => parseFloat(r.Kp) || 0);
       const current = vals[vals.length - 1];
       const prev = vals[vals.length - 2] || current;
 
@@ -1447,7 +1447,7 @@
       const now = new Date();
       const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3);
       const rows = rawKp.filter(r => {
-        const d = new Date(r[0]);
+        const d = new Date(r.time_tag);
         return d >= now && d < cutoff;
       });
       if (!rows.length) return;
@@ -1458,17 +1458,17 @@
 
       // First day label at index 0
       const dayBoundaries = [];
-      const firstDate = new Date(rows[0][0]);
+      const firstDate = new Date(rows[0].time_tag);
       dayBoundaries.push({ index: 0, label: firstDate.toLocaleDateString('sv-SE',{weekday:'short',day:'numeric',month:'short'}) });
 
       rows.forEach((r, i) => {
-        const d = new Date(r[0]);
+        const d = new Date(r.time_tag);
         labels.push(d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}));
-        kpVals.push(parseFloat(r[1]) || 0);
+        kpVals.push(parseFloat(r.kp) || 0);
 
         // Detect day change for chart separator
         if (i > 0) {
-          const prev = new Date(rows[i-1][0]);
+          const prev = new Date(rows[i-1].time_tag);
           if (d.getDate() !== prev.getDate()) {
             const dayLbl = d.toLocaleDateString('sv-SE',{weekday:'short',day:'numeric',month:'short'});
             dayBoundaries.push({ index: i, label: dayLbl });
@@ -1519,13 +1519,13 @@
 
       // Past 1 day: 3-hourly observed/estimated from forecast JSON
       fcRaw.forEach(row => {
-        const d = new Date(row[0]);
+        const d = new Date(row.time_tag);
         if (isNaN(d)) return;
         const diff = (d - now) / 86400000;
         if (diff < -1.1 || diff > 0.1) return; // only yesterday
-        const type = row[2] || 'observed';
+        const type = row.observed || 'observed';
         if (type === 'predicted') return;
-        push(d, parseFloat(row[1]) || 0, type);
+        push(d, parseFloat(row.kp) || 0, type);
       });
 
       // Future days: parse daily Kp from 27-day text outlook
