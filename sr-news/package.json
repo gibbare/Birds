@@ -1,7 +1,15 @@
 {
-  "name": "news",
+  "name": "sr-news",
   "version": "1.0.0",
+  "description": "Svenska Nyheter – nyhetsaggregator med server-side cache",
+  "main": "server.js",
   "scripts": {
-    "start": "npx serve . -p ${PORT:-3000} --no-clipboard"
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

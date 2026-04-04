@@ -451,25 +451,14 @@ async function load() {
     const res  = await fetch(`/api/news?date=${dateStr}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-
     allItems = (data.items || []).map(item => ({
       ...item,
       pubDate: item.pubDate ? new Date(item.pubDate) : null,
     })).filter(item => !item.pubDate || isSameDay(item.pubDate, selectedDate));
-
   } catch (e) {
     sourceErrors['Nyheter'] = e.message;
     allItems = [];
   }
-
-  // Deduplicate by title
-  const seen = new Set();
-  allItems = allItems.filter(item => {
-    const key = item.title.toLowerCase().slice(0, 60);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 
   // Sort newest first
   allItems.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0));
