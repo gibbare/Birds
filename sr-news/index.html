@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Svenska Nyheter – Live</title>
+  <link rel="apple-touch-icon" href="news_ico_small.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+    }
+
+    /* ── TOP BAR ── */
+    .topbar {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .topbar h1 { font-size: 1rem; font-weight: 700; letter-spacing: 0.03em; }
+    .topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+    .icon-btn {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #fff;
+      padding: 5px 12px;
+      border-radius: 16px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .icon-btn:hover:not(:disabled) { background: rgba(255,255,255,0.22); }
+    .icon-btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── CONTROLS ── */
+    .controls {
+      background: #fff;
+      border-bottom: 1px solid #e5e5e5;
+      padding: 8px 16px;
+      position: sticky;
+      top: 41px;
+      z-index: 19;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    /* Date nav */
+    .date-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .date-nav-btn {
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 3px 10px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #333;
+      transition: all 0.12s;
+    }
+    .date-nav-btn:hover:not(:disabled) { border-color: #666; background: #f5f5f5; }
+    .date-nav-btn:disabled { opacity: 0.35; cursor: default; }
+    .date-label {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #1a1a2e;
+      min-width: 160px;
+      text-align: center;
+    }
+    .today-btn {
+      background: #1a1a2e;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 3px 12px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+      transition: background 0.12s;
+      margin-left: 2px;
+    }
+    .today-btn:hover { background: #2c2c4e; }
+
+    /* Pill filter bars */
+    .filter-row {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .filter-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 2px;
+      white-space: nowrap;
+    }
+    .pill {
+      border: 1.5px solid #ddd;
+      background: #fff;
+      padding: 2px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 0.73rem;
+      font-weight: 600;
+      color: #555;
+      transition: all 0.12s;
+      white-space: nowrap;
+    }
+    .pill:hover { border-color: #888; }
+    .pill.active { color: #fff; border-color: transparent; }
+    .pill.inactive { opacity: 0.38; }
+
+    /* ── MAIN ── */
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 12px 14px;
+    }
+
+    .status-row {
+      font-size: 0.75rem;
+      color: #888;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── NEWS LIST (compact) ── */
+    .news-list { display: flex; flex-direction: column; }
+
+    .news-row {
+      background: #fff;
+      border-bottom: 1px solid #ececec;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      cursor: pointer;
+      transition: background 0.1s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .news-row:first-child { border-radius: 8px 8px 0 0; }
+    .news-row:last-child  { border-radius: 0 0 8px 8px; border-bottom: none; }
+    .news-row:only-child  { border-radius: 8px; }
+    .news-row:hover { background: #f7f8fa; }
+
+    .row-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #111;
+      line-height: 1.35;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .row-meta {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .source-badge {
+      font-size: 0.66rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 8px;
+      color: #fff;
+      letter-spacing: 0.03em;
+    }
+
+    .cat-tag {
+      font-size: 0.68rem;
+      color: #777;
+      background: #f0f0f0;
+      padding: 1px 6px;
+      border-radius: 6px;
+    }
+
+    .row-time {
+      font-size: 0.68rem;
+      color: #aaa;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    /* ── STATES ── */
+    .spinner-wrap {
+      text-align: center;
+      padding: 40px;
+      color: #888;
+      font-size: 0.85rem;
+    }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2.5px solid #ddd;
+      border-top-color: #cc0000;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #888;
+      font-size: 0.85rem;
+      background: #fff;
+      border-radius: 8px;
+    }
+
+    .source-errors {
+      font-size: 0.72rem;
+      color: #aaa;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>📰 Svenska Nyheter</h1>
+  <div class="topbar-right">
+    <button class="icon-btn" id="refreshBtn" onclick="load()">↺ Uppdatera</button>
+  </div>
+</div>
+
+<div class="controls">
+  <!-- Date navigation -->
+  <div class="date-nav">
+    <button class="date-nav-btn" onclick="changeDay(-1)">‹ Föregående</button>
+    <span class="date-label" id="dateLbl"></span>
+    <button class="date-nav-btn" id="nextDayBtn" onclick="changeDay(1)">Nästa ›</button>
+    <button class="today-btn" onclick="goToday()">Idag</button>
+  </div>
+
+  <!-- Source filters -->
+  <div class="filter-row" id="sourceFilters">
+    <span class="filter-label">Källa</span>
+  </div>
+
+  <!-- Category filters -->
+  <div class="filter-row" id="catFilters">
+    <span class="filter-label">Kategori</span>
+  </div>
+</div>
+
+<main>
+  <div class="status-row" id="statusRow"></div>
+  <div id="app"><div class="spinner-wrap"><div class="spinner"></div>Hämtar nyheter…</div></div>
+</main>
+
+<script>
+// ──────────────────────────────────────────────
+// CONFIG
+// ──────────────────────────────────────────────
+
+const SOURCE_COLORS = {
+  SR:          '#cc0000',
+  SVT:         '#1765b3',
+  Aftonbladet: '#1a1a1a',
+  Expressen:   '#0060b0',
+  DN:          '#1a3a5c',
+  SvD:         '#004b87',
+};
+
+const RSS_FEEDS = [
+  { source: 'SVT',          url: 'https://www.svt.se/nyheter/inrikes/rss.xml',                                  defCat: 'Inrikes' },
+  { source: 'SVT',          url: 'https://www.svt.se/nyheter/utrikes/rss.xml',                                  defCat: 'Utrikes' },
+  { source: 'SVT',          url: 'https://www.svt.se/sport/rss.xml',                                            defCat: 'Sport' },
+  { source: 'Aftonbladet',  url: 'https://rss.aftonbladet.se/rss2/small/pages/sections/senastenytt',            defCat: 'Nyheter' },
+  { source: 'Expressen',    url: 'https://feeds.expressen.se/nyheter',                                          defCat: 'Nyheter' },
+  { source: 'Expressen',    url: 'https://feeds.expressen.se/sport',                                            defCat: 'Sport' },
+  { source: 'DN',           url: 'https://www.dn.se/rss',                                                       defCat: 'Nyheter' },
+  { source: 'SvD',          url: 'https://www.svd.se/feed/articles.rss',                                        defCat: 'Nyheter' },
+];
+
+const SR_PROGRAMS = [
+  { id: 4540, name: 'Ekot nyhetssändning', cat: 'Nyheter' },
+  { id: 83,   name: 'Ekot',               cat: 'Nyheter' },
+  { id: 406,  name: 'Studio Ett',         cat: 'Samhälle' },
+  { id: 164,  name: 'Ekonytt',            cat: 'Nyheter' },
+];
+
+const CORS_PROXY = 'https://api.allorigins.win/get?url=';
+
+// ──────────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────────
+
+let selectedDate = todayMidnight();
+let allItems     = [];
+let activeSources = new Set(Object.keys(SOURCE_COLORS).concat(['SR']));
+let activeCat    = 'Alla';
+let sourceErrors = {};
+
+// ──────────────────────────────────────────────
+// DATE HELPERS
+// ──────────────────────────────────────────────
+
+function todayMidnight() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function dateISO(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function formatDateLabel(d) {
+  const today = todayMidnight();
+  const diff = Math.round((today - d) / 86400000);
+  const label = d.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+  if (diff === 0) return `Idag · ${label}`;
+  if (diff === 1) return `Igår · ${label}`;
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatTime(date) {
+  if (!date) return '';
+  const now = new Date();
+  const diff = now - date;
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  if (mins < 1)  return 'Just nu';
+  if (mins < 60) return `${mins} min`;
+  if (hours < 24) return `${hours} tim`;
+  return date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+}
+
+function isSameDay(date, base) {
+  return date >= base && date < new Date(base.getTime() + 86400000);
+}
+
+// ──────────────────────────────────────────────
+// SR API
+// ──────────────────────────────────────────────
+
+function parseSRDate(raw) {
+  if (!raw) return null;
+  const m = raw.match(/\/Date\((\d+)\)\//);
+  return m ? new Date(parseInt(m[1])) : null;
+}
+
+async function fetchSR(dateStr) {
+  const results = await Promise.allSettled(SR_PROGRAMS.map(async prog => {
+    const url = `https://api.sr.se/api/v2/episodes/index?programid=${prog.id}&format=json&fromdate=${dateStr}&todate=${dateStr}&size=50`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return (data.episodes || []).map(ep => ({
+      id:     `sr-${ep.id}`,
+      title:  ep.title || '',
+      url:    ep.url   || '',
+      pubDate: parseSRDate(ep.publishdateutc),
+      source: 'SR',
+      category: prog.cat,
+    }));
+  }));
+
+  const items = [];
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') items.push(...r.value);
+    else sourceErrors['SR'] = r.reason?.message;
+  });
+  return items;
+}
+
+// ──────────────────────────────────────────────
+// RSS
+// ──────────────────────────────────────────────
+
+function stripHtml(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  return d.textContent || '';
+}
+
+function parseRSS(xmlText, feed) {
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(xmlText, 'text/xml');
+  const items = xml.querySelectorAll('item');
+  const out = [];
+  items.forEach(item => {
+    const title   = item.querySelector('title')?.textContent?.trim()   || '';
+    const link    = item.querySelector('link')?.textContent?.trim()    || '';
+    const pubStr  = item.querySelector('pubDate')?.textContent?.trim() || '';
+    const catEl   = item.querySelector('category');
+    const category = (catEl?.textContent?.trim()) || feed.defCat;
+    const pubDate  = pubStr ? new Date(pubStr) : null;
+    if (!title) return;
+    out.push({
+      id:       `rss-${feed.source}-${link || title}`,
+      title:    stripHtml(title),
+      url:      link,
+      pubDate,
+      source:   feed.source,
+      category: category || feed.defCat,
+    });
+  });
+  return out;
+}
+
+async function fetchRSSFeed(feed) {
+  const proxyUrl = CORS_PROXY + encodeURIComponent(feed.url);
+  const res = await fetch(proxyUrl);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data.contents) throw new Error('Tom svar från proxy');
+  return parseRSS(data.contents, feed);
+}
+
+// ──────────────────────────────────────────────
+// LOAD
+// ──────────────────────────────────────────────
+
+async function load() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '… Hämtar';
+  document.getElementById('app').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div>Hämtar nyheter…</div>';
+  sourceErrors = {};
+
+  const dateStr = dateISO(selectedDate);
+
+  try {
+    const res  = await fetch(`/api/news?date=${dateStr}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    allItems = (data.items || []).map(item => ({
+      ...item,
+      pubDate: item.pubDate ? new Date(item.pubDate) : null,
+    })).filter(item => !item.pubDate || isSameDay(item.pubDate, selectedDate));
+
+  } catch (e) {
+    sourceErrors['Nyheter'] = e.message;
+    allItems = [];
+  }
+
+  // Deduplicate by title
+  const seen = new Set();
+  allItems = allItems.filter(item => {
+    const key = item.title.toLowerCase().slice(0, 60);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Sort newest first
+  allItems.sort((a, b) => (b.pubDate || 0) - (a.pubDate || 0));
+
+  activeCat = 'Alla';
+  renderControls();
+  renderList();
+
+  btn.disabled = false;
+  btn.textContent = '↺ Uppdatera';
+}
+
+// ──────────────────────────────────────────────
+// RENDER
+// ──────────────────────────────────────────────
+
+function renderControls() {
+  // Date label
+  document.getElementById('dateLbl').textContent = formatDateLabel(selectedDate);
+  // Disable next-day btn if today
+  document.getElementById('nextDayBtn').disabled = selectedDate >= todayMidnight();
+
+  // Source pills
+  const sf = document.getElementById('sourceFilters');
+  const sources = Object.keys(SOURCE_COLORS).concat(['SR']).filter((v,i,a)=>a.indexOf(v)===i);
+  sf.innerHTML = '<span class="filter-label">Källa</span>' + sources.map(s => {
+    const on = activeSources.has(s);
+    const color = SOURCE_COLORS[s] || '#555';
+    return `<button class="pill ${on ? 'active' : 'inactive'}"
+      style="${on ? `background:${color};border-color:${color}` : ''}"
+      onclick="toggleSource('${s}')">${s}</button>`;
+  }).join('');
+
+  // Category pills
+  const cats = ['Alla', ...new Set(allItems.map(i => i.category).filter(Boolean))].sort((a,b) => a==='Alla'?-1:a.localeCompare(b,'sv'));
+  const cf = document.getElementById('catFilters');
+  cf.innerHTML = '<span class="filter-label">Kategori</span>' + cats.map(c => {
+    const on = activeCat === c;
+    return `<button class="pill ${on ? 'active' : ''}"
+      style="${on ? 'background:#444;border-color:#444' : ''}"
+      onclick="setCategory('${c.replace(/'/g,"\\'")}')">${c}</button>`;
+  }).join('');
+}
+
+function renderList() {
+  const filtered = allItems
+    .filter(item => activeSources.has(item.source))
+    .filter(item => activeCat === 'Alla' || item.category === activeCat)
+    .slice(0, 20);
+
+  // Status row
+  const errSources = Object.keys(sourceErrors);
+  document.getElementById('statusRow').innerHTML =
+    `<span>${filtered.length} nyheter</span>` +
+    (errSources.length ? `<span class="source-errors">⚠ Fel från: ${errSources.join(', ')}</span>` : '');
+
+  if (!filtered.length) {
+    document.getElementById('app').innerHTML =
+      `<div class="empty-state">Inga nyheter hittades för detta datum och dessa filter.</div>`;
+    return;
+  }
+
+  document.getElementById('app').innerHTML =
+    `<div class="news-list">${filtered.map(item => {
+      const color = SOURCE_COLORS[item.source] || '#555';
+      const timeStr = formatTime(item.pubDate);
+      return `<a class="news-row" href="${escHtml(item.url || '#')}" target="_blank" rel="noopener">
+        <div class="row-title">${escHtml(item.title)}</div>
+        <div class="row-meta">
+          <span class="source-badge" style="background:${color}">${escHtml(item.source)}</span>
+          ${item.category ? `<span class="cat-tag">${escHtml(item.category)}</span>` : ''}
+          <span class="row-time">${timeStr}</span>
+        </div>
+      </a>`;
+    }).join('')}</div>`;
+}
+
+// ──────────────────────────────────────────────
+// INTERACTIONS
+// ──────────────────────────────────────────────
+
+function changeDay(delta) {
+  const d = new Date(selectedDate);
+  d.setDate(d.getDate() + delta);
+  if (d > todayMidnight()) return;
+  selectedDate = d;
+  load();
+}
+
+function goToday() {
+  selectedDate = todayMidnight();
+  load();
+}
+
+function toggleSource(source) {
+  if (activeSources.has(source)) {
+    if (activeSources.size > 1) activeSources.delete(source);
+  } else {
+    activeSources.add(source);
+  }
+  renderControls();
+  renderList();
+}
+
+function setCategory(cat) {
+  activeCat = cat;
+  renderControls();
+  renderList();
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
+load();
+</script>
+</body>
+</html>
