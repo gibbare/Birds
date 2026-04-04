@@ -277,7 +277,9 @@ async function refreshNews() {
 
   const results = await Promise.allSettled([
     ...NEWS_FEEDS.map(async feed => {
-      const res = await fetch(feed.url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10000) });
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 10000);
+      const res = await fetch(feed.url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: ctrl.signal }).finally(() => clearTimeout(timer));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return parseRSSXml(await res.text(), feed.source, feed.defCat);
     }),
