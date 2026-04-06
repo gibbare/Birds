@@ -14,6 +14,7 @@ const NEWS_FEEDS = [
   { source: 'Expressen',   url: 'https://feeds.expressen.se/sport',                                 defCat: 'Sport'   },
   { source: 'DN',          url: 'https://www.dn.se/rss',                                            defCat: 'Nyheter' },
   { source: 'SvD',         url: 'https://www.svd.se/feed/articles.rss',                             defCat: 'Nyheter' },
+  { source: 'Norran',      url: 'https://www.norran.se/rss',                                        defCat: 'Nyheter' },
 ];
 const SR_PROGRAMS = [
   { id: 4540, cat: 'Nyheter'  },

@@ -504,10 +504,14 @@ function renderControls() {
 }
 
 function renderList() {
+  const perSourceCount = {};
   const filtered = allItems
     .filter(item => activeSources.has(item.source))
     .filter(item => activeCat === 'Alla' || item.category === activeCat)
-    .slice(0, 20);
+    .filter(item => {
+      perSourceCount[item.source] = (perSourceCount[item.source] || 0) + 1;
+      return perSourceCount[item.source] <= 20;
+    });
 
   // Status row
   const errSources = Object.keys(sourceErrors);
