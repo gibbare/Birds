@@ -663,6 +663,12 @@
       .obs-table td.col-rap:has(.t-empty),
       .obs-table td.col-tid:has(.t-empty) { display: none; }
 
+      /* Indentering av underrader i kortlayout */
+      .obs-table tbody tr.group-sub {
+        border-left: 5px solid #4a90d9;
+        padding-left: 2.5rem;
+      }
+
     } /* end @media 640px */
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
@@ -1755,6 +1761,8 @@ function renderMapMarkers() {
   // Dubbel rAF: ge webbläsaren tid att måla container innan Leaflet mäter storlek
   requestAnimationFrame(() => requestAnimationFrame(() => {
     leafletMap.invalidateSize();
+    // Om en specifik art/obs visas, låt inte den allmänna renderingen skriva över
+    if (_singleObsActive) return;
 
     // Gruppera observationer per plats (3 decimaler ≈ 100m precision)
     const groups = {};
