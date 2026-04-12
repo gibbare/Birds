@@ -1820,6 +1820,62 @@ function renderMapMarkers() {
 /* ── Visa enskild observation på kartan ── */
 let _singleObsActive = false;
 
+/* ── Visa alla obs för en art på kartan (från summäradsknapp) ── */
+function showGroupOnMap(key) {
+  const groups = groupRows(filteredRows(sortedRows(allResults)));
+  const group  = groups.find(g => g.key === key);
+  if (!group) return;
+
+  // Öppna kartan om stängd
+  if (!mapVisible) {
+    mapVisible = true;
+    document.getElementById('mapContainer').classList.add('visible');
+    const btn = document.getElementById('mapToggleBtn');
+    if (btn) { btn.classList.add('active'); btn.textContent = 'Dölj karta'; }
+  }
+
+  // Avmarkera ev. aktiv rad, markera group-header
+  _singleObsActive = true;
+  document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
+  document.querySelectorAll('.group-header').forEach(tr => {
+    if (tr.querySelector('.t-art-sv')?.textContent.includes(key)) tr.classList.add('row-map-active');
+  });
+
+  // Filtrera alla obs för arten och visa på kartan
+  const withCoords = group.rows.filter(r => r.lat !== null && r.lng !== null);
+  if (withCoords.length) {
+    mapMarkerLayer.clearLayers();
+    // Återanvänd renderMapMarkers men begränsat till denna arts obs
+    const saved = allResults;
+    // Tillfälligt filtrera: rendera direkt utan att byta allResults
+    const bounds = [];
+    const tmpGroups = {};
+    for (const row of withCoords) {
+      const k = `${row.lat.toFixed(3)}_${row.lng.toFixed(3)}`;
+      if (!tmpGroups[k]) tmpGroups[k] = { lat: row.lat, lng: row.lng, rows: [] };
+      tmpGroups[k].rows.push(row);
+    }
+    for (const g of Object.values(tmpGroups)) {
+      const color = g.rows.some(r => r.verified) ? '#276749' : g.rows.some(r => r.uncertainId) ? '#e07b39' : '#2b6cb0';
+      const marker = L.circleMarker([g.lat, g.lng], { radius: g.rows.length > 1 ? 8 : 7, fillColor: color, color: '#fff', weight: 1.5, opacity: 1, fillOpacity: 0.85 });
+      const row = g.rows[0];
+      const apLink = row.artportalenId ? ` <a href="https://www.artportalen.se/sighting/${row.artportalenId}" target="_blank" style="color:#2b6cb0">↗</a>` : '';
+      marker.bindPopup(`<b>${escHtml(row.vernacularName || row.scientificName)}</b><br>${row.individualCount} ${escHtml(row.unit)}${row.reporter ? '<br>' + escHtml(row.reporter) : ''}${row.startDT ? '<br>' + escHtml(row.startDT) : ''}${apLink}`);
+      mapMarkerLayer.addLayer(marker);
+      bounds.push([g.lat, g.lng]);
+    }
+    if (bounds.length) leafletMap.fitBounds(bounds, { padding: [35, 35], maxZoom: 13 });
+  }
+  document.getElementById('mapContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* ── Återställ kartan till alla observationer ── */
+function resetMap() {
+  _singleObsActive = false;
+  document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
+  renderMapMarkers();
+}
+
 function showSingleObsOnMap(el) {
   const lat      = el.dataset.lat      ? parseFloat(el.dataset.lat)  : null;
   const lng      = el.dataset.lng      ? parseFloat(el.dataset.lng)  : null;
@@ -1977,6 +2033,7 @@ function renderTable(content, jumpNotice) {
     <div class="toolbar">
       <button id="mapToggleBtn" class="btn-map-toggle${mapVisible ? ' active' : ''}"
         onclick="toggleMap()">${mapVisible ? 'Dölj karta' : 'Visa karta'}</button>
+      ${mapVisible ? `<button class="btn-map-toggle" onclick="resetMap()" title="Visa alla observationer på kartan">Visa alla</button>` : ''}
       <input type="search" id="filterInput" placeholder="Filtrera art, lokal, rapportör…" value="${escHtml(filterText)}"
         oninput="doFilter(this, ${total})" />
     </div>
@@ -2052,7 +2109,7 @@ function renderTable(content, jumpNotice) {
             <td class="col-huvud"><span class="t-empty">–</span></td>
             <td class="col-rap"><span class="t-empty">–</span></td>
             <td class="col-tid"><span class="t-empty">–</span></td>
-            <td class="col-map"></td>
+            <td class="col-map"><button class="btn-obs-map" onclick="event.stopPropagation();showGroupOnMap('${safeKey}')" title="Visa alla obs för ${escHtml(g.key)} på karta">📍</button></td>
           </tr>`;
         if (expanded) {
           for (const row of g.rows) html += rowHtml(row, 'group-sub');
