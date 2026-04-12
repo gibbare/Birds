@@ -349,7 +349,7 @@
     }
     .btn-obs-map:hover { background: #2b6cb0; color: white; border-color: #2b6cb0; }
     .obs-table tbody tr.row-clickable { cursor: pointer; }
-    .obs-table tbody tr.row-map-active td { background: #f0fff4 !important; box-shadow: inset 3px 0 0 #68d391; }
+    .obs-table tbody tr.row-map-active td { background: #f0fff4 !important; }
 
     .obs-table td.col-rar { text-align: center; padding: .55rem .3rem; }
 
@@ -1834,7 +1834,11 @@ function showGroupOnMap(key) {
     if (btn) { btn.classList.add('active'); btn.textContent = 'Dölj karta'; }
   }
 
-  // Avmarkera ev. aktiv rad, markera group-header
+  // Expandera gruppen i listan så underraderna syns
+  expandedGroups.add(key);
+  render(lastTotal);
+
+  // Markera group-header (render() har nu ritat om DOM)
   _singleObsActive = true;
   document.querySelectorAll('.row-map-active').forEach(r => r.classList.remove('row-map-active'));
   document.querySelectorAll('.group-header').forEach(tr => {
