@@ -385,7 +385,10 @@
     .group-chevron { display: inline-block; width: 1rem; font-size: .75rem; color: #4a6fa5; }
     .obs-table tbody tr.group-sub { background: #f8faff; }
     .obs-table tbody tr.group-sub:hover { background: #edf5ff; }
-    .obs-table tbody tr.group-sub td:first-child { padding-left: 2.8rem; border-left: 4px solid #90cdf4; }
+    .obs-table tbody tr.group-sub td.col-art {
+      padding-left: 2.8rem;
+      box-shadow: inset 5px 0 0 #4a90d9;
+    }
 
     .obs-table td {
       padding: .55rem .8rem;
@@ -2070,12 +2073,12 @@ function renderTable(content, jumpNotice) {
       ? `<button class="btn-obs-map" onclick="event.stopPropagation();showSingleObsOnMap(this.closest('tr'))" title="Visa på karta">📍</button>`
       : '';
     return `
-      <tr class="${cls} row-clickable"
+      <tr class="${cls}"
         data-lat="${row.lat ?? ''}" data-lng="${row.lng ?? ''}"
         data-name="${escHtml(name)}" data-reporter="${escHtml(row.reporter||'')}"
         data-count="${row.individualCount}" data-unit="${escHtml(row.unit||'')}"
         data-dt="${escHtml(row.startDT||'')}" data-apid="${row.artportalenId||''}"
-        onclick="showSingleObsOnMap(this)">
+        >
         <td class="col-art">
           <span class="t-art-sv">${nameHtml}</span>
           ${sci ? `<span class="t-art-sci">${escHtml(sci)}</span>` : ''}
