@@ -33,7 +33,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "3.3"          # Uppdatera vid varje deploy
+APP_VERSION   = "3.4"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
 
 # ── Fellogg (cirkulär buffer, max 500 poster) ────────────────────────────────
