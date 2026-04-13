@@ -1731,16 +1731,22 @@ function resizeMobileMap() {
   if (window.innerWidth > 640) return;
   const mapEl = document.getElementById('observationMap');
   if (!mapEl) return;
-  requestAnimationFrame(() => {
-    const h = id => document.getElementById(id)?.offsetHeight || 0;
-    const q = sel => document.querySelector(sel)?.offsetHeight || 0;
-    const aboveMap = q('header') + q('nav') + h('sourceBar') + q('.nav-bar');
-    const belowMap = h('mapLayers') + q('.summary-bar') + q('.toolbar');
-    const newH = Math.max(180, window.innerHeight - aboveMap - belowMap);
-    mapEl.style.height = newH + 'px';
+  // Scrolla till toppen direkt, mät sedan i dubbel-rAF när layout är stabil
+  window.scrollTo(0, 0);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    // Avstånd från viewportens överkant till kartans överkant
+    const mapTop   = mapEl.getBoundingClientRect().top;
+    // Höjd på allt under kartan
+    const layerH   = document.getElementById('mapLayers')?.offsetHeight || 0;
+    const mcBottom = document.getElementById('mapContainer')?.getBoundingClientRect().bottom || 0;
+    const ctTop    = document.getElementById('content')?.getBoundingClientRect().top || mcBottom;
+    const gap      = Math.max(0, ctTop - mcBottom);   // margin-bottom på #mapContainer
+    const summaryH = document.querySelector('.summary-bar')?.offsetHeight || 0;
+    const toolbarH = document.querySelector('.toolbar')?.offsetHeight     || 0;
+    const belowMap = layerH + gap + summaryH + toolbarH;
+    mapEl.style.height = Math.max(180, window.innerHeight - mapTop - belowMap) + 'px';
     leafletMap?.invalidateSize();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
+  }));
 }
 
 /* Togglar kartpanelen och initialiserar Leaflet vid behov */
