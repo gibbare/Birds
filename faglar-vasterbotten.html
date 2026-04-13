@@ -1744,7 +1744,8 @@ function resizeMobileMap(callback) {
     const safeBottom = safeEl.offsetHeight || 0;
     document.body.removeChild(safeEl);
     const toolbarBottom = toolbar.getBoundingClientRect().bottom;
-    mapEl.style.height = Math.max(180, window.innerHeight - toolbarBottom - safeBottom - 8) + 'px';
+    const summaryH      = document.querySelector('.summary-bar')?.offsetHeight || 0;
+    mapEl.style.height  = Math.max(180, window.innerHeight - toolbarBottom - safeBottom - summaryH - 8) + 'px';
     leafletMap?.invalidateSize();
     callback?.();
   }));
