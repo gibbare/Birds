@@ -784,7 +784,7 @@
     <div id="observationMap"></div>
     <div id="mapLayers">
       <span class="map-layer-label">Lager:</span>
-      <button class="btn-layer-toggle active" id="ns-toggle-osm"
+      <button class="btn-layer-toggle" id="ns-toggle-osm"
         onclick="toggleOsmLayer(this)" title="OSM-kartans fågeltorn och gömslen">
         🗼 OSM-torn
       </button>
@@ -862,7 +862,7 @@ const NS_LAYER_DEFS = [
 ];
 function _nsVisible(key) {
   const saved = localStorage.getItem(`ns_layer_${key}`);
-  return saved === null ? (key !== 'parkering') : saved === '1';
+  return saved === '1';   // default: av för alla
 }
 
 // Rödliste-state
@@ -1852,8 +1852,21 @@ async function loadNatursidan() {
 function toggleOsmLayer(btn) {
   if (!birdHideLayer || !leafletMap) return;
   const visible = leafletMap.hasLayer(birdHideLayer);
-  if (visible) { birdHideLayer.remove(); btn.classList.remove('active'); }
-  else { birdHideLayer.addTo(leafletMap); btn.classList.add('active'); }
+  if (visible) {
+    birdHideLayer.remove();
+    btn.classList.remove('active');
+    localStorage.setItem('ns_layer_osm', '0');
+  } else {
+    birdHideLayer.addTo(leafletMap);
+    btn.classList.add('active');
+    localStorage.setItem('ns_layer_osm', '1');
+  }
+}
+
+/* Sätter OSM-knappens utseende utifrån sparat tillstånd */
+function initOsmToggleBtn() {
+  const btn = document.getElementById('ns-toggle-osm');
+  if (btn && localStorage.getItem('ns_layer_osm') === '1') btn.classList.add('active');
 }
 
 /* Renderar och uppdaterar natursidan-lagerknapparna */
@@ -1901,8 +1914,10 @@ function renderMapMarkers() {
       maxZoom: 18,
     }).addTo(leafletMap);
     mapMarkerLayer = L.layerGroup().addTo(leafletMap);
-    birdHideLayer  = L.layerGroup().addTo(leafletMap);
+    birdHideLayer  = L.layerGroup();
+    if (localStorage.getItem('ns_layer_osm') === '1') birdHideLayer.addTo(leafletMap);
     loadBirdHides();
+    initOsmToggleBtn();
     updateLayerToggles();
     loadNatursidan();
   } else {
