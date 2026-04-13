@@ -800,6 +800,8 @@ let selectedKommunId = '2482';  // Default: Skellefteå
 // Kart-state
 let leafletMap       = null;   // Leaflet-instansen
 let mapMarkerLayer   = null;   // LayerGroup för observationsmarkörer
+let birdHideLayer    = null;   // LayerGroup för fågeltorn/-gömslen
+let _birdHidesLoaded = false;  // Hämtad en gång
 let mapVisible       = false;  // Är kartan synlig?
 
 // Rödliste-state
@@ -1681,6 +1683,62 @@ function toggleMap() {
   }
 }
 
+/* ── Hämtar fågeltorn och fågelgömslen från OpenStreetMap (Overpass) ── */
+async function loadBirdHides() {
+  if (_birdHidesLoaded) return;
+  _birdHidesLoaded = true;
+
+  const query = `[out:json][timeout:30];
+(
+  node["leisure"="bird_hide"](63.0,14.5,66.5,22.0);
+  way["leisure"="bird_hide"](63.0,14.5,66.5,22.0);
+  node["man_made"="observation_tower"](63.0,14.5,66.5,22.0);
+  way["man_made"="observation_tower"](63.0,14.5,66.5,22.0);
+);
+out center tags;`;
+
+  try {
+    const resp = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: query,
+    });
+    const data = await resp.json();
+
+    for (const el of data.elements) {
+      const lat = el.lat ?? el.center?.lat;
+      const lon = el.lon ?? el.center?.lon;
+      if (!lat || !lon) continue;
+
+      const tags   = el.tags || {};
+      const name   = tags['name:sv'] || tags.name || '';
+      const isTower = tags.man_made === 'observation_tower';
+      const label  = isTower ? 'Utsiktstorn' : 'Fågelgömsle';
+      const emoji  = isTower ? '🗼' : '🔭';
+
+      const icon = L.divIcon({
+        html: `<div style="background:#744210;color:white;border-radius:50%;width:26px;height:26px;
+                           display:flex;align-items:center;justify-content:center;font-size:.95rem;
+                           border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.45);
+                           cursor:pointer">${emoji}</div>`,
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+        popupAnchor: [0, -16],
+      });
+
+      const popHtml = `<div style="font-family:system-ui,sans-serif;font-size:.82rem">
+        <b style="color:#744210">${emoji} ${label}</b>
+        ${name ? `<br><span style="color:#2d3748">${escHtml(name)}</span>` : ''}
+        ${tags.description ? `<br><span style="color:#718096;font-size:.75rem">${escHtml(tags.description)}</span>` : ''}
+      </div>`;
+
+      L.marker([lat, lon], { icon }).bindPopup(popHtml).addTo(birdHideLayer);
+    }
+  } catch (e) {
+    console.warn('Kunde inte ladda fågeltorn från OSM:', e);
+  }
+}
+
 /* Ritar/uppdaterar observationspunkterna på kartan */
 function renderMapMarkers() {
   const withCoords = filteredRows(allResults).filter(r => r.lat !== null && r.lng !== null);
@@ -1694,6 +1752,8 @@ function renderMapMarkers() {
       maxZoom: 18,
     }).addTo(leafletMap);
     mapMarkerLayer = L.layerGroup().addTo(leafletMap);
+    birdHideLayer  = L.layerGroup().addTo(leafletMap);
+    loadBirdHides();
   } else {
     mapMarkerLayer.clearLayers();
   }
