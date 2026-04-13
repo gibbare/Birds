@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fågelobservationer Sverige</title>
   <link rel="apple-touch-icon" href="/storspov2_ico.png" />
   <link rel="manifest" href="/manifest.json" />
@@ -24,7 +24,6 @@
       background: linear-gradient(135deg, #1a4a7a, #2b6cb0);
       color: white;
       padding: .5rem 1.5rem;
-      padding-top: calc(.5rem + env(safe-area-inset-top, 0px));
       text-align: center;
       box-shadow: 0 2px 10px rgba(0,0,0,.25);
     }
@@ -1738,12 +1737,8 @@ function resizeMobileMap(callback) {
   mapEl.style.height = '1px';
   window.scrollTo(0, 0);
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    // safe-area-inset-bottom kräver viewport-fit=cover i meta-taggen
-    const safeEl = document.createElement('div');
-    safeEl.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden';
-    document.body.appendChild(safeEl);
-    const safeBottom = safeEl.offsetHeight || 0;
-    document.body.removeChild(safeEl);
+    // Fast offset för iPhone hemknapp (~34px) + lite luft
+    const safeBottom    = /iPhone|iPad/.test(navigator.userAgent) ? 34 : 0;
     const toolbarBottom = toolbar.getBoundingClientRect().bottom;
     const summaryH      = document.querySelector('.summary-bar')?.offsetHeight || 0;
     mapEl.style.height  = Math.max(180, window.innerHeight - toolbarBottom - safeBottom - summaryH - 8) + 'px';
