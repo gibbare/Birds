@@ -1726,25 +1726,19 @@ async function enrichRedlist() {
 }
 
 /* Justerar karthöjden på mobil:
-   toppen = header "Fågelobservationer", botten = "Dölj karta"-knappen */
+   toppen = header "Fågelobservationer", botten = "Dölj karta"-knappen.
+   Strategi: kolla kartan till 1px, mät var toolbars nederkant hamnar →
+   det är exakt "allt utom kartan". newH = viewportH - toolbarBottom + 1. */
 function resizeMobileMap() {
   if (window.innerWidth > 640) return;
-  const mapEl = document.getElementById('observationMap');
-  if (!mapEl) return;
-  // Scrolla till toppen direkt, mät sedan i dubbel-rAF när layout är stabil
+  const mapEl  = document.getElementById('observationMap');
+  const toolbar = document.querySelector('.toolbar');
+  if (!mapEl || !toolbar) return;
+  mapEl.style.height = '1px';
   window.scrollTo(0, 0);
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    // Avstånd från viewportens överkant till kartans överkant
-    const mapTop   = mapEl.getBoundingClientRect().top;
-    // Höjd på allt under kartan
-    const layerH   = document.getElementById('mapLayers')?.offsetHeight || 0;
-    const mcBottom = document.getElementById('mapContainer')?.getBoundingClientRect().bottom || 0;
-    const ctTop    = document.getElementById('content')?.getBoundingClientRect().top || mcBottom;
-    const gap      = Math.max(0, ctTop - mcBottom);   // margin-bottom på #mapContainer
-    const summaryH = document.querySelector('.summary-bar')?.offsetHeight || 0;
-    const toolbarH = document.querySelector('.toolbar')?.offsetHeight     || 0;
-    const belowMap = layerH + gap + summaryH + toolbarH;
-    mapEl.style.height = Math.max(180, window.innerHeight - mapTop - belowMap) + 'px';
+    const toolbarBottom = toolbar.getBoundingClientRect().bottom;
+    mapEl.style.height = Math.max(180, window.innerHeight - toolbarBottom + 1) + 'px';
     leafletMap?.invalidateSize();
   }));
 }
