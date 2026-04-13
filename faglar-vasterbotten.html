@@ -1738,7 +1738,13 @@ function resizeMobileMap() {
   window.scrollTo(0, 0);
   requestAnimationFrame(() => requestAnimationFrame(() => {
     const toolbarBottom = toolbar.getBoundingClientRect().bottom;
-    mapEl.style.height = Math.max(180, window.innerHeight - toolbarBottom + 1) + 'px';
+    // Lägg till safe-area-inset-bottom (iPhone home indicator, böjda kanter m.m.)
+    const safeEl = document.createElement('div');
+    safeEl.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden';
+    document.body.appendChild(safeEl);
+    const safeBottom = safeEl.offsetHeight || 0;
+    document.body.removeChild(safeEl);
+    mapEl.style.height = Math.max(180, window.innerHeight - toolbarBottom - safeBottom - 8) + 'px';
     leafletMap?.invalidateSize();
   }));
 }
