@@ -478,7 +478,7 @@
       display: none;
     }
     #mapContainer.visible { display: block; }
-    #observationMap { height: 400px; width: 100%; border-radius: 10px; overflow: hidden; }
+    #observationMap { aspect-ratio: 1 / 1; width: 100%; border-radius: 10px; overflow: hidden; }
 
     /* Karttlager-panel */
     #mapLayers {
@@ -572,7 +572,7 @@
       .toolbar input[type="search"] { width: 100%; min-width: 0; }
 
       /* Karta: lägre höjd på mobil */
-      #observationMap { height: 220px; }
+      #observationMap { aspect-ratio: auto; height: 260px; }
 
       /* ── Tabell → kortlayout ── */
       .obs-wrap {
