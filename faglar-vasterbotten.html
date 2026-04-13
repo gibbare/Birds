@@ -1725,25 +1725,21 @@ async function enrichRedlist() {
   updateRedlistCells();
 }
 
-/* Justerar karthöjden på mobil så toolbar hamnar precis längst ned */
+/* Justerar karthöjden på mobil:
+   toppen = header "Fågelobservationer", botten = "Dölj karta"-knappen */
 function resizeMobileMap() {
   if (window.innerWidth > 640) return;
-  const mapEl    = document.getElementById('observationMap');
+  const mapEl = document.getElementById('observationMap');
   if (!mapEl) return;
   requestAnimationFrame(() => {
-    const layerEl  = document.getElementById('mapLayers');
-    const summary  = document.querySelector('.summary-bar');
-    const toolbar  = document.querySelector('.toolbar');
-    const layerH   = layerEl  ? layerEl.offsetHeight  : 0;
-    const summaryH = summary  ? summary.offsetHeight  : 0;
-    const toolbarH = toolbar  ? toolbar.offsetHeight  : 0;
-    const reserved = layerH + summaryH + toolbarH + 4;
-    const newH     = Math.max(180, window.innerHeight - reserved);
+    const h = id => document.getElementById(id)?.offsetHeight || 0;
+    const q = sel => document.querySelector(sel)?.offsetHeight || 0;
+    const aboveMap = q('header') + q('nav') + h('sourceBar');
+    const belowMap = h('mapLayers') + q('.summary-bar') + q('.toolbar');
+    const newH = Math.max(180, window.innerHeight - aboveMap - belowMap);
     mapEl.style.height = newH + 'px';
     leafletMap?.invalidateSize();
-    // Scrolla så mapContainer ligger överst → toolbar hamnar längst ned
-    document.getElementById('mapContainer')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 }
 
