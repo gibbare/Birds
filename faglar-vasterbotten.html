@@ -1725,27 +1725,32 @@ async function enrichRedlist() {
   updateRedlistCells();
 }
 
-/* Justerar karthöjden på mobil:
-   toppen = header "Fågelobservationer", botten = "Dölj karta"-knappen.
-   Strategi: kolla kartan till 1px, mät var toolbars nederkant hamnar →
-   det är exakt "allt utom kartan". newH = viewportH - toolbarBottom + 1. */
-function resizeMobileMap() {
-  if (window.innerWidth > 640) return;
-  const mapEl  = document.getElementById('observationMap');
+/* Justerar karthöjden på mobil så toolbar hamnar precis vid nederkanten.
+   Räknar ut delta matematiskt utan att ändra höjden i förväg, så att
+   renderMapMarkers/fitBounds alltid körs med rätt storlek.
+   callback() anropas efter att höjden är satt. */
+function resizeMobileMap(callback) {
+  if (window.innerWidth > 640) { callback?.(); return; }
+  const mapEl   = document.getElementById('observationMap');
   const toolbar = document.querySelector('.toolbar');
-  if (!mapEl || !toolbar) return;
-  mapEl.style.height = '1px';
+  if (!mapEl || !toolbar) { callback?.(); return; }
   window.scrollTo(0, 0);
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    const toolbarBottom = toolbar.getBoundingClientRect().bottom;
-    // Lägg till safe-area-inset-bottom (iPhone home indicator, böjda kanter m.m.)
+    // safe-area-inset-bottom (iPhone home indicator)
     const safeEl = document.createElement('div');
     safeEl.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden';
     document.body.appendChild(safeEl);
     const safeBottom = safeEl.offsetHeight || 0;
     document.body.removeChild(safeEl);
-    mapEl.style.height = Math.max(180, window.innerHeight - toolbarBottom - safeBottom - 8) + 'px';
+
+    const targetBottom      = window.innerHeight - safeBottom - 8;
+    const curToolbarBottom  = toolbar.getBoundingClientRect().bottom;
+    const curH              = mapEl.offsetHeight;
+    // toolbar rör sig lika mycket som kartan ändrar höjd
+    const newH = Math.max(180, curH + targetBottom - curToolbarBottom);
+    mapEl.style.height = newH + 'px';
     leafletMap?.invalidateSize();
+    callback?.();
   }));
 }
 
@@ -1761,8 +1766,7 @@ function toggleMap() {
   if (mapVisible) {
     container.classList.add('visible');
     if (btn) { btn.classList.add('active'); btn.textContent = 'Dölj karta'; }
-    renderMapMarkers();
-    resizeMobileMap();
+    resizeMobileMap(() => renderMapMarkers());
   } else {
     container.classList.remove('visible');
     if (btn) { btn.classList.remove('active'); btn.textContent = 'Visa karta'; }
@@ -2169,7 +2173,7 @@ function render(gbifTotal) {
     updateFetchTime();
     renderTable(content, jumpNotice);
     // Uppdatera karta om den är synlig (kartan lever utanför #content)
-    if (mapVisible) { renderMapMarkers(); resizeMobileMap(); }
+    if (mapVisible) renderMapMarkers();
     // Berika tabellen med rödlistestatus i bakgrunden (async)
     enrichRedlist();
     // Starta auto-refresh (bara vid dagens datum)
