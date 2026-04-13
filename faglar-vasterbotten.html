@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Fågelobservationer Sverige</title>
   <link rel="apple-touch-icon" href="/storspov2_ico.png" />
   <link rel="manifest" href="/manifest.json" />
@@ -1726,29 +1726,25 @@ async function enrichRedlist() {
 }
 
 /* Justerar karthöjden på mobil så toolbar hamnar precis vid nederkanten.
-   Räknar ut delta matematiskt utan att ändra höjden i förväg, så att
-   renderMapMarkers/fitBounds alltid körs med rätt storlek.
-   callback() anropas efter att höjden är satt. */
+   Strategi: kolla till 1px → mät var toolbars nederkant hamnar exakt →
+   sätt korrekt höjd → anropa callback (renderMapMarkers/fitBounds körs
+   med rätt storlek). viewport-fit=cover krävs för safe-area-inset-bottom. */
 function resizeMobileMap(callback) {
   if (window.innerWidth > 640) { callback?.(); return; }
   const mapEl   = document.getElementById('observationMap');
   const toolbar = document.querySelector('.toolbar');
   if (!mapEl || !toolbar) { callback?.(); return; }
+  mapEl.style.height = '1px';
   window.scrollTo(0, 0);
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    // safe-area-inset-bottom (iPhone home indicator)
+    // safe-area-inset-bottom kräver viewport-fit=cover i meta-taggen
     const safeEl = document.createElement('div');
     safeEl.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom,0px);pointer-events:none;visibility:hidden';
     document.body.appendChild(safeEl);
     const safeBottom = safeEl.offsetHeight || 0;
     document.body.removeChild(safeEl);
-
-    const targetBottom      = window.innerHeight - safeBottom - 8;
-    const curToolbarBottom  = toolbar.getBoundingClientRect().bottom;
-    const curH              = mapEl.offsetHeight;
-    // toolbar rör sig lika mycket som kartan ändrar höjd
-    const newH = Math.max(180, curH + targetBottom - curToolbarBottom);
-    mapEl.style.height = newH + 'px';
+    const toolbarBottom = toolbar.getBoundingClientRect().bottom;
+    mapEl.style.height = Math.max(180, window.innerHeight - toolbarBottom - safeBottom - 8) + 'px';
     leafletMap?.invalidateSize();
     callback?.();
   }));
