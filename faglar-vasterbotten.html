@@ -472,13 +472,50 @@
     /* ── Karta ── */
     #mapContainer {
       border-radius: 10px;
-      overflow: hidden;
+      overflow: visible;
       box-shadow: 0 1px 6px rgba(0,0,0,.1);
       margin-bottom: 1rem;
       display: none;
     }
     #mapContainer.visible { display: block; }
-    #observationMap { height: 400px; width: 100%; }
+    #observationMap { height: 400px; width: 100%; border-radius: 10px; overflow: hidden; }
+
+    /* Karttlager-panel */
+    #mapLayers {
+      background: #f7faff;
+      border: 1px solid #e2e8f0;
+      border-radius: 0 0 10px 10px;
+      border-top: none;
+      padding: .45rem .7rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: .35rem;
+    }
+    .map-layer-label {
+      font-size: .7rem;
+      font-weight: 600;
+      color: #718096;
+      margin-right: .15rem;
+      white-space: nowrap;
+    }
+    .btn-layer-toggle {
+      font-size: .72rem;
+      padding: .18rem .5rem;
+      border-radius: 20px;
+      border: 1px solid #cbd5e0;
+      background: white;
+      color: #4a5568;
+      cursor: pointer;
+      transition: background .12s, color .12s;
+      white-space: nowrap;
+    }
+    .btn-layer-toggle.active {
+      background: #2b6cb0;
+      color: white;
+      border-color: #2b6cb0;
+    }
+    .ns-count { opacity: .7; font-size: .68rem; }
 
     /* Kartknapp i toolbar */
     .btn-map-toggle {
@@ -745,6 +782,14 @@
   <!-- Kartvyn – utanför #content så Leaflet-instansen överlever re-renders -->
   <div id="mapContainer">
     <div id="observationMap"></div>
+    <div id="mapLayers">
+      <span class="map-layer-label">Lager:</span>
+      <button class="btn-layer-toggle active" id="ns-toggle-osm"
+        onclick="toggleOsmLayer(this)" title="OSM-kartans fågeltorn och gömslen">
+        🗼 OSM-torn
+      </button>
+      <!-- Natursidan-lager renderas dynamiskt av updateLayerToggles() -->
+    </div>
   </div>
   <div id="content">
     <div class="status">Kontrollerar proxyanslutning…<div class="spinner"></div></div>
@@ -798,11 +843,27 @@ let selectedLanId   = '24';     // Default: Västerbottens län
 let selectedKommunId = '2482';  // Default: Skellefteå
 
 // Kart-state
-let leafletMap       = null;   // Leaflet-instansen
-let mapMarkerLayer   = null;   // LayerGroup för observationsmarkörer
-let birdHideLayer    = null;   // LayerGroup för fågeltorn/-gömslen
-let _birdHidesLoaded = false;  // Hämtad en gång
-let mapVisible       = false;  // Är kartan synlig?
+let leafletMap          = null;   // Leaflet-instansen
+let mapMarkerLayer      = null;   // LayerGroup för observationsmarkörer
+let birdHideLayer       = null;   // LayerGroup för OSM-torn/-gömslen
+let natursidanLayers    = {};     // { lokal, fågel, område, utsikt, gömsle, parkering, matning }
+let _birdHidesLoaded    = false;  // OSM hämtad en gång
+let _natursidanLoaded   = false;  // Natursidan hämtad en gång
+let mapVisible          = false;  // Är kartan synlig?
+
+// Vilka natursidan-lager är synliga (sparas i localStorage)
+const NS_LAYER_DEFS = [
+  { key: 'lokal',     label: 'Fågellokaler',    emoji: '🔭', color: '#276749' },
+  { key: 'fågel',     label: 'Samlingsplatser', emoji: '🐦', color: '#2b6cb0' },
+  { key: 'utsikt',    label: 'Utsiktsplatser',  emoji: '👁',  color: '#553c9a' },
+  { key: 'område',    label: 'Fågelområden',    emoji: '🗺',  color: '#2c7a7b' },
+  { key: 'gömsle',    label: 'Gömslen',         emoji: '🌿', color: '#744210' },
+  { key: 'parkering', label: 'Parkering',        emoji: '🅿', color: '#718096' },
+];
+function _nsVisible(key) {
+  const saved = localStorage.getItem(`ns_layer_${key}`);
+  return saved === null ? (key !== 'parkering') : saved === '1';
+}
 
 // Rödliste-state
 let redlistMap = {};           // taxonId (sträng) → {redListCategory, source}
@@ -1739,6 +1800,94 @@ out center tags;`;
   }
 }
 
+/* ── Hämtar fågellokaler från natursidan.se via proxy ── */
+async function loadNatursidan() {
+  if (_natursidanLoaded) return;
+  _natursidanLoaded = true;
+
+  // Skapa ett lager per kategori
+  for (const def of NS_LAYER_DEFS) {
+    natursidanLayers[def.key] = L.layerGroup();
+    if (_nsVisible(def.key)) natursidanLayers[def.key].addTo(leafletMap);
+  }
+
+  try {
+    const resp = await fetch(`${PROXY}/api/bird_lokaler`);
+    const data = await resp.json();
+    if (!data.features) return;
+
+    for (const f of data.features) {
+      const def = NS_LAYER_DEFS.find(d => d.key === f.type);
+      if (!def || !natursidanLayers[f.type]) continue;
+
+      const icon = L.divIcon({
+        html: `<div style="background:${def.color};color:white;border-radius:50%;
+                           width:24px;height:24px;display:flex;align-items:center;
+                           justify-content:center;font-size:.85rem;border:2px solid white;
+                           box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer"
+               >${def.emoji}</div>`,
+        className: '',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+        popupAnchor: [0, -14],
+      });
+
+      const popHtml = `<div style="font-family:system-ui,sans-serif;font-size:.82rem;max-width:220px">
+        <b style="color:${def.color}">${def.emoji} ${def.label}</b>
+        ${f.name ? `<br><span style="color:#1a202c;font-weight:600">${escHtml(f.name)}</span>` : ''}
+        ${f.desc ? `<br><span style="color:#718096;font-size:.75rem;display:block;margin-top:.2rem">${escHtml(f.desc)}</span>` : ''}
+        <br><a href="https://www.natursidan.se/nyheter/karta-over-sveriges-basta-platser-for-fagelskadning/"
+              target="_blank" style="color:#a0aec0;font-size:.72rem;text-decoration:none">natursidan.se ↗</a>
+      </div>`;
+
+      L.marker([f.lat, f.lon], { icon }).bindPopup(popHtml).addTo(natursidanLayers[f.type]);
+    }
+    updateLayerToggles();
+  } catch(e) {
+    console.warn('Kunde inte ladda natursidan-lokaler:', e);
+  }
+}
+
+/* Togglar OSM-lagret (torn/gömslen) */
+function toggleOsmLayer(btn) {
+  if (!birdHideLayer || !leafletMap) return;
+  const visible = leafletMap.hasLayer(birdHideLayer);
+  if (visible) { birdHideLayer.remove(); btn.classList.remove('active'); }
+  else { birdHideLayer.addTo(leafletMap); btn.classList.add('active'); }
+}
+
+/* Renderar och uppdaterar natursidan-lagerknapparna */
+function updateLayerToggles() {
+  const panel = document.getElementById('mapLayers');
+  if (!panel) return;
+  // Ta bort gamla ns-knappar
+  panel.querySelectorAll('.ns-btn').forEach(b => b.remove());
+  for (const def of NS_LAYER_DEFS) {
+    const n       = natursidanLayers[def.key]?.getLayers().length || 0;
+    const visible = _nsVisible(def.key);
+    const btn     = document.createElement('button');
+    btn.id        = `ns-toggle-${def.key}`;
+    btn.className = `btn-layer-toggle ns-btn${visible ? ' active' : ''}`;
+    btn.title     = `natursidan.se – ${def.label}`;
+    btn.innerHTML = `${def.emoji} ${def.label}<span class="ns-count">${n ? ` (${n})` : ''}</span>`;
+    btn.onclick   = () => toggleNsLayer(def.key);
+    panel.appendChild(btn);
+  }
+}
+
+/* Togglar ett natursidan-lager */
+function toggleNsLayer(key) {
+  const layer = natursidanLayers[key];
+  if (!layer || !leafletMap) return;
+  const visible = leafletMap.hasLayer(layer);
+  if (visible) { layer.remove(); localStorage.setItem(`ns_layer_${key}`, '0'); }
+  else { layer.addTo(leafletMap); localStorage.setItem(`ns_layer_${key}`, '1'); }
+  document.getElementById(`ns-toggle-${key}`)?.classList.toggle('active', !visible);
+  document.getElementById(`ns-toggle-${key}`)?.querySelector('.ns-count') &&
+    (document.getElementById(`ns-toggle-${key}`).querySelector('.ns-count').textContent =
+      ` (${layer.getLayers().length})`);
+}
+
 /* Ritar/uppdaterar observationspunkterna på kartan */
 function renderMapMarkers() {
   const withCoords = filteredRows(allResults).filter(r => r.lat !== null && r.lng !== null);
@@ -1754,6 +1903,8 @@ function renderMapMarkers() {
     mapMarkerLayer = L.layerGroup().addTo(leafletMap);
     birdHideLayer  = L.layerGroup().addTo(leafletMap);
     loadBirdHides();
+    updateLayerToggles();
+    loadNatursidan();
   } else {
     mapMarkerLayer.clearLayers();
   }

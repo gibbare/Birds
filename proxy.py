@@ -28,6 +28,8 @@ import time as _time
 from datetime import datetime as _dt, date as _date_type, timedelta as _timedelta
 import calendar as _calendar
 from collections import defaultdict as _defaultdict, deque as _deque
+import zipfile as _zipfile
+import xml.etree.ElementTree as _ET
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -1785,6 +1787,107 @@ def umami_stats():
         return jsonify(r.json()), r.status_code
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ── Fågellokaler från natursidan.se (Google My Maps KMZ) ────────────────────
+_bird_lokaler_cache = None
+_bird_lokaler_lock  = _threading.Lock()
+
+# Ikonmappning: Google My Maps icon-id → platskategori
+_ICON_TYPE = {
+    'icon-1621': 'lokal',      # Kikare-person – fågellokal
+    'icon-1760': 'fågel',      # Fågel – samlingsplats
+    'icon-1644': 'område',     # Kluster – flerplatsområde
+    'icon-1611': 'utsikt',     # Kikare – utsiktsplats
+    'icon-1874': 'parkering',  # Parkering
+    'icon-1603': 'gömsle',     # Gömsle
+    'icon-1789': 'matning',    # Matningsstation
+    'icon-1733': 'toalett',    # Toalett
+    'icon-1783': 'karta',      # Länk till underkarta
+}
+
+# Koordinater för Västerbotten (generöst tilltagna)
+_VB_LAT_MIN, _VB_LAT_MAX = 63.0, 66.5
+_VB_LON_MIN, _VB_LON_MAX = 14.5, 22.0
+
+@app.route('/api/bird_lokaler')
+def bird_lokaler():
+    global _bird_lokaler_cache
+    with _bird_lokaler_lock:
+        if _bird_lokaler_cache is not None:
+            return jsonify(_bird_lokaler_cache)
+
+    KMZ_URL = ('https://www.google.com/maps/d/kml'
+               '?mid=1Gn96TCZx92PN6B5HlmZvDLJcQAwe6dQ2&forcekml=1')
+    try:
+        r = requests.get(KMZ_URL, timeout=30,
+                         headers={'User-Agent': 'Mozilla/5.0'})
+        r.raise_for_status()
+    except Exception as e:
+        return jsonify({'error': f'Kunde inte hämta KMZ: {e}'}), 502
+
+    # Packa upp KMZ (ZIP) och läs KML-filen
+    try:
+        with _zipfile.ZipFile(_io.BytesIO(r.content)) as z:
+            kml_name = next(n for n in z.namelist() if n.endswith('.kml'))
+            kml_bytes = z.read(kml_name)
+    except Exception:
+        # Filen är kanske redan KML (ej zippat)
+        kml_bytes = r.content
+
+    root = _ET.fromstring(kml_bytes)
+    KNS  = 'http://www.opengis.net/kml/2.2'
+
+    features = []
+    for pm in root.iter(f'{{{KNS}}}Placemark'):
+        # Koordinater
+        pt = pm.find(f'.//{{{KNS}}}Point/{{{KNS}}}coordinates')
+        if pt is None or not pt.text:
+            continue
+        parts = pt.text.strip().split(',')
+        if len(parts) < 2:
+            continue
+        try:
+            lon, lat = float(parts[0]), float(parts[1])
+        except ValueError:
+            continue
+
+        # Filtrera till Västerbotten
+        if not (_VB_LAT_MIN <= lat <= _VB_LAT_MAX and
+                _VB_LON_MIN <= lon <= _VB_LON_MAX):
+            continue
+
+        # Namn
+        name_el = pm.find(f'{{{KNS}}}name')
+        name    = (name_el.text or '').strip() if name_el is not None else ''
+
+        # Beskrivning (strip HTML-taggar)
+        desc_el = pm.find(f'{{{KNS}}}description')
+        desc    = ''
+        if desc_el is not None and desc_el.text:
+            desc = re.sub(r'<[^>]+>', '', desc_el.text).strip()[:300]
+
+        # Platskategori via styleUrl
+        su_el  = pm.find(f'{{{KNS}}}styleUrl')
+        su     = su_el.text if su_el is not None else ''
+        ptype  = next((v for k, v in _ICON_TYPE.items() if k in su), 'lokal')
+
+        # Hoppa över rena navigationsplatser
+        if ptype in ('karta', 'toalett'):
+            continue
+
+        features.append({
+            'lat':  round(lat, 6),
+            'lon':  round(lon, 6),
+            'name': name,
+            'type': ptype,
+            'desc': desc,
+        })
+
+    result = {'features': features, 'count': len(features)}
+    with _bird_lokaler_lock:
+        _bird_lokaler_cache = result
+    return jsonify(result)
 
 
 # ── Starta statistik-bakgrundstråd ──────────────────────────────────────────
