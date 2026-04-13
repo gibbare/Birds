@@ -571,8 +571,8 @@
       .toolbar { gap: .4rem; }
       .toolbar input[type="search"] { width: 100%; min-width: 0; }
 
-      /* Karta: lägre höjd på mobil */
-      #observationMap { aspect-ratio: auto; height: 260px; }
+      /* Karta: höjd beräknas av resizeMobileMap() i JS; fallback om JS ej kört */
+      #observationMap { aspect-ratio: auto; height: 60dvh; }
 
       /* ── Tabell → kortlayout ── */
       .obs-wrap {
@@ -1725,6 +1725,28 @@ async function enrichRedlist() {
   updateRedlistCells();
 }
 
+/* Justerar karthöjden på mobil så toolbar hamnar precis längst ned */
+function resizeMobileMap() {
+  if (window.innerWidth > 640) return;
+  const mapEl    = document.getElementById('observationMap');
+  if (!mapEl) return;
+  requestAnimationFrame(() => {
+    const layerEl  = document.getElementById('mapLayers');
+    const summary  = document.querySelector('.summary-bar');
+    const toolbar  = document.querySelector('.toolbar');
+    const layerH   = layerEl  ? layerEl.offsetHeight  : 0;
+    const summaryH = summary  ? summary.offsetHeight  : 0;
+    const toolbarH = toolbar  ? toolbar.offsetHeight  : 0;
+    const reserved = layerH + summaryH + toolbarH + 4;
+    const newH     = Math.max(180, window.innerHeight - reserved);
+    mapEl.style.height = newH + 'px';
+    leafletMap?.invalidateSize();
+    // Scrolla så mapContainer ligger överst → toolbar hamnar längst ned
+    document.getElementById('mapContainer')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
 /* Togglar kartpanelen och initialiserar Leaflet vid behov */
 function toggleMap() {
   // Återställ alltid enskild-obs-läge och radmarkering
@@ -1738,6 +1760,7 @@ function toggleMap() {
     container.classList.add('visible');
     if (btn) { btn.classList.add('active'); btn.textContent = 'Dölj karta'; }
     renderMapMarkers();
+    resizeMobileMap();
   } else {
     container.classList.remove('visible');
     if (btn) { btn.classList.remove('active'); btn.textContent = 'Visa karta'; }
@@ -2144,7 +2167,7 @@ function render(gbifTotal) {
     updateFetchTime();
     renderTable(content, jumpNotice);
     // Uppdatera karta om den är synlig (kartan lever utanför #content)
-    if (mapVisible) renderMapMarkers();
+    if (mapVisible) { renderMapMarkers(); resizeMobileMap(); }
     // Berika tabellen med rödlistestatus i bakgrunden (async)
     enrichRedlist();
     // Starta auto-refresh (bara vid dagens datum)
