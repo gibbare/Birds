@@ -1734,7 +1734,7 @@ function resizeMobileMap() {
   requestAnimationFrame(() => {
     const h = id => document.getElementById(id)?.offsetHeight || 0;
     const q = sel => document.querySelector(sel)?.offsetHeight || 0;
-    const aboveMap = q('header') + q('nav') + h('sourceBar');
+    const aboveMap = q('header') + q('nav') + h('sourceBar') + q('.nav-bar');
     const belowMap = h('mapLayers') + q('.summary-bar') + q('.toolbar');
     const newH = Math.max(180, window.innerHeight - aboveMap - belowMap);
     mapEl.style.height = newH + 'px';
