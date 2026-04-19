@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fågelstatistik Sverige</title>
-  <link rel="apple-touch-icon" href="/storspov2_ico.png" />
-  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="storspov2_ico.png" />
+  <link rel="manifest" href="manifest.json" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Fåglar" />
@@ -625,17 +625,14 @@
 </div>
 
 <div><a href="#" class="btn-top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ Gå till toppen</a></div>
-<footer>Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
+<footer>Utvecklad av <a href="https://birds.up.railway.app/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
 
 <script>
 /* ══════════════════════════════════════════════════════════════════
    Konfiguration
 ══════════════════════════════════════════════════════════════════ */
 
-/* PROXY-URL: automatisk – fungerar lokalt och på Render utan ändringar */
-const PROXY = (window.location.origin === 'null' || window.location.origin === 'file://')
-  ? 'http://localhost:5050'
-  : window.location.origin;
+const PROXY = location.hostname === 'localhost' ? 'http://localhost:5050' : 'https://birds.up.railway.app';
 
 // abortAfter() stöds inte på äldre iOS Safari – använd denna hjälpfunktion istället
 function abortAfter(ms) {

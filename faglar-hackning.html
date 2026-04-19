@@ -324,14 +324,14 @@
 </div>
 
 <div><a href="#" class="btn-top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ Gå till toppen</a></div>
-<footer>Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
+<footer>Utvecklad av <a href="https://birds.up.railway.app/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 /* ══════════════════════════════════════════════════════
    Config
 ══════════════════════════════════════════════════════ */
-const PROXY         = location.hostname === 'localhost' ? 'http://localhost:5000' : '';
+const PROXY         = location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://birds.up.railway.app';
 const THIS_YEAR     = new Date().getFullYear();
 function abortAfter(ms) { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
 const DEFAULT_COUNTY = '24';   // Västerbottens län

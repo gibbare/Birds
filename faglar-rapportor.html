@@ -327,12 +327,14 @@
     ↑ Gå till toppen
   </button>
 </div>
-<footer>Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026</footer>
+<footer>Utvecklad av <a href="https://birds.up.railway.app/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026</footer>
 
 <style>
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 <script>
+const PROXY = location.hostname === 'localhost' ? 'http://localhost:5050' : 'https://birds.up.railway.app';
+
 /* ── Utility ── */
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -350,7 +352,7 @@ async function onFilterChange() {
   localStorage.setItem('bird_county', county);
   localStorage.setItem('bird_year',   year);
   try {
-    const r = await fetch(`/api/reporter_list?county_id=${county}&year=${year}`);
+    const r = await fetch(`${PROXY}/api/reporter_list?county_id=${county}&year=${year}`);
     const names = await r.json();
     const dl = document.getElementById('repSuggestions');
     dl.innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
@@ -376,7 +378,7 @@ async function loadReporter() {
   btn.disabled = true;
 
   try {
-    const r = await fetch(`/api/reporter_stats?county_id=${county}&year=${year}&name=${encodeURIComponent(name)}`);
+    const r = await fetch(`${PROXY}/api/reporter_stats?county_id=${county}&year=${year}&name=${encodeURIComponent(name)}`);
     const d = await r.json();
 
     if (!r.ok) {

@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fågelobservationer Sverige</title>
-  <link rel="apple-touch-icon" href="/storspov2_ico.png" />
-  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="storspov2_ico.png" />
+  <link rel="manifest" href="manifest.json" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Fåglar" />
@@ -811,7 +811,7 @@
 
 <div><a href="#" class="btn-top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ Gå till toppen</a></div>
 <footer>
-  Utvecklad av <a href="/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span>
+  Utvecklad av <a href="https://birds.up.railway.app/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span>
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -1210,7 +1210,7 @@ document.addEventListener('visibilitychange', () => {
 
 async function loadUmamiStats() {
   try {
-    const r = await fetch('/api/umami_stats');
+    const r = await fetch(`${PROXY}/api/umami_stats`);
     if (!r.ok) return;
     const d = await r.json();
     const el = document.getElementById('umamiStats');
