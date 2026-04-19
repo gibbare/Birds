@@ -2,13 +2,14 @@
   "name": "Fågelobservationer Sverige",
   "short_name": "Fåglar",
   "description": "Fågelobservationer och statistik från Artportalen",
-  "start_url": "/faglar-vasterbotten.html",
+  "start_url": "faglar-vasterbotten.html",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#1a202c",
   "theme_color": "#2d3748",
   "icons": [
     {
-      "src": "/storspov2_ico.png",
+      "src": "storspov2_ico.png",
       "sizes": "180x180",
       "type": "image/png"
     }
