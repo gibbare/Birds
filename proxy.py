@@ -775,13 +775,14 @@ def get_breeding():
     # ── Spara till cache ────────────────────────────────────────────────────
     cache_data = {"cached_date": today, "payload": payload}
     if not _r2_put(cache_key_r2, cache_data):
-        # Fallback: lokalt filsystem
-        try:
-            local_path = _os.path.join(_BASE_DIR, cache_key_r2)
-            with open(local_path, 'w', encoding='utf-8') as _cf:
-                _json.dump(cache_data, _cf, ensure_ascii=False)
-        except Exception as _ce:
-            _log_error(f"breeding cache write local: {_ce}")
+        # Fallback: lokalt filsystem ENDAST om R2 ej är konfigurerat (lokal dev)
+        if not _r2():
+            try:
+                local_path = _os.path.join(_BASE_DIR, cache_key_r2)
+                with open(local_path, 'w', encoding='utf-8') as _cf:
+                    _json.dump(cache_data, _cf, ensure_ascii=False)
+            except Exception as _ce:
+                _log_error(f"breeding cache write local: {_ce}")
 
     return jsonify(payload)
 
@@ -1666,15 +1667,16 @@ def _save_cache(cache_key=None):
         if _r2_put(r2_key, {ck: data}):
             print(f'  Stats: sparad till R2: {r2_key}')
             continue
-        # ── Lokalt filsystem (fallback för lokal utveckling) ──
-        try:
-            parts = ck.split('_', 1)
-            filepath = _cache_file_for(parts[0], parts[1]) if len(parts) == 2 else _CACHE_FILE
-            with open(filepath, 'w', encoding='utf-8') as f:
-                _json.dump({ck: data}, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f'  Stats: kunde inte spara {ck} – {e}')
-            _log_error(f'Stats: kunde inte spara {ck} – {e}')
+        # ── Lokalt filsystem (fallback ENDAST för lokal utveckling utan R2) ──
+        if not _r2():
+            try:
+                parts = ck.split('_', 1)
+                filepath = _cache_file_for(parts[0], parts[1]) if len(parts) == 2 else _CACHE_FILE
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    _json.dump({ck: data}, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f'  Stats: kunde inte spara {ck} – {e}')
+                _log_error(f'Stats: kunde inte spara {ck} – {e}')
 
 
 def _trigger_on_demand(year, county_id):
@@ -1762,15 +1764,22 @@ def _stats_builder():
             _stats_cache = loaded
         print(f'  Stats: cache laddad ({len(loaded)} poster)')
 
-    # ── Ta bort lokala cachefiler om R2 är konfigurerat (frigör Railway-disk) ─
-    if _r2() and loaded:
+    # ── Ta bort ALLA lokala cachefiler om R2 är konfigurerat (frigör Railway-disk) ─
+    if _r2():
         import glob as _glob2
-        for fp in _glob2.glob(_os.path.join(_BASE_DIR, 'stats_cache_*.json')):
-            try:
-                _os.remove(fp)
-                print(f'  Stats: tog bort lokal fil {_os.path.basename(fp)}')
-            except Exception:
-                pass
+        patterns = [
+            'stats_cache_*.json',   # per-år länscache
+            'stats_cache.json',     # gammal monolitfil
+            'breeding_cache_*.json', # häckningscache
+            'observers_se_*.json',  # Sverige-observatörscache
+        ]
+        for pat in patterns:
+            for fp in _glob2.glob(_os.path.join(_BASE_DIR, pat)):
+                try:
+                    _os.remove(fp)
+                    print(f'  Cleanup: tog bort lokal fil {_os.path.basename(fp)}')
+                except Exception:
+                    pass
 
     while True:
         # Vänta på autentisering (max 5 min)
