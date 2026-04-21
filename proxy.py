@@ -2097,13 +2097,13 @@ def _se_observers_builder():
             nxt = f'{year}-01-01'
 
         if nxt > yesterday:
-            # Redan à jour – ladda kompakt format direkt från R2 för API-cachen.
-            # Lagra INTE det fullständiga arbetsformatet (sp_ids-set + sp_obs/pl_obs-dicts)
-            # – det upptar 500–800 MB RAM under hela sömnperioden.
-            compact = _r2_get(_se_obs_r2_key(year))
-            if compact and compact.get('reporters'):
-                with _se_obs_lock:
-                    _se_obs_cache[year] = compact
+            # Redan à jour – kompaktera och spara R2-filen om den är i gammalt format
+            # (engångsmigration: species/places → art/sp_ids/sp/pl).
+            # Bygg compact_data direkt från arbetsformatet – hämta INTE en ny kopia
+            # från R2 (den kan vara gammal och stor och skulle bara öka RAM-användningen).
+            ok, compact_data = _save_se_obs_r2(year, data)
+            with _se_obs_lock:
+                _se_obs_cache[year] = compact_data   # ~30 MB, inte ~500 MB
             data = None      # ← frigör ~500 MB arbetsdata
             reporters = None
             print(f'  SE obs {year}: à jour (last={last}), sover 6h')
