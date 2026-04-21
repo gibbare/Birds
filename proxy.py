@@ -105,7 +105,7 @@ def _r2_list(prefix='stats_cache_'):
         return []
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "3.5"          # Uppdatera vid varje deploy
+APP_VERSION   = "4.0"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
 
 # ── Fellogg (cirkulär buffer, max 500 poster) ────────────────────────────────
@@ -929,7 +929,7 @@ def observer_stats():
             })
 
         observers.sort(key=lambda x: (-x['art'], -x['obs']))
-        return jsonify(observers[:100])
+        return jsonify(observers)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

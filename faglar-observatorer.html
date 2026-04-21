@@ -238,7 +238,7 @@
 
 </div>
 
-<footer></footer>
+<footer>Utvecklad av <a href="https://birds.up.railway.app/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
 
 <script>
 const PROXY = location.hostname === 'localhost'
@@ -247,7 +247,6 @@ const PROXY = location.hostname === 'localhost'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 const PAGE_SIZE = 10;
-const MAX_OBSERVERS = 100;
 let currentPage = 1;
 let filtered = [];
 let openRow = null;
@@ -446,6 +445,15 @@ function esc(s) {
 }
 
 fetchData();
+
+/* ── Versionsinfo i footer ── */
+fetch(`${PROXY}/api/version`)
+  .then(r => r.ok ? r.json() : null)
+  .then(v => {
+    if (!v) return;
+    const started = v.started ? v.started.slice(0,10) : '';
+    document.getElementById('footerVersion').textContent = `v${v.version} · Startad ${started}`;
+  }).catch(() => {});
 </script>
 </body>
 </html>
