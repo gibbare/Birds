@@ -191,7 +191,6 @@
   <a href="faglar-vasterbotten.html" class="page-tab">📋 Dagslista</a>
   <a href="faglar-statistik.html"    class="page-tab">📊 Statistik</a>
   <a href="faglar-hackning.html"     class="page-tab">🥚 Häckning</a>
-  <a href="faglar-rapportor.html"    class="page-tab">👤 Rapportör</a>
   <a href="faglar-observatorer.html" class="page-tab active">🏆 Observatörer</a>
 </nav>
 
@@ -244,6 +243,7 @@
 <script>
 const MONTHS = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 const PAGE_SIZE = 10;
+const MAX_OBSERVERS = 100;
 let currentPage = 1;
 let filtered = [];
 let openRow = null;
@@ -399,8 +399,9 @@ function applyFilters() {
     return `${r.name} ${lokStr}`.toLowerCase().includes(q);
   });
 
-  // Fast ordning: flest unika arter, vid lika flest obs
+  // Fast ordning: flest unika arter, vid lika flest obs – max 100
   filtered.sort((a, b) => b.art - a.art || b.obs - a.obs);
+  filtered = filtered.slice(0, MAX_OBSERVERS);
 
   currentPage = 1;
   openRow = null;
