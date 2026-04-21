@@ -200,7 +200,7 @@
     <label>Sök</label>
     <input type="search" id="searchInput" placeholder="Namn eller lokal…" oninput="applyFilters()" />
     <label>År</label>
-    <select id="selYear" onchange="applyFilters()">
+    <select id="selYear" onchange="fetchData()">
       <option value="2026" selected>2026</option>
       <option value="2025">2025</option>
       <option value="2024">2024</option>
@@ -238,9 +238,13 @@
 
 </div>
 
-<footer>Testvy – mockdata Västerbotten 2026</footer>
+<footer></footer>
 
 <script>
+const PROXY = location.hostname === 'localhost'
+  ? 'http://localhost:5000'
+  : 'https://birds.up.railway.app';
+
 const MONTHS = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 const PAGE_SIZE = 10;
 const MAX_OBSERVERS = 100;
@@ -248,6 +252,7 @@ let currentPage = 1;
 let filtered = [];
 let openRow = null;
 let onlyFavs = false;
+let ALL_DATA = [];
 
 /* ── Favoriter (localStorage) ── */
 let favorites = new Set(JSON.parse(localStorage.getItem('obs_favorites') || '[]'));
@@ -265,143 +270,48 @@ function toggleFavFilter() {
   applyFilters();
 }
 
-/* ── Mock-data ── */
-const MOCK_DATA = [
-  { name:'Christer Olsson',   obs:1544, art:72, dagar:89, senast:'2026-04-20',
-    lokaler:[{name:'Västerbottens kust',art:41},{name:'Nydala',art:28},{name:'Umeå centrum',art:19}],
-    species:[{sv:'talgoxe',obs:187},{sv:'blåmes',obs:143},{sv:'nötväcka',obs:112}],
-    monthly:[312,287,498,447,0,0,0,0,0,0,0,0] },
-  { name:'Thomas Sundström',  obs:1271, art:71, dagar:76, senast:'2026-04-19',
-    lokaler:[{name:'Skelleftehamn',art:38},{name:'Ostvik',art:29},{name:'Lövånger',art:21}],
-    species:[{sv:'ejder',obs:201},{sv:'vigg',obs:154},{sv:'knipa',obs:98}],
-    monthly:[280,245,389,357,0,0,0,0,0,0,0,0] },
-  { name:'Kerstin Årdahl',    obs:757, art:65, dagar:62, senast:'2026-04-21',
-    lokaler:[{name:'Nydala',art:35},{name:'Gammlia',art:24},{name:'Böleäng',art:17}],
-    species:[{sv:'domherre',obs:98},{sv:'grönsiska',obs:87},{sv:'talgoxe',obs:76}],
-    monthly:[154,138,241,224,0,0,0,0,0,0,0,0] },
-  { name:'Ralf Norberg',      obs:460, art:63, dagar:54, senast:'2026-04-18',
-    lokaler:[{name:'Vindelälven',art:33},{name:'Hällnäs',art:22},{name:'Vindeln',art:15}],
-    species:[{sv:'strömstare',obs:67},{sv:'forsärla',obs:54},{sv:'kungsfiskare',obs:41}],
-    monthly:[89,78,152,141,0,0,0,0,0,0,0,0] },
-  { name:'Stefan Delin',      obs:425, art:63, dagar:48, senast:'2026-04-17',
-    lokaler:[{name:'Täfteå',art:31},{name:'Ängesån',art:21},{name:'Umeå hamn',art:14}],
-    species:[{sv:'storskrake',obs:78},{sv:'knipa',obs:63},{sv:'gräsand',obs:52}],
-    monthly:[82,74,141,128,0,0,0,0,0,0,0,0] },
-  { name:'Krister Jakobsson', obs:398, art:61, dagar:45, senast:'2026-04-15',
-    lokaler:[{name:'Lycksele',art:29},{name:'Örträsk',art:19},{name:'Åmsele',art:13}],
-    species:[{sv:'lavskrika',obs:89},{sv:'talltita',obs:71},{sv:'björktrast',obs:55}],
-    monthly:[76,68,132,122,0,0,0,0,0,0,0,0] },
-  { name:'Anna Lindgren',     obs:371, art:58, dagar:43, senast:'2026-04-20',
-    lokaler:[{name:'Nydala',art:28},{name:'Röbäck',art:19},{name:'Holmön',art:14}],
-    species:[{sv:'talgoxe',obs:65},{sv:'blåmes',obs:54},{sv:'sånglärka',obs:43}],
-    monthly:[71,63,122,115,0,0,0,0,0,0,0,0] },
-  { name:'Per-Erik Nilsson',  obs:344, art:56, dagar:41, senast:'2026-04-16',
-    lokaler:[{name:'Bygdeå',art:27},{name:'Robertsfors',art:18},{name:'Kusön',art:12}],
-    species:[{sv:'orre',obs:54},{sv:'tjäder',obs:43},{sv:'järpe',obs:32}],
-    monthly:[65,58,113,108,0,0,0,0,0,0,0,0] },
-  { name:'Maria Bergström',   obs:312, art:54, dagar:39, senast:'2026-04-14',
-    lokaler:[{name:'Byske',art:26},{name:'Skellefteå å',art:17},{name:'Bureälven',art:11}],
-    species:[{sv:'gärdsmyg',obs:47},{sv:'rödhake',obs:39},{sv:'koltrast',obs:31}],
-    monthly:[59,52,103,98,0,0,0,0,0,0,0,0] },
-  { name:'Jonas Eriksson',    obs:287, art:52, dagar:37, senast:'2026-04-19',
-    lokaler:[{name:'Holmön',art:25},{name:'Gammlia',art:16},{name:'Yttersjön',art:11}],
-    species:[{sv:'ejder',obs:89},{sv:'alfågel',obs:67},{sv:'sjöorre',obs:45}],
-    monthly:[54,47,97,89,0,0,0,0,0,0,0,0] },
-  { name:'Lars-Åke Persson',  obs:265, art:51, dagar:35, senast:'2026-04-13',
-    lokaler:[{name:'Levar',art:23},{name:'Nordmaling',art:15},{name:'Lögdeälven',art:10}],
-    species:[{sv:'havsörn',obs:34},{sv:'pilgrimsfalk',obs:28},{sv:'duvhök',obs:22}],
-    monthly:[49,43,89,84,0,0,0,0,0,0,0,0] },
-  { name:'Eva Holmgren',      obs:243, art:49, dagar:34, senast:'2026-04-12',
-    lokaler:[{name:'Bönan',art:22},{name:'Nydala',art:14},{name:'Hörnefors',art:10}],
-    species:[{sv:'koltrast',obs:43},{sv:'björktrast',obs:36},{sv:'rödvingetrast',obs:29}],
-    monthly:[45,39,82,77,0,0,0,0,0,0,0,0] },
-  { name:'Björn Andersson',   obs:228, art:47, dagar:32, senast:'2026-04-18',
-    lokaler:[{name:'Kalvholmen',art:21},{name:'Näsudden',art:14},{name:'Kåge',art:9}],
-    species:[{sv:'gråtrut',obs:67},{sv:'silltrut',obs:54},{sv:'fiskmås',obs:43}],
-    monthly:[42,37,77,72,0,0,0,0,0,0,0,0] },
-  { name:'Ingrid Söderström', obs:214, art:46, dagar:31, senast:'2026-04-11',
-    lokaler:[{name:'Vännäsby',art:20},{name:'Vindelälven',art:13},{name:'Sorsele',art:9}],
-    species:[{sv:'ängspiplärka',obs:38},{sv:'sädesärla',obs:31},{sv:'gulärla',obs:25}],
-    monthly:[39,34,72,69,0,0,0,0,0,0,0,0] },
-  { name:'Mikael Lundqvist',  obs:198, art:45, dagar:29, senast:'2026-04-17',
-    lokaler:[{name:'Ängesån',art:19},{name:'Täfteå',art:12},{name:'Nydala',art:8}],
-    species:[{sv:'knölsvan',obs:29},{sv:'sångsvan',obs:24},{sv:'bläsgås',obs:19}],
-    monthly:[36,31,67,64,0,0,0,0,0,0,0,0] },
-  { name:'Gunnar Pettersson', obs:187, art:44, dagar:28, senast:'2026-04-09',
-    lokaler:[{name:'Lycksele djurpark',art:18},{name:'Örträsk',art:12},{name:'Bjurholm',art:8}],
-    species:[{sv:'lavskrika',obs:54},{sv:'nötskrika',obs:43},{sv:'korp',obs:34}],
-    monthly:[33,28,63,63,0,0,0,0,0,0,0,0] },
-  { name:'Susanne Lindström', obs:176, art:43, dagar:27, senast:'2026-04-16',
-    lokaler:[{name:'Umeälven',art:18},{name:'Gammlia',art:11},{name:'Röbäck',art:7}],
-    species:[{sv:'gräsand',obs:45},{sv:'kricka',obs:36},{sv:'bläsand',obs:28}],
-    monthly:[31,26,59,60,0,0,0,0,0,0,0,0] },
-  { name:'Håkan Westman',     obs:164, art:41, dagar:25, senast:'2026-04-08',
-    lokaler:[{name:'Dorotea',art:17},{name:'Borgafjäll',art:11},{name:'Vojmsjön',art:7}],
-    species:[{sv:'fjällripa',obs:67},{sv:'dalripa',obs:54},{sv:'fjällpipare',obs:43}],
-    monthly:[29,24,56,55,0,0,0,0,0,0,0,0] },
-  { name:'Lena Johansson',    obs:152, art:40, dagar:24, senast:'2026-04-15',
-    lokaler:[{name:'Skelleftehamn',art:17},{name:'Ostvik',art:11},{name:'Bureå',art:7}],
-    species:[{sv:'ejder',obs:56},{sv:'svärta',obs:45},{sv:'alfågel',obs:34}],
-    monthly:[27,22,52,51,0,0,0,0,0,0,0,0] },
-  { name:'Åke Franzén',       obs:143, art:39, dagar:23, senast:'2026-04-14',
-    lokaler:[{name:'Holmön',art:17},{name:'Nydala',art:10},{name:'Umeå hamn',art:6}],
-    species:[{sv:'tordmule',obs:34},{sv:'sillgrissla',obs:28},{sv:'tobisgrissla',obs:22}],
-    monthly:[25,20,49,49,0,0,0,0,0,0,0,0] },
-  { name:'Britta Henriksson', obs:134, art:38, dagar:22, senast:'2026-04-07',
-    lokaler:[{name:'Åsele',art:16},{name:'Vilhelmina',art:10},{name:'Tärnasjön',art:6}],
-    species:[{sv:'smålom',obs:23},{sv:'storlom',obs:19},{sv:'skäggdopping',obs:15}],
-    monthly:[23,18,46,47,0,0,0,0,0,0,0,0] },
-  { name:'Ove Magnusson',     obs:128, art:37, dagar:21, senast:'2026-04-13',
-    lokaler:[{name:'Nydala',art:16},{name:'Böleäng',art:9},{name:'Ersboda',art:6}],
-    species:[{sv:'blåmes',obs:34},{sv:'talgoxe',obs:28},{sv:'entita',obs:22}],
-    monthly:[22,17,44,45,0,0,0,0,0,0,0,0] },
-  { name:'Helene Carlsson',   obs:119, art:36, dagar:20, senast:'2026-04-10',
-    lokaler:[{name:'Bygdeå',art:15},{name:'Kusön',art:9},{name:'Klockestrand',art:6}],
-    species:[{sv:'skogssnäppa',obs:28},{sv:'drillsnäppa',obs:23},{sv:'rödbena',obs:18}],
-    monthly:[21,16,41,41,0,0,0,0,0,0,0,0] },
-  { name:'Dan Wikström',      obs:108, art:34, dagar:18, senast:'2026-04-12',
-    lokaler:[{name:'Byske',art:14},{name:'Kåge',art:9},{name:'Bureälven',art:5}],
-    species:[{sv:'storlom',obs:23},{sv:'smålom',obs:19},{sv:'skäggdopping',obs:15}],
-    monthly:[19,14,38,37,0,0,0,0,0,0,0,0] },
-  { name:'Agneta Blomqvist',  obs:97, art:33, dagar:17, senast:'2026-04-06',
-    lokaler:[{name:'Vindelälven',art:13},{name:'Hällnäs',art:8},{name:'Granö',art:5}],
-    species:[{sv:'strömstare',obs:34},{sv:'forsärla',obs:27},{sv:'bergsärla',obs:21}],
-    monthly:[17,12,35,33,0,0,0,0,0,0,0,0] },
-  { name:'Roland Nordgren',   obs:89, art:31, dagar:16, senast:'2026-04-05',
-    lokaler:[{name:'Norsjö',art:12},{name:'Malå',art:8},{name:'Arvidsjaur',art:5}],
-    species:[{sv:'korp',obs:29},{sv:'nötskrika',obs:23},{sv:'skata',obs:18}],
-    monthly:[15,11,32,31,0,0,0,0,0,0,0,0] },
-  { name:'Anita Söderberg',   obs:82, art:30, dagar:15, senast:'2026-04-11',
-    lokaler:[{name:'Gammlia',art:12},{name:'Nydala',art:7},{name:'Ålidhemsskogen',art:5}],
-    species:[{sv:'talgoxe',obs:23},{sv:'nötväcka',obs:18},{sv:'trädkrypare',obs:14}],
-    monthly:[13,9,30,30,0,0,0,0,0,0,0,0] },
-  { name:'Stig Lindahl',      obs:74, art:29, dagar:14, senast:'2026-04-04',
-    lokaler:[{name:'Vilhelmina',art:11},{name:'Tärnasjön',art:7},{name:'Saxnäs',art:5}],
-    species:[{sv:'fjällripa',obs:34},{sv:'orre',obs:27},{sv:'tjäder',obs:21}],
-    monthly:[12,8,28,26,0,0,0,0,0,0,0,0] },
-  { name:'Karin Forsberg',    obs:68, art:28, dagar:13, senast:'2026-04-09',
-    lokaler:[{name:'Holmön',art:11},{name:'Umeå hamn',art:7},{name:'Nydala',art:4}],
-    species:[{sv:'ejder',obs:19},{sv:'alfågel',obs:15},{sv:'svärta',obs:12}],
-    monthly:[11,7,26,24,0,0,0,0,0,0,0,0] },
-  { name:'Nils-Göran Berg',   obs:61, art:27, dagar:12, senast:'2026-04-03',
-    lokaler:[{name:'Sorsele',art:10},{name:'Ammarnäs',art:7},{name:'Stor-Tjulträsk',art:4}],
-    species:[{sv:'lavskrika',obs:23},{sv:'fjällpipare',obs:18},{sv:'fjällripa',obs:14}],
-    monthly:[10,6,24,21,0,0,0,0,0,0,0,0] },
-];
+/* ── Datahämtning ── */
+async function fetchData() {
+  const year     = document.getElementById('selYear').value;
+  const statusEl = document.getElementById('emptyState');
+  statusEl.textContent = 'Hämtar data…';
+  statusEl.style.display = '';
+  document.getElementById('tableBody').innerHTML = '';
+  document.getElementById('pagination').innerHTML = '';
+
+  try {
+    const res = await fetch(`${PROXY}/api/observer_stats?year=${year}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (err.error === 'cache_missing') {
+        statusEl.textContent = `Ingen statistik tillgänglig för ${year} – prova ett annat år.`;
+      } else {
+        statusEl.textContent = `Fel vid hämtning: ${err.error || res.status}`;
+      }
+      ALL_DATA = [];
+      renderAll();
+      return;
+    }
+    ALL_DATA = await res.json();
+  } catch (e) {
+    statusEl.textContent = `Kunde inte nå servern: ${e.message}`;
+    ALL_DATA = [];
+    renderAll();
+    return;
+  }
+
+  applyFilters();
+}
 
 function applyFilters() {
   const q = document.getElementById('searchInput').value.toLowerCase();
 
-  filtered = MOCK_DATA.filter(r => {
+  filtered = ALL_DATA.filter(r => {
     if (onlyFavs && !favorites.has(r.name)) return false;
     if (!q) return true;
     const lokStr = r.lokaler.map(l => l.name).join(' ').toLowerCase();
     return `${r.name} ${lokStr}`.toLowerCase().includes(q);
   });
-
-  // Fast ordning: flest unika arter, vid lika flest obs – max 100
-  filtered.sort((a, b) => b.art - a.art || b.obs - a.obs);
-  filtered = filtered.slice(0, MAX_OBSERVERS);
 
   currentPage = 1;
   openRow = null;
@@ -416,7 +326,7 @@ function renderAll() {
   document.getElementById('sumObs').textContent   = totObs.toLocaleString('sv');
   document.getElementById('sumArt').textContent   = maxArt;
   document.getElementById('resultCount').textContent =
-    filtered.length < MOCK_DATA.length ? `Visar ${filtered.length} av ${MOCK_DATA.length}` : '';
+    filtered.length < ALL_DATA.length ? `Visar ${filtered.length} av ${ALL_DATA.length}` : '';
 
   // Rader
   const start  = (currentPage - 1) * PAGE_SIZE;
@@ -454,15 +364,15 @@ function renderAll() {
 }
 
 function buildDetail(r) {
-  const maxLok = r.lokaler[0]?.art || 1;
+  const maxLok = r.lokaler[0]?.obs || 1;
   const maxSp  = r.species[0]?.obs || 1;
   const maxMon = Math.max(...r.monthly, 1);
 
   const lokalHtml = r.lokaler.slice(0,3).map(l => `
     <div class="lokal-item">
       <span style="flex:0 0 140px;font-weight:600">${esc(l.name)}</span>
-      <div class="lokal-bar-wrap"><div class="lokal-bar" style="width:${Math.round(l.art/maxLok*100)}%"></div></div>
-      <span class="lokal-count">${l.art} arter</span>
+      <div class="lokal-bar-wrap"><div class="lokal-bar" style="width:${Math.round(l.obs/maxLok*100)}%"></div></div>
+      <span class="lokal-count">${l.obs} obs</span>
     </div>`).join('');
 
   const spHtml = r.species.slice(0,3).map(s => `
@@ -535,7 +445,7 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-applyFilters();
+fetchData();
 </script>
 </body>
 </html>

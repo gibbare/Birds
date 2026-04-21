@@ -895,6 +895,45 @@ def reporter_stats():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/observer_stats")
+def observer_stats():
+    """Returnerar topp 100 observatörer för ett county+år, sorterade efter unika arter."""
+    county_id = (request.args.get("county_id") or DEFAULT_COUNTY_ID).strip()
+    year      = (request.args.get("year") or str(_date_type.today().year)).strip()
+    cache_key = f"{county_id}_{year}"
+    with _stats_lock:
+        payload = _stats_cache.get(cache_key)
+    if not payload:
+        return jsonify({"error": "cache_missing", "cache_key": cache_key}), 404
+    try:
+        details   = payload.get('reporter_details', {})
+        top_rap   = payload.get('top_reporters', [])
+        obs_lookup = {r['name']: r['obs'] for r in top_rap}
+
+        observers = []
+        for name, d in details.items():
+            art_count = len(d.get('species', []))
+            obs_count = obs_lookup.get(name) or sum(d.get('monthly', []))
+            places    = d.get('places', [])
+            top_lokal = places[0]['name'] if places else ''
+            observers.append({
+                'name':    name,
+                'obs':     obs_count,
+                'art':     art_count,
+                'dagar':   d.get('dagar', 0),
+                'lastObs': d.get('lastObs', ''),
+                'topLokal': top_lokal,
+                'lokaler': [{'name': p['name'], 'obs': p['obs']} for p in places[:3]],
+                'species': [{'sv': s['sv'], 'obs': s['obs']} for s in d.get('species', [])[:3]],
+                'monthly': d.get('monthly', [0]*12),
+            })
+
+        observers.sort(key=lambda x: (-x['art'], -x['obs']))
+        return jsonify(observers[:100])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/reporter_debug")
 def reporter_debug():
     """Debugar statistikcachens innehåll för ett visst county+år."""
