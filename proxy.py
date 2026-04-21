@@ -920,9 +920,10 @@ def observer_stats():
     with _se_obs_lock:
         se_data = _se_obs_cache.get(yr)
 
-    # Inte i minnet? Ladda från R2 och konvertera till arbetsformat
+    # Inte i minnet? Ladda kompakt format direkt från R2 (ej _load_se_obs_r2
+    # som konverterar till fullt arbetsformat och upptar 500+ MB RAM).
     if not se_data:
-        se_data = _load_se_obs_r2(yr)
+        se_data = _r2_get(_se_obs_r2_key(yr))
         if se_data and se_data.get('reporters'):
             with _se_obs_lock:
                 _se_obs_cache[yr] = se_data
@@ -931,17 +932,27 @@ def observer_stats():
         try:
             result = []
             for name, d in se_data['reporters'].items():
-                # In-memory format: sp_obs/pl_obs dicts + art counter
-                sp_obs  = d.get('sp_obs', {})
-                pl_obs  = d.get('pl_obs', {})
-                art     = d.get('art', len(sp_obs))
-                top_loc = max(pl_obs, key=pl_obs.get) if pl_obs else ''
-                top_3_lok = sorted(
-                    [{'name': k, 'obs': v} for k, v in pl_obs.items()],
-                    key=lambda x: -x['obs'])[:3]
-                top_3_sp = sorted(
-                    [{'sv': v['sv'], 'obs': v['obs']} for v in sp_obs.values() if v.get('sv')],
-                    key=lambda x: -x['obs'])[:3]
+                # Stöd både kompakt format (sp/pl listor) och
+                # gammalt in-memory-format (sp_obs/pl_obs dicts) för bakåtkompatibilitet
+                if 'sp_obs' in d:
+                    sp_obs  = d['sp_obs']
+                    pl_obs  = d['pl_obs']
+                    art     = d.get('art', len(sp_obs))
+                    top_loc = max(pl_obs, key=pl_obs.get) if pl_obs else ''
+                    top_3_lok = sorted(
+                        [{'name': k, 'obs': v} for k, v in pl_obs.items()],
+                        key=lambda x: -x['obs'])[:3]
+                    top_3_sp = sorted(
+                        [{'sv': v['sv'], 'obs': v['obs']} for v in sp_obs.values() if v.get('sv')],
+                        key=lambda x: -x['obs'])[:3]
+                else:
+                    # Kompakt format (sp/pl listor redan sorterade)
+                    sp_list   = d.get('sp', [])
+                    pl_list   = d.get('pl', [])
+                    art       = d.get('art', 0)
+                    top_loc   = pl_list[0]['name'] if pl_list else ''
+                    top_3_lok = [{'name': x['name'], 'obs': x['obs']} for x in pl_list[:3]]
+                    top_3_sp  = [{'sv': x['sv'],  'obs': x['obs']} for x in sp_list[:3]]
                 result.append({
                     'name':     name,
                     'obs':      d.get('obs', 0),
@@ -1897,22 +1908,19 @@ def _load_se_obs_r2(year):
         'reporters': reporters,
     }
 
-def _save_se_obs_r2(year, data):
-    """Spara SE-observatörscachen till R2 i kompakt format.
-    In-memory-set (sp_ids) och fullständiga dicts (sp_obs/pl_obs) komprimeras
-    till art-räknare + top-30-listor för att hålla filstorleken nere."""
+def _build_compact_se(year, data):
+    """Bygg kompakt reporters-dict från in-memory arbetsformat.
+    Returnerar save_data-dict redo för R2 och in-memory cache."""
     reporters = data.get('reporters', {})
     compact = {}
     for name, rep in reporters.items():
         sp_ids = rep.get('sp_ids', set())
         sp_obs = rep.get('sp_obs', {})
         pl_obs = rep.get('pl_obs', {})
-        # Top-30 arter efter obs-antal
         top_sp = sorted(
             [{'id': k, 'sv': v['sv'], 'obs': v['obs']} for k, v in sp_obs.items() if v.get('sv')],
             key=lambda x: -x['obs']
         )[:30]
-        # Top-30 lokaler efter obs-antal
         top_pl = sorted(
             [{'name': k, 'obs': v} for k, v in pl_obs.items()],
             key=lambda x: -x['obs']
@@ -1921,22 +1929,28 @@ def _save_se_obs_r2(year, data):
             'obs':     rep.get('obs', 0),
             'monthly': rep.get('monthly', [0]*12),
             'art':     rep.get('art', len(sp_ids)),
-            'sp_ids':  sorted(sp_ids),          # lista för R2-lagring
-            'sp':      top_sp,                  # top-30 arter (id+sv+obs)
-            'pl':      top_pl,                  # top-30 lokaler
+            'sp_ids':  sorted(sp_ids),
+            'sp':      top_sp,
+            'pl':      top_pl,
             'dagar':   rep.get('dagar', 0),
             'lastObs': rep.get('lastObs', ''),
         }
-    save_data = {
+    return {
         'year':      data.get('year', year),
         'last_date': data.get('last_date'),
         'built_at':  _dt.now().isoformat()[:19],
         'reporters': compact,
     }
+
+def _save_se_obs_r2(year, data):
+    """Komprimera och spara SE-observatörscachen till R2.
+    Returnerar (ok: bool, compact_data: dict) – compact_data är lämplig för in-memory cache."""
+    save_data = _build_compact_se(year, data)
     ok = _r2_put(_se_obs_r2_key(year), save_data)
     if ok:
-        print(f'  SE obs: sparad {_se_obs_r2_key(year)} ({len(compact)} observatörer, last={data["last_date"]})')
-    return ok
+        print(f'  SE obs: sparad {_se_obs_r2_key(year)} '
+              f'({len(save_data["reporters"])} observatörer, last={data["last_date"]})')
+    return ok, save_data
 
 def _fetch_county_obs_day(county_id, date_str):
     """Hämtar alla fågelobservationer för ett givet county och datum.
@@ -2083,8 +2097,15 @@ def _se_observers_builder():
             nxt = f'{year}-01-01'
 
         if nxt > yesterday:
-            with _se_obs_lock:
-                _se_obs_cache[year] = data
+            # Redan à jour – ladda kompakt format direkt från R2 för API-cachen.
+            # Lagra INTE det fullständiga arbetsformatet (sp_ids-set + sp_obs/pl_obs-dicts)
+            # – det upptar 500–800 MB RAM under hela sömnperioden.
+            compact = _r2_get(_se_obs_r2_key(year))
+            if compact and compact.get('reporters'):
+                with _se_obs_lock:
+                    _se_obs_cache[year] = compact
+            data = None      # ← frigör ~500 MB arbetsdata
+            reporters = None
             print(f'  SE obs {year}: à jour (last={last}), sover 6h')
             _time.sleep(6 * 3600)
             continue
@@ -2103,10 +2124,11 @@ def _se_observers_builder():
 
             data['last_date'] = current
             data['year']      = year
-            _save_se_obs_r2(year, data)
+            ok, compact = _save_se_obs_r2(year, data)  # returnerar (bool, compact_dict)
 
+            # Cachen får kompakt format – sp/pl listor, inte de fulla arbets-dicts
             with _se_obs_lock:
-                _se_obs_cache[year] = data
+                _se_obs_cache[year] = compact
 
             print(f'  SE obs {current}: {total_recs} records, {len(reporters)} observatörer totalt')
             current = (_dt.strptime(current, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
@@ -2114,6 +2136,9 @@ def _se_observers_builder():
             # Paus mellan dagar under uppbyggnad – ger plats för användaranrop
             _time.sleep(30)
 
+        # Ikapp – frigör arbetsdata och sov
+        data = None
+        reporters = None
         print(f'  SE obs {year}: ikapp! sover 6h')
         _time.sleep(6 * 3600)
 
