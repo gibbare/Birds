@@ -1681,7 +1681,8 @@ def _save_cache(cache_key=None):
 
 
 def _trigger_on_demand(year, county_id):
-    """Startar bakgrundsbygge för en specifik county+year om det inte redan byggs."""
+    """Startar bakgrundsbygge för en specifik county+year om det inte redan byggs.
+    Försöker alltid R2 först (snabbt) innan SOS API anropas (långsamt)."""
     cache_key = f"{county_id}_{year}"
     with _stats_lock:
         if cache_key in _stats_cache:
@@ -1694,7 +1695,18 @@ def _trigger_on_demand(year, county_id):
     def _build():
         today = _date_type.today()
         max_month = today.month if year == today.year else 12
-        result = _fetch_year_stats(year, county_id, max_month=max_month)
+
+        # ── Försök läsa från R2 först (undviker SOS API-anrop) ──────────────
+        result = None
+        r2_data = _r2_get(f'stats_cache_{cache_key}.json')
+        if r2_data and r2_data.get(cache_key):
+            result = r2_data[cache_key]
+            print(f'  Stats: {cache_key} laddad från R2 (ingen SOS-hämtning)')
+
+        # ── Fallback: hämta från SOS API ─────────────────────────────────────
+        if not result:
+            result = _fetch_year_stats(year, county_id, max_month=max_month)
+
         with _stats_lock:
             _building.discard(cache_key)
             if result:
@@ -1719,13 +1731,18 @@ def _stats_builder():
     global _stats_cache
 
     # ── Ladda cache från R2 (primärt) ───────────────────────────────────────
+    # Ladda bara innevarande år för defaultlänet vid uppstart.
+    # Övriga county×år laddas lat från R2 via _trigger_on_demand när de efterfrågas.
+    # Detta förhindrar att hundratals MB historisk statistik hamnar i RAM direkt.
     import glob as _glob
     loaded = {}
+    current_year_str = str(_date_type.today().year)
+    startup_key = f'stats_cache_{DEFAULT_COUNTY_ID}_{current_year_str}.json'
     r2_keys = _r2_list('stats_cache_')
     if r2_keys:
-        print(f'  Stats: laddar {len(r2_keys)} filer från R2…')
-        for key in r2_keys:
-            data = _r2_get(key)
+        print(f'  Stats: {len(r2_keys)} filer i R2 – laddar bara {startup_key}…')
+        if startup_key in r2_keys:
+            data = _r2_get(startup_key)
             if data:
                 loaded.update(data)
         print(f'  Stats: {len(loaded)} poster laddade från R2')
