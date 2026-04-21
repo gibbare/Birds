@@ -314,12 +314,14 @@ async function fetchData() {
 function applyFilters() {
   const q = document.getElementById('searchInput').value.toLowerCase();
 
-  filtered = ALL_DATA.filter(r => {
-    if (onlyFavs && !favorites.has(r.name)) return false;
-    if (!q) return true;
-    const lokStr = r.lokaler.map(l => l.name).join(' ').toLowerCase();
-    return `${r.name} ${lokStr}`.toLowerCase().includes(q);
-  });
+  filtered = ALL_DATA
+    .filter(r => {
+      if (onlyFavs && !favorites.has(r.name)) return false;
+      if (!q) return true;
+      const lokStr = r.lokaler.map(l => l.name).join(' ').toLowerCase();
+      return `${r.name} ${lokStr}`.toLowerCase().includes(q);
+    })
+    .sort((a, b) => b.art - a.art || a.name.localeCompare(b.name, 'sv'));
 
   currentPage = 1;
   openRow = null;
