@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Observatörer – Fågelobservationer</title>
+  <link rel="apple-touch-icon" href="storspov2_ico.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f7fafc; color: #2d3748; }
+
+    header {
+      background: linear-gradient(135deg, #1a4a7a, #2b6cb0);
+      color: white; padding: .5rem 1.5rem; text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+    }
+    header h1 { font-size: 1.25rem; font-weight: 700; }
+
+    .page-tabs { display: flex; justify-content: center; background: #163d6a; flex-wrap: wrap; }
+    .page-tab  { padding: .45rem 1.2rem; font-size: .78rem; font-weight: 700;
+                 color: rgba(255,255,255,.65); text-decoration: none;
+                 border-bottom: 3px solid transparent; letter-spacing: .02em; }
+    .page-tab:hover  { color: white; }
+    .page-tab.active { color: white; border-bottom-color: #63b3ed; }
+
+    .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem 3rem; }
+
+    /* ── Filter-panel ── */
+    .filter-panel {
+      background: white; border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      padding: .75rem 1rem; margin-bottom: 1rem;
+      display: flex; gap: .6rem; flex-wrap: wrap; align-items: center;
+    }
+    .filter-panel label { font-size: .78rem; font-weight: 700; color: #718096;
+                          text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+    .filter-panel input[type="search"],
+    .filter-panel select {
+      border: 1.5px solid #cbd5e0; border-radius: 7px;
+      padding: .38rem .7rem; font-size: .85rem; background: white; outline: none;
+      transition: border-color .15s;
+    }
+    .filter-panel input[type="search"] { flex: 1; min-width: 180px; }
+    .filter-panel input[type="search"]:focus,
+    .filter-panel select:focus { border-color: #2b6cb0; }
+
+    /* ── Summary-bar ── */
+    .summary-bar {
+      background: white; border-radius: 10px;
+      padding: .7rem 1.25rem; margin-bottom: 1rem;
+      display: flex; gap: 1.5rem; align-items: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07); flex-wrap: wrap;
+    }
+    .summary-item { text-align: center; }
+    .summary-item .val { font-size: 1.5rem; font-weight: 800; color: #2b6cb0; line-height: 1; }
+    .summary-item .lbl { font-size: .7rem; color: #718096; margin-top: .1rem;
+                         text-transform: uppercase; letter-spacing: .04em; }
+    .summary-divider { width: 1px; height: 2.2rem; background: #e2e8f0; flex-shrink: 0; }
+    .result-count { margin-left: auto; font-size: .8rem; color: #a0aec0; }
+
+    /* ── Tabell ── */
+    .table-wrap { border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.07); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    thead { background: #2b6cb0; color: white; }
+    th {
+      padding: .6rem .9rem; text-align: left; font-size: .75rem;
+      font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+      white-space: nowrap; cursor: pointer; user-select: none;
+    }
+    th:hover { background: #2558a0; }
+    th.sorted-asc::after  { content: ' ▲'; font-size: .65rem; opacity: .8; }
+    th.sorted-desc::after { content: ' ▼'; font-size: .65rem; opacity: .8; }
+    th.num { text-align: right; }
+
+    tbody tr.obs-row { border-bottom: 1px solid #f0f4f8; cursor: pointer; transition: background .1s; }
+    tbody tr.obs-row:hover { background: #f0f7ff; }
+    tbody tr.obs-row.open { background: #ebf8ff; border-bottom: none; }
+    td { padding: .6rem .9rem; font-size: .85rem; vertical-align: middle; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .rank { font-weight: 700; color: #a0aec0; font-size: .8rem; min-width: 2rem; display: inline-block; }
+    .reporter-name { font-weight: 700; color: #1a202c; }
+    .art-val  { font-weight: 800; color: #276749; font-size: 1rem; }
+    .lokal-name { font-size: .83rem; color: #4a5568; }
+    .expand-icon { float: right; color: #a0aec0; font-size: .75rem; transition: transform .2s; }
+    tr.open .expand-icon { transform: rotate(180deg); }
+
+    /* ── Detail-rad ── */
+    tr.detail-row td { padding: 0; }
+    .detail-box {
+      background: #f7fbff; border-top: 2px solid #bee3f8;
+      border-bottom: 2px solid #bee3f8;
+      padding: 1.25rem 1.5rem; display: none;
+    }
+    tr.detail-row.visible .detail-box { display: block; }
+
+    .detail-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem; margin-bottom: 1.25rem;
+    }
+    @media (max-width: 640px) { .detail-grid { grid-template-columns: 1fr 1fr; } }
+
+    .detail-card {
+      background: white; border-radius: 8px; padding: .75rem 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .detail-card .dc-label { font-size: .7rem; text-transform: uppercase;
+                             letter-spacing: .05em; color: #718096; margin-bottom: .2rem; }
+    .detail-card .dc-val   { font-size: 1.4rem; font-weight: 800; color: #2b6cb0; line-height: 1; }
+
+    .detail-section { margin-bottom: 1rem; }
+    .detail-section h4 { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em;
+                         color: #718096; margin-bottom: .5rem; border-bottom: 1px solid #e2e8f0;
+                         padding-bottom: .3rem; }
+
+    .lokal-list-detail { display: flex; flex-direction: column; gap: .3rem; }
+    .lokal-item {
+      display: flex; align-items: center; gap: .5rem;
+      font-size: .83rem; color: #2d3748;
+    }
+    .lokal-item .lokal-bar-wrap { flex: 1; background: #e2e8f0; border-radius: 99px; height: 6px; }
+    .lokal-item .lokal-bar { background: #2b6cb0; border-radius: 99px; height: 6px; }
+    .lokal-item .lokal-count { font-size: .75rem; color: #718096; width: 2.5rem; text-align: right; }
+
+    .species-list { display: flex; flex-direction: column; gap: .3rem; }
+    .species-item {
+      display: flex; align-items: center; gap: .5rem; font-size: .83rem;
+    }
+    .species-name { flex: 1; color: #2d3748; }
+    .species-bar-wrap { width: 80px; background: #e2e8f0; border-radius: 99px; height: 6px; }
+    .species-bar { background: #276749; border-radius: 99px; height: 6px; }
+    .species-count { font-size: .75rem; color: #718096; width: 2.5rem; text-align: right; }
+
+    /* ── Månadsdiagram ── */
+    .month-chart { display: flex; align-items: flex-end; gap: 3px; height: 60px; margin-top: .4rem; }
+    .month-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .month-bar { width: 100%; background: #bee3f8; border-radius: 3px 3px 0 0;
+                 transition: background .15s; min-height: 2px; }
+    .month-bar:hover { background: #2b6cb0; }
+    .month-label { font-size: .6rem; color: #a0aec0; }
+    .month-val   { font-size: .6rem; color: #718096; display: none; }
+    .month-bar-wrap:hover .month-val { display: block; }
+
+    /* ── Paginering ── */
+    .pagination {
+      display: flex; align-items: center; justify-content: center;
+      gap: .4rem; margin-top: 1.25rem; flex-wrap: wrap;
+    }
+    .pagination button {
+      border: 1.5px solid #cbd5e0; background: white; border-radius: 7px;
+      padding: .35rem .7rem; font-size: .82rem; cursor: pointer; color: #4a5568;
+      transition: background .1s, border-color .1s;
+    }
+    .pagination button:hover:not(:disabled) { background: #ebf8ff; border-color: #2b6cb0; color: #2b6cb0; }
+    .pagination button.active { background: #2b6cb0; border-color: #2b6cb0; color: white; font-weight: 700; }
+    .pagination button:disabled { opacity: .4; cursor: default; }
+    .pagination .pg-info { font-size: .8rem; color: #718096; margin: 0 .4rem; }
+    .pg-jump { display: flex; align-items: center; gap: .4rem; font-size: .8rem; color: #718096; }
+    .pg-jump input { width: 3.5rem; border: 1.5px solid #cbd5e0; border-radius: 7px;
+                     padding: .3rem .5rem; font-size: .82rem; text-align: center; outline: none; }
+    .pg-jump input:focus { border-color: #2b6cb0; }
+
+    .empty { text-align: center; padding: 3rem; color: #a0aec0; font-size: .95rem; background: white; }
+
+    /* ── Stjärna / favorit ── */
+    .star-cell { text-align: center; width: 2.8rem; padding: .6rem .4rem !important; }
+    .star-btn {
+      font-size: 1.15rem; color: #cbd5e0; cursor: pointer;
+      transition: color .15s, transform .12s; line-height: 1; display: inline-block;
+      background: none; border: none; padding: 0;
+    }
+    .star-btn:hover  { color: #ed8936; transform: scale(1.25); }
+    .star-btn.starred { color: #ed8936; }
+
+    .fav-toggle {
+      display: flex; align-items: center; gap: .35rem; cursor: pointer;
+      border: 1.5px solid #cbd5e0; border-radius: 7px;
+      padding: .35rem .75rem; background: white; user-select: none;
+      font-size: .85rem; color: #718096; transition: border-color .15s, color .15s;
+      white-space: nowrap;
+    }
+    .fav-toggle .fav-star { font-size: 1rem; color: #cbd5e0; transition: color .15s; }
+    .fav-toggle.active    { border-color: #ed8936; color: #c05621; }
+    .fav-toggle.active .fav-star { color: #ed8936; }
+
+    footer { text-align: center; font-size: .75rem; color: #a0aec0; margin-top: 2rem; }
+  </style>
+</head>
+<body>
+
+<header><h1>🐦 Fågelobservationer Sverige</h1></header>
+<nav class="page-tabs">
+  <a href="faglar-vasterbotten.html" class="page-tab">📋 Dagslista</a>
+  <a href="faglar-statistik.html"    class="page-tab">📊 Statistik</a>
+  <a href="faglar-hackning.html"     class="page-tab">🥚 Häckning</a>
+  <a href="faglar-rapportor.html"    class="page-tab">👤 Rapportör</a>
+  <a href="faglar-observatorer.html" class="page-tab active">🏆 Observatörer</a>
+</nav>
+
+<div class="container">
+
+  <div class="filter-panel">
+    <label>Sök</label>
+    <input type="search" id="searchInput" placeholder="Namn eller lokal…" oninput="applyFilters()" />
+    <label>År</label>
+    <select id="selYear" onchange="applyFilters()">
+      <option value="2026" selected>2026</option>
+      <option value="2025">2025</option>
+      <option value="2024">2024</option>
+    </select>
+    <label>Sortera</label>
+    <select id="selSort" onchange="applyFilters()">
+      <option value="art-desc">Flest arter</option>
+      <option value="obs-desc">Flest observationer</option>
+      <option value="name-asc">Namn A–Ö</option>
+      <option value="dagar-desc">Flest aktiva dagar</option>
+    </select>
+    <button class="fav-toggle" id="favToggle" onclick="toggleFavFilter()" title="Visa bara favoriter">
+      <span class="fav-star">★</span> Favoriter
+    </button>
+  </div>
+
+  <div class="summary-bar">
+    <div class="summary-item"><div class="val" id="sumCount">–</div><div class="lbl">observatörer</div></div>
+    <div class="summary-divider"></div>
+    <div class="summary-item"><div class="val" id="sumObs">–</div><div class="lbl">observationer</div></div>
+    <div class="summary-item"><div class="val" id="sumArt">–</div><div class="lbl">max arter</div></div>
+    <div class="result-count" id="resultCount"></div>
+  </div>
+
+  <div class="table-wrap">
+    <table id="mainTable">
+      <thead>
+        <tr>
+          <th style="width:2.8rem">#</th>
+          <th onclick="toggleSort('name')">Observatör</th>
+          <th class="num sorted-desc" id="th-art" onclick="toggleSort('art')">Unika arter</th>
+          <th onclick="toggleSort('lokal')">Topplokal</th>
+          <th class="star-cell" style="cursor:default">★</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="empty" id="emptyState" style="display:none">Inga observatörer matchade sökningen.</div>
+  </div>
+
+  <div class="pagination" id="pagination"></div>
+
+</div>
+
+<footer>Testvy – mockdata Västerbotten 2026</footer>
+
+<script>
+const MONTHS = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
+const PAGE_SIZE = 10;
+let currentPage = 1;
+let sortCol = 'art';
+let sortDir = 'desc';
+let filtered = [];
+let openRow = null;
+let onlyFavs = false;
+
+/* ── Favoriter (localStorage) ── */
+let favorites = new Set(JSON.parse(localStorage.getItem('obs_favorites') || '[]'));
+function saveFavs() { localStorage.setItem('obs_favorites', JSON.stringify([...favorites])); }
+function toggleFav(name, e) {
+  e.stopPropagation();
+  if (favorites.has(name)) favorites.delete(name); else favorites.add(name);
+  saveFavs();
+  renderAll();
+}
+function toggleFavFilter() {
+  onlyFavs = !onlyFavs;
+  document.getElementById('favToggle').classList.toggle('active', onlyFavs);
+  currentPage = 1;
+  applyFilters();
+}
+
+/* ── Mock-data ── */
+const MOCK_DATA = [
+  { name:'Christer Olsson',   obs:1544, art:72, dagar:89, senast:'2026-04-20',
+    lokaler:[{name:'Västerbottens kust',art:41},{name:'Nydala',art:28},{name:'Umeå centrum',art:19}],
+    species:[{sv:'talgoxe',obs:187},{sv:'blåmes',obs:143},{sv:'nötväcka',obs:112}],
+    monthly:[312,287,498,447,0,0,0,0,0,0,0,0] },
+  { name:'Thomas Sundström',  obs:1271, art:71, dagar:76, senast:'2026-04-19',
+    lokaler:[{name:'Skelleftehamn',art:38},{name:'Ostvik',art:29},{name:'Lövånger',art:21}],
+    species:[{sv:'ejder',obs:201},{sv:'vigg',obs:154},{sv:'knipa',obs:98}],
+    monthly:[280,245,389,357,0,0,0,0,0,0,0,0] },
+  { name:'Kerstin Årdahl',    obs:757, art:65, dagar:62, senast:'2026-04-21',
+    lokaler:[{name:'Nydala',art:35},{name:'Gammlia',art:24},{name:'Böleäng',art:17}],
+    species:[{sv:'domherre',obs:98},{sv:'grönsiska',obs:87},{sv:'talgoxe',obs:76}],
+    monthly:[154,138,241,224,0,0,0,0,0,0,0,0] },
+  { name:'Ralf Norberg',      obs:460, art:63, dagar:54, senast:'2026-04-18',
+    lokaler:[{name:'Vindelälven',art:33},{name:'Hällnäs',art:22},{name:'Vindeln',art:15}],
+    species:[{sv:'strömstare',obs:67},{sv:'forsärla',obs:54},{sv:'kungsfiskare',obs:41}],
+    monthly:[89,78,152,141,0,0,0,0,0,0,0,0] },
+  { name:'Stefan Delin',      obs:425, art:63, dagar:48, senast:'2026-04-17',
+    lokaler:[{name:'Täfteå',art:31},{name:'Ängesån',art:21},{name:'Umeå hamn',art:14}],
+    species:[{sv:'storskrake',obs:78},{sv:'knipa',obs:63},{sv:'gräsand',obs:52}],
+    monthly:[82,74,141,128,0,0,0,0,0,0,0,0] },
+  { name:'Krister Jakobsson', obs:398, art:61, dagar:45, senast:'2026-04-15',
+    lokaler:[{name:'Lycksele',art:29},{name:'Örträsk',art:19},{name:'Åmsele',art:13}],
+    species:[{sv:'lavskrika',obs:89},{sv:'talltita',obs:71},{sv:'björktrast',obs:55}],
+    monthly:[76,68,132,122,0,0,0,0,0,0,0,0] },
+  { name:'Anna Lindgren',     obs:371, art:58, dagar:43, senast:'2026-04-20',
+    lokaler:[{name:'Nydala',art:28},{name:'Röbäck',art:19},{name:'Holmön',art:14}],
+    species:[{sv:'talgoxe',obs:65},{sv:'blåmes',obs:54},{sv:'sånglärka',obs:43}],
+    monthly:[71,63,122,115,0,0,0,0,0,0,0,0] },
+  { name:'Per-Erik Nilsson',  obs:344, art:56, dagar:41, senast:'2026-04-16',
+    lokaler:[{name:'Bygdeå',art:27},{name:'Robertsfors',art:18},{name:'Kusön',art:12}],
+    species:[{sv:'orre',obs:54},{sv:'tjäder',obs:43},{sv:'järpe',obs:32}],
+    monthly:[65,58,113,108,0,0,0,0,0,0,0,0] },
+  { name:'Maria Bergström',   obs:312, art:54, dagar:39, senast:'2026-04-14',
+    lokaler:[{name:'Byske',art:26},{name:'Skellefteå å',art:17},{name:'Bureälven',art:11}],
+    species:[{sv:'gärdsmyg',obs:47},{sv:'rödhake',obs:39},{sv:'koltrast',obs:31}],
+    monthly:[59,52,103,98,0,0,0,0,0,0,0,0] },
+  { name:'Jonas Eriksson',    obs:287, art:52, dagar:37, senast:'2026-04-19',
+    lokaler:[{name:'Holmön',art:25},{name:'Gammlia',art:16},{name:'Yttersjön',art:11}],
+    species:[{sv:'ejder',obs:89},{sv:'alfågel',obs:67},{sv:'sjöorre',obs:45}],
+    monthly:[54,47,97,89,0,0,0,0,0,0,0,0] },
+  { name:'Lars-Åke Persson',  obs:265, art:51, dagar:35, senast:'2026-04-13',
+    lokaler:[{name:'Levar',art:23},{name:'Nordmaling',art:15},{name:'Lögdeälven',art:10}],
+    species:[{sv:'havsörn',obs:34},{sv:'pilgrimsfalk',obs:28},{sv:'duvhök',obs:22}],
+    monthly:[49,43,89,84,0,0,0,0,0,0,0,0] },
+  { name:'Eva Holmgren',      obs:243, art:49, dagar:34, senast:'2026-04-12',
+    lokaler:[{name:'Bönan',art:22},{name:'Nydala',art:14},{name:'Hörnefors',art:10}],
+    species:[{sv:'koltrast',obs:43},{sv:'björktrast',obs:36},{sv:'rödvingetrast',obs:29}],
+    monthly:[45,39,82,77,0,0,0,0,0,0,0,0] },
+  { name:'Björn Andersson',   obs:228, art:47, dagar:32, senast:'2026-04-18',
+    lokaler:[{name:'Kalvholmen',art:21},{name:'Näsudden',art:14},{name:'Kåge',art:9}],
+    species:[{sv:'gråtrut',obs:67},{sv:'silltrut',obs:54},{sv:'fiskmås',obs:43}],
+    monthly:[42,37,77,72,0,0,0,0,0,0,0,0] },
+  { name:'Ingrid Söderström', obs:214, art:46, dagar:31, senast:'2026-04-11',
+    lokaler:[{name:'Vännäsby',art:20},{name:'Vindelälven',art:13},{name:'Sorsele',art:9}],
+    species:[{sv:'ängspiplärka',obs:38},{sv:'sädesärla',obs:31},{sv:'gulärla',obs:25}],
+    monthly:[39,34,72,69,0,0,0,0,0,0,0,0] },
+  { name:'Mikael Lundqvist',  obs:198, art:45, dagar:29, senast:'2026-04-17',
+    lokaler:[{name:'Ängesån',art:19},{name:'Täfteå',art:12},{name:'Nydala',art:8}],
+    species:[{sv:'knölsvan',obs:29},{sv:'sångsvan',obs:24},{sv:'bläsgås',obs:19}],
+    monthly:[36,31,67,64,0,0,0,0,0,0,0,0] },
+  { name:'Gunnar Pettersson', obs:187, art:44, dagar:28, senast:'2026-04-09',
+    lokaler:[{name:'Lycksele djurpark',art:18},{name:'Örträsk',art:12},{name:'Bjurholm',art:8}],
+    species:[{sv:'lavskrika',obs:54},{sv:'nötskrika',obs:43},{sv:'korp',obs:34}],
+    monthly:[33,28,63,63,0,0,0,0,0,0,0,0] },
+  { name:'Susanne Lindström', obs:176, art:43, dagar:27, senast:'2026-04-16',
+    lokaler:[{name:'Umeälven',art:18},{name:'Gammlia',art:11},{name:'Röbäck',art:7}],
+    species:[{sv:'gräsand',obs:45},{sv:'kricka',obs:36},{sv:'bläsand',obs:28}],
+    monthly:[31,26,59,60,0,0,0,0,0,0,0,0] },
+  { name:'Håkan Westman',     obs:164, art:41, dagar:25, senast:'2026-04-08',
+    lokaler:[{name:'Dorotea',art:17},{name:'Borgafjäll',art:11},{name:'Vojmsjön',art:7}],
+    species:[{sv:'fjällripa',obs:67},{sv:'dalripa',obs:54},{sv:'fjällpipare',obs:43}],
+    monthly:[29,24,56,55,0,0,0,0,0,0,0,0] },
+  { name:'Lena Johansson',    obs:152, art:40, dagar:24, senast:'2026-04-15',
+    lokaler:[{name:'Skelleftehamn',art:17},{name:'Ostvik',art:11},{name:'Bureå',art:7}],
+    species:[{sv:'ejder',obs:56},{sv:'svärta',obs:45},{sv:'alfågel',obs:34}],
+    monthly:[27,22,52,51,0,0,0,0,0,0,0,0] },
+  { name:'Åke Franzén',       obs:143, art:39, dagar:23, senast:'2026-04-14',
+    lokaler:[{name:'Holmön',art:17},{name:'Nydala',art:10},{name:'Umeå hamn',art:6}],
+    species:[{sv:'tordmule',obs:34},{sv:'sillgrissla',obs:28},{sv:'tobisgrissla',obs:22}],
+    monthly:[25,20,49,49,0,0,0,0,0,0,0,0] },
+  { name:'Britta Henriksson', obs:134, art:38, dagar:22, senast:'2026-04-07',
+    lokaler:[{name:'Åsele',art:16},{name:'Vilhelmina',art:10},{name:'Tärnasjön',art:6}],
+    species:[{sv:'smålom',obs:23},{sv:'storlom',obs:19},{sv:'skäggdopping',obs:15}],
+    monthly:[23,18,46,47,0,0,0,0,0,0,0,0] },
+  { name:'Ove Magnusson',     obs:128, art:37, dagar:21, senast:'2026-04-13',
+    lokaler:[{name:'Nydala',art:16},{name:'Böleäng',art:9},{name:'Ersboda',art:6}],
+    species:[{sv:'blåmes',obs:34},{sv:'talgoxe',obs:28},{sv:'entita',obs:22}],
+    monthly:[22,17,44,45,0,0,0,0,0,0,0,0] },
+  { name:'Helene Carlsson',   obs:119, art:36, dagar:20, senast:'2026-04-10',
+    lokaler:[{name:'Bygdeå',art:15},{name:'Kusön',art:9},{name:'Klockestrand',art:6}],
+    species:[{sv:'skogssnäppa',obs:28},{sv:'drillsnäppa',obs:23},{sv:'rödbena',obs:18}],
+    monthly:[21,16,41,41,0,0,0,0,0,0,0,0] },
+  { name:'Dan Wikström',      obs:108, art:34, dagar:18, senast:'2026-04-12',
+    lokaler:[{name:'Byske',art:14},{name:'Kåge',art:9},{name:'Bureälven',art:5}],
+    species:[{sv:'storlom',obs:23},{sv:'smålom',obs:19},{sv:'skäggdopping',obs:15}],
+    monthly:[19,14,38,37,0,0,0,0,0,0,0,0] },
+  { name:'Agneta Blomqvist',  obs:97, art:33, dagar:17, senast:'2026-04-06',
+    lokaler:[{name:'Vindelälven',art:13},{name:'Hällnäs',art:8},{name:'Granö',art:5}],
+    species:[{sv:'strömstare',obs:34},{sv:'forsärla',obs:27},{sv:'bergsärla',obs:21}],
+    monthly:[17,12,35,33,0,0,0,0,0,0,0,0] },
+  { name:'Roland Nordgren',   obs:89, art:31, dagar:16, senast:'2026-04-05',
+    lokaler:[{name:'Norsjö',art:12},{name:'Malå',art:8},{name:'Arvidsjaur',art:5}],
+    species:[{sv:'korp',obs:29},{sv:'nötskrika',obs:23},{sv:'skata',obs:18}],
+    monthly:[15,11,32,31,0,0,0,0,0,0,0,0] },
+  { name:'Anita Söderberg',   obs:82, art:30, dagar:15, senast:'2026-04-11',
+    lokaler:[{name:'Gammlia',art:12},{name:'Nydala',art:7},{name:'Ålidhemsskogen',art:5}],
+    species:[{sv:'talgoxe',obs:23},{sv:'nötväcka',obs:18},{sv:'trädkrypare',obs:14}],
+    monthly:[13,9,30,30,0,0,0,0,0,0,0,0] },
+  { name:'Stig Lindahl',      obs:74, art:29, dagar:14, senast:'2026-04-04',
+    lokaler:[{name:'Vilhelmina',art:11},{name:'Tärnasjön',art:7},{name:'Saxnäs',art:5}],
+    species:[{sv:'fjällripa',obs:34},{sv:'orre',obs:27},{sv:'tjäder',obs:21}],
+    monthly:[12,8,28,26,0,0,0,0,0,0,0,0] },
+  { name:'Karin Forsberg',    obs:68, art:28, dagar:13, senast:'2026-04-09',
+    lokaler:[{name:'Holmön',art:11},{name:'Umeå hamn',art:7},{name:'Nydala',art:4}],
+    species:[{sv:'ejder',obs:19},{sv:'alfågel',obs:15},{sv:'svärta',obs:12}],
+    monthly:[11,7,26,24,0,0,0,0,0,0,0,0] },
+  { name:'Nils-Göran Berg',   obs:61, art:27, dagar:12, senast:'2026-04-03',
+    lokaler:[{name:'Sorsele',art:10},{name:'Ammarnäs',art:7},{name:'Stor-Tjulträsk',art:4}],
+    species:[{sv:'lavskrika',obs:23},{sv:'fjällpipare',obs:18},{sv:'fjällripa',obs:14}],
+    monthly:[10,6,24,21,0,0,0,0,0,0,0,0] },
+];
+
+function applyFilters() {
+  const q    = document.getElementById('searchInput').value.toLowerCase();
+  const sort = document.getElementById('selSort').value;
+  const [col, dir] = sort.split('-');
+
+  filtered = MOCK_DATA.filter(r => {
+    if (onlyFavs && !favorites.has(r.name)) return false;
+    if (!q) return true;
+    const lokStr = r.lokaler.map(l => l.name).join(' ').toLowerCase();
+    return `${r.name} ${lokStr}`.toLowerCase().includes(q);
+  });
+
+  filtered.sort((a, b) => {
+    let av, bv;
+    if      (col === 'art')   { av = a.art;  bv = b.art; }
+    else if (col === 'obs')   { av = a.obs;  bv = b.obs; }
+    else if (col === 'name')  { av = a.name; bv = b.name; }
+    else if (col === 'dagar') { av = a.dagar;bv = b.dagar; }
+    if (av < bv) return dir === 'asc' ? -1 : 1;
+    if (av > bv) return dir === 'asc' ?  1 : -1;
+    return 0;
+  });
+
+  // Uppdatera th-klasser
+  document.querySelectorAll('th[id]').forEach(th => {
+    th.className = th.id === `th-${col}` ? `num sorted-${dir}` : 'num';
+  });
+
+  currentPage = 1;
+  openRow = null;
+  renderAll();
+}
+
+function toggleSort(col) {
+  const sel = document.getElementById('selSort');
+  const cur = sel.value.split('-');
+  const newDir = cur[0] === col && cur[1] === 'desc' ? 'asc' : 'desc';
+  sel.value = `${col}-${newDir}`;
+  applyFilters();
+}
+
+function renderAll() {
+  // Summor
+  const totObs = filtered.reduce((s,r) => s + r.obs, 0);
+  const maxArt = filtered.length ? Math.max(...filtered.map(r => r.art)) : 0;
+  document.getElementById('sumCount').textContent = filtered.length.toLocaleString('sv');
+  document.getElementById('sumObs').textContent   = totObs.toLocaleString('sv');
+  document.getElementById('sumArt').textContent   = maxArt;
+  document.getElementById('resultCount').textContent =
+    filtered.length < MOCK_DATA.length ? `Visar ${filtered.length} av ${MOCK_DATA.length}` : '';
+
+  // Rader
+  const start  = (currentPage - 1) * PAGE_SIZE;
+  const page   = filtered.slice(start, start + PAGE_SIZE);
+  const empty  = document.getElementById('emptyState');
+  const tbody  = document.getElementById('tableBody');
+
+  if (!filtered.length) { tbody.innerHTML=''; empty.style.display=''; renderPagination(); return; }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = page.map((r, i) => {
+    const rank     = start + i + 1;
+    const topLokal = r.lokaler[0]?.name || '–';
+    const isOpen   = openRow === r.name;
+    const isFav    = favorites.has(r.name);
+    return `
+      <tr class="obs-row${isOpen?' open':''}" onclick="toggleDetail('${esc(r.name)}')">
+        <td><span class="rank">${rank}</span></td>
+        <td><span class="reporter-name">${esc(r.name)}</span>
+            <span class="expand-icon">▼</span></td>
+        <td class="num"><span class="art-val">${r.art}</span></td>
+        <td><span class="lokal-name">${esc(topLokal)}</span></td>
+        <td class="star-cell">
+          <button class="star-btn${isFav?' starred':''}"
+                  onclick="toggleFav('${esc(r.name)}',event)"
+                  title="${isFav?'Ta bort favorit':'Lägg till favorit'}">${isFav?'★':'☆'}</button>
+        </td>
+      </tr>
+      <tr class="detail-row${isOpen?' visible':''}">
+        <td colspan="5">${isOpen ? buildDetail(r) : '<div class="detail-box"></div>'}</td>
+      </tr>`;
+  }).join('');
+
+  renderPagination();
+}
+
+function buildDetail(r) {
+  const maxLok = r.lokaler[0]?.art || 1;
+  const maxSp  = r.species[0]?.obs || 1;
+  const maxMon = Math.max(...r.monthly, 1);
+
+  const lokalHtml = r.lokaler.slice(0,3).map(l => `
+    <div class="lokal-item">
+      <span style="flex:0 0 140px;font-weight:600">${esc(l.name)}</span>
+      <div class="lokal-bar-wrap"><div class="lokal-bar" style="width:${Math.round(l.art/maxLok*100)}%"></div></div>
+      <span class="lokal-count">${l.art} arter</span>
+    </div>`).join('');
+
+  const spHtml = r.species.slice(0,3).map(s => `
+    <div class="species-item">
+      <span class="species-name">${esc(s.sv)}</span>
+      <div class="species-bar-wrap"><div class="species-bar" style="width:${Math.round(s.obs/maxSp*100)}%"></div></div>
+      <span class="species-count">${s.obs} obs</span>
+    </div>`).join('');
+
+  const monHtml = r.monthly.map((v,i) => `
+    <div class="month-bar-wrap">
+      <div class="month-val">${v||''}</div>
+      <div class="month-bar" style="height:${v?Math.round(v/maxMon*52)+8:2}px" title="${MONTHS[i]}: ${v} obs"></div>
+      <div class="month-label">${MONTHS[i]}</div>
+    </div>`).join('');
+
+  return `<div class="detail-box">
+    <div class="detail-grid">
+      <div class="detail-card"><div class="dc-label">Observationer</div><div class="dc-val">${r.obs.toLocaleString('sv')}</div></div>
+      <div class="detail-card"><div class="dc-label">Unika arter</div><div class="dc-val" style="color:#276749">${r.art}</div></div>
+      <div class="detail-card"><div class="dc-label">Aktiva dagar</div><div class="dc-val" style="color:#744210">${r.dagar}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+      <div class="detail-section"><h4>Topp 3 lokaler</h4><div class="lokal-list-detail">${lokalHtml}</div></div>
+      <div class="detail-section"><h4>Topp 3 arter</h4><div class="species-list">${spHtml}</div></div>
+    </div>
+    <div class="detail-section">
+      <h4>Månadsfördelning</h4>
+      <div class="month-chart">${monHtml}</div>
+    </div>
+  </div>`;
+}
+
+function toggleDetail(name) {
+  openRow = openRow === name ? null : name;
+  renderAll();
+}
+
+function renderPagination() {
+  const total = Math.ceil(filtered.length / PAGE_SIZE);
+  const pg    = document.getElementById('pagination');
+  if (total <= 1) { pg.innerHTML=''; return; }
+
+  const windowPages = [];
+  for (let p = Math.max(1, currentPage-2); p <= Math.min(total, currentPage+2); p++)
+    windowPages.push(p);
+
+  pg.innerHTML = `
+    <button onclick="goPage(1)" ${currentPage===1?'disabled':''}>«</button>
+    <button onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>
+    ${windowPages.map(p =>
+      `<button class="${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`
+    ).join('')}
+    <button onclick="goPage(${currentPage+1})" ${currentPage===total?'disabled':''}>›</button>
+    <button onclick="goPage(${total})" ${currentPage===total?'disabled':''}>»</button>
+    <span class="pg-info">Sida ${currentPage} av ${total}</span>
+    <span class="pg-jump">Gå till <input type="number" min="1" max="${total}" value="${currentPage}"
+      onchange="goPage(+this.value)" /> </span>`;
+}
+
+function goPage(p) {
+  const total = Math.ceil(filtered.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(total, p));
+  openRow = null;
+  renderAll();
+  document.querySelector('.table-wrap')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+applyFilters();
+</script>
+</body>
+</html>
