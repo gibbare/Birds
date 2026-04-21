@@ -920,11 +920,13 @@ def observer_stats():
     with _se_obs_lock:
         se_data = _se_obs_cache.get(yr)
 
-    # Inte i minnet? Ladda kompakt format direkt från R2 (ej _load_se_obs_r2
-    # som konverterar till fullt arbetsformat och upptar 500+ MB RAM).
+    # Inte i minnet? Ladda från R2 och konvertera direkt till minimalt API-format.
+    # Lagra ALDRIG råfilen (top-30 + sp_ids per observatör) i _se_obs_cache –
+    # den är ~450 MB som Python-objekt. _api_cache_from_compact ger ~7 MB.
     if not se_data:
-        se_data = _r2_get(_se_obs_r2_key(yr))
-        if se_data and se_data.get('reporters'):
+        raw = _r2_get(_se_obs_r2_key(yr))
+        if raw and raw.get('reporters'):
+            se_data = _api_cache_from_compact(raw)
             with _se_obs_lock:
                 _se_obs_cache[yr] = se_data
 
@@ -932,27 +934,13 @@ def observer_stats():
         try:
             result = []
             for name, d in se_data['reporters'].items():
-                # Stöd både kompakt format (sp/pl listor) och
-                # gammalt in-memory-format (sp_obs/pl_obs dicts) för bakåtkompatibilitet
-                if 'sp_obs' in d:
-                    sp_obs  = d['sp_obs']
-                    pl_obs  = d['pl_obs']
-                    art     = d.get('art', len(sp_obs))
-                    top_loc = max(pl_obs, key=pl_obs.get) if pl_obs else ''
-                    top_3_lok = sorted(
-                        [{'name': k, 'obs': v} for k, v in pl_obs.items()],
-                        key=lambda x: -x['obs'])[:3]
-                    top_3_sp = sorted(
-                        [{'sv': v['sv'], 'obs': v['obs']} for v in sp_obs.values() if v.get('sv')],
-                        key=lambda x: -x['obs'])[:3]
-                else:
-                    # Kompakt format (sp/pl listor redan sorterade)
-                    sp_list   = d.get('sp', [])
-                    pl_list   = d.get('pl', [])
-                    art       = d.get('art', 0)
-                    top_loc   = pl_list[0]['name'] if pl_list else ''
-                    top_3_lok = [{'name': x['name'], 'obs': x['obs']} for x in pl_list[:3]]
-                    top_3_sp  = [{'sv': x['sv'],  'obs': x['obs']} for x in sp_list[:3]]
+                # _se_obs_cache innehåller alltid minimalt API-format (sp/pl top-3 listor)
+                sp_list   = d.get('sp', [])
+                pl_list   = d.get('pl', [])
+                art       = d.get('art', 0)
+                top_loc   = pl_list[0]['name'] if pl_list else ''
+                top_3_lok = [{'name': x['name'], 'obs': x['obs']} for x in pl_list[:3]]
+                top_3_sp  = [{'sv': x['sv'], 'obs': x['obs']} for x in sp_list[:3]]
                 result.append({
                     'name':     name,
                     'obs':      d.get('obs', 0),
@@ -1942,15 +1930,42 @@ def _build_compact_se(year, data):
         'reporters': compact,
     }
 
+def _api_cache_from_compact(compact_data):
+    """Bygg ett minimalt in-memory API-cacheformat från compact_data (R2-format).
+    Tar bara med det som observer_stats-endpointen faktiskt returnerar:
+      - Inga sp_ids (bara byggtråden behöver dem)
+      - Bara top-3 sp/pl (API visar aldrig mer)
+    15 000 observatörer × ~500 B = ~7 MB istället för ~450 MB."""
+    api_reps = {}
+    for name, d in compact_data.get('reporters', {}).items():
+        sp_list = d.get('sp', [])
+        pl_list = d.get('pl', [])
+        api_reps[name] = {
+            'obs':     d.get('obs', 0),
+            'art':     d.get('art', 0),
+            'dagar':   d.get('dagar', 0),
+            'lastObs': d.get('lastObs', ''),
+            'monthly': d.get('monthly', [0]*12),
+            'sp':      sp_list[:3],   # top-3 räcker – API visar aldrig mer
+            'pl':      pl_list[:3],   # top-3 räcker
+        }
+    return {
+        'year':      compact_data.get('year'),
+        'last_date': compact_data.get('last_date'),
+        'reporters': api_reps,
+    }
+
 def _save_se_obs_r2(year, data):
     """Komprimera och spara SE-observatörscachen till R2.
-    Returnerar (ok: bool, compact_data: dict) – compact_data är lämplig för in-memory cache."""
-    save_data = _build_compact_se(year, data)
+    Returnerar (ok: bool, api_cache: dict) – api_cache är ett minimalt format
+    lämpligt för _se_obs_cache (inga sp_ids, bara top-3 sp/pl)."""
+    save_data = _build_compact_se(year, data)   # full compact → R2
     ok = _r2_put(_se_obs_r2_key(year), save_data)
     if ok:
         print(f'  SE obs: sparad {_se_obs_r2_key(year)} '
               f'({len(save_data["reporters"])} observatörer, last={data["last_date"]})')
-    return ok, save_data
+    api_cache = _api_cache_from_compact(save_data)   # minimal → RAM
+    return ok, api_cache
 
 def _fetch_county_obs_day(county_id, date_str):
     """Hämtar alla fågelobservationer för ett givet county och datum.
