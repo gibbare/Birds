@@ -1,5 +1,6 @@
 stats_cache.json
 stats_cache_*.json
+breeding_cache_*.json
 __pycache__/
 *.pyc
 .env
