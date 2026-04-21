@@ -104,6 +104,18 @@ def _r2_list(prefix='stats_cache_'):
         print(f'  R2 list {prefix}: {_e}')
         return []
 
+# ── Sverige: alla 21 läns feature-IDs (Artportalen/SOS-API) ─────────────────
+SE_COUNTY_IDS = [
+    "1","3","4","5","6","7","8","9","10","12",
+    "13","14","17","18","19","20","21","22","23","24","25",
+]  # Stockholm, Uppsala, Södermanland, Östergötland, Jönköping, Kronoberg,
+   # Kalmar, Gotland, Blekinge, Skåne, Halland, Västra Götaland, Värmland,
+   # Örebro, Västmanland, Dalarna, Gävleborg, Västernorrland, Jämtland,
+   # Västerbotten, Norrbotten
+
+_se_obs_lock  = _threading.Lock()
+_se_obs_cache = {}   # { year(int): {last_date, reporters: {…}} }
+
 # ── Konstanter ─────────────────────────────────────────────────────────────
 APP_VERSION   = "4.0"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
@@ -897,37 +909,78 @@ def reporter_stats():
 
 @app.route("/api/observer_stats")
 def observer_stats():
-    """Returnerar topp 100 observatörer för ett county+år, sorterade efter unika arter."""
+    """Returnerar observatörer sorterade efter unika arter.
+    Primärt: läser från hela-Sverige-cachen (observers_se_YYYY.json) i R2.
+    Fallback: länscachen (Västerbotten) om Sverige-cachen inte är redo."""
+    year = (request.args.get("year") or str(_date_type.today().year)).strip()
+    yr   = int(year)
+
+    # ── Primärt: SE-cache (hela Sverige) ────────────────────────────────────
+    with _se_obs_lock:
+        se_data = _se_obs_cache.get(yr)
+
+    # Inte i minnet? Försök läsa direkt från R2
+    if not se_data:
+        se_data = _r2_get(_se_obs_r2_key(yr))
+        if se_data:
+            with _se_obs_lock:
+                _se_obs_cache[yr] = se_data
+
+    if se_data and se_data.get('reporters'):
+        try:
+            result = []
+            for name, d in se_data['reporters'].items():
+                species = d.get('species', {})
+                places  = d.get('places', {})
+                top_loc = max(places, key=places.get) if places else ''
+                top_3_lok = sorted(
+                    [{'name': k, 'obs': v} for k, v in places.items()],
+                    key=lambda x: -x['obs'])[:3]
+                top_3_sp = sorted(
+                    [{'sv': v['sv'], 'obs': v['obs']} for v in species.values() if v.get('sv')],
+                    key=lambda x: -x['obs'])[:3]
+                result.append({
+                    'name':     name,
+                    'obs':      d.get('obs', 0),
+                    'art':      len(species),
+                    'dagar':    d.get('dagar', 0),
+                    'lastObs':  d.get('lastObs', ''),
+                    'topLokal': top_loc,
+                    'lokaler':  top_3_lok,
+                    'species':  top_3_sp,
+                    'monthly':  d.get('monthly', [0]*12),
+                })
+            result.sort(key=lambda x: (-x['art'], -x['obs']))
+            return jsonify(result)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    # ── Fallback: länscachen (Västerbotten) ─────────────────────────────────
     county_id = (request.args.get("county_id") or DEFAULT_COUNTY_ID).strip()
-    year      = (request.args.get("year") or str(_date_type.today().year)).strip()
     cache_key = f"{county_id}_{year}"
     with _stats_lock:
         payload = _stats_cache.get(cache_key)
     if not payload:
-        return jsonify({"error": "cache_missing", "cache_key": cache_key}), 404
+        return jsonify({"error": "cache_missing", "cache_key": cache_key,
+                        "hint": "SE-cache byggs i bakgrunden – försök igen om en stund"}), 404
     try:
-        details   = payload.get('reporter_details', {})
-        top_rap   = payload.get('top_reporters', [])
+        details    = payload.get('reporter_details', {})
+        top_rap    = payload.get('top_reporters', [])
         obs_lookup = {r['name']: r['obs'] for r in top_rap}
-
-        observers = []
+        observers  = []
         for name, d in details.items():
-            art_count = len(d.get('species', []))
-            obs_count = obs_lookup.get(name) or sum(d.get('monthly', []))
             places    = d.get('places', [])
-            top_lokal = places[0]['name'] if places else ''
             observers.append({
-                'name':    name,
-                'obs':     obs_count,
-                'art':     art_count,
-                'dagar':   d.get('dagar', 0),
-                'lastObs': d.get('lastObs', ''),
-                'topLokal': top_lokal,
-                'lokaler': [{'name': p['name'], 'obs': p['obs']} for p in places[:3]],
-                'species': [{'sv': s['sv'], 'obs': s['obs']} for s in d.get('species', [])[:3]],
-                'monthly': d.get('monthly', [0]*12),
+                'name':     name,
+                'obs':      obs_lookup.get(name) or sum(d.get('monthly', [])),
+                'art':      len(d.get('species', [])),
+                'dagar':    d.get('dagar', 0),
+                'lastObs':  d.get('lastObs', ''),
+                'topLokal': places[0]['name'] if places else '',
+                'lokaler':  [{'name': p['name'], 'obs': p['obs']} for p in places[:3]],
+                'species':  [{'sv': s['sv'], 'obs': s['obs']} for s in d.get('species', [])[:3]],
+                'monthly':  d.get('monthly', [0]*12),
             })
-
         observers.sort(key=lambda x: (-x['art'], -x['obs']))
         return jsonify(observers)
     except Exception as e:
@@ -1709,6 +1762,16 @@ def _stats_builder():
             _stats_cache = loaded
         print(f'  Stats: cache laddad ({len(loaded)} poster)')
 
+    # ── Ta bort lokala cachefiler om R2 är konfigurerat (frigör Railway-disk) ─
+    if _r2() and loaded:
+        import glob as _glob2
+        for fp in _glob2.glob(_os.path.join(_BASE_DIR, 'stats_cache_*.json')):
+            try:
+                _os.remove(fp)
+                print(f'  Stats: tog bort lokal fil {_os.path.basename(fp)}')
+            except Exception:
+                pass
+
     while True:
         # Vänta på autentisering (max 5 min)
         for _ in range(60):
@@ -1773,6 +1836,176 @@ def _stats_builder():
 
         # Sov 1 timme (vaknar och kontrollerar om innevarande år behöver uppdateras)
         _time.sleep(3600)
+
+
+# ── Sverige-observatörscache (inkrementell dagsfil i R2) ─────────────────────
+
+def _se_obs_r2_key(year):
+    return f"observers_se_{year}.json"
+
+def _load_se_obs_r2(year):
+    """Läs SE-observatörscachen från R2. Returnerar data-dict eller tomt skelett."""
+    data = _r2_get(_se_obs_r2_key(year))
+    return data if data else {'year': year, 'last_date': None, 'built_at': None, 'reporters': {}}
+
+def _save_se_obs_r2(year, data):
+    """Spara SE-observatörscachen till R2."""
+    data['built_at'] = _dt.now().isoformat()[:19]
+    ok = _r2_put(_se_obs_r2_key(year), data)
+    if ok:
+        print(f'  SE obs: sparad {_se_obs_r2_key(year)} ({len(data["reporters"])} observatörer, last={data["last_date"]})')
+    return ok
+
+def _fetch_county_obs_day(county_id, date_str):
+    """Hämtar alla fågelobservationer för ett givet county och datum.
+    Returnerar lista av rårecords från SOS API."""
+    results, skip, take = [], 0, 1000
+    body = {
+        'taxon':       {'ids': [AVES_TAXON_ID], 'includeUnderlyingTaxa': True},
+        'date':        {'startDate': date_str, 'endDate': date_str,
+                        'dateFilterType': 'OverlappingStartDateAndEndDate'},
+        'geographics': {'areas': [{'areaType': 'County', 'featureId': county_id}]},
+    }
+    while True:
+        try:
+            resp = requests.post(
+                f'{SOS_API_BASE}/Observations/Search',
+                headers=_auth_headers(), json=body,
+                params={'skip': skip, 'take': take}, timeout=30
+            )
+            if not resp.ok:
+                break
+            rd   = resp.json()
+            recs = rd.get('records', [])
+            tot  = int(rd.get('totalCount') or 0)
+            results.extend(recs)
+            skip += len(recs)
+            if not recs or skip >= tot or skip + take > 50000:
+                break
+        except Exception as e:
+            print(f'  SE obs {county_id}/{date_str}: {e}')
+            break
+    return results
+
+def _merge_se_records(reporters, records, date_str):
+    """Mergar SOS API-records in i reporters-dicten (in-place)."""
+    seen_rd = set()  # (reporter, date) – för korrekt dagar-räkning
+    for rec in records:
+        taxon    = rec.get('taxon')      or {}
+        occ      = rec.get('occurrence') or {}
+        event    = rec.get('event')      or {}
+        location = rec.get('location')   or {}
+
+        reporter = (occ.get('reportedBy') or occ.get('observer') or '').strip()
+        if not reporter:
+            continue
+
+        taxon_id = str(taxon.get('id') or taxon.get('taxonId') or taxon.get('dyntaxaId') or '')
+        sv_name  = (taxon.get('vernacularName') or taxon.get('commonName') or '').strip()
+        locality = (location.get('locality') or location.get('name') or '').strip()
+        if not locality:
+            muni = location.get('municipality') or {}
+            locality = (muni.get('name') or '').strip()
+
+        start_dt = (event.get('startDate') or '').strip()
+        obs_date = start_dt[:10] if len(start_dt) >= 10 else date_str
+        try:
+            month_0 = int(obs_date[5:7]) - 1
+        except (ValueError, IndexError):
+            month_0 = int(date_str[5:7]) - 1
+
+        if reporter not in reporters:
+            reporters[reporter] = {
+                'obs': 0, 'monthly': [0]*12,
+                'species': {}, 'places': {},
+                'dagar': 0, 'lastObs': '',
+            }
+        rep = reporters[reporter]
+        rep['obs'] += 1
+        if 0 <= month_0 < 12:
+            rep['monthly'][month_0] += 1
+        if taxon_id and sv_name:
+            if taxon_id not in rep['species']:
+                rep['species'][taxon_id] = {'sv': sv_name, 'obs': 0}
+            rep['species'][taxon_id]['obs'] += 1
+        if locality:
+            rep['places'][locality] = rep['places'].get(locality, 0) + 1
+        rd_key = (reporter, obs_date)
+        if rd_key not in seen_rd:
+            seen_rd.add(rd_key)
+            rep['dagar'] += 1
+        if obs_date > rep['lastObs']:
+            rep['lastObs'] = obs_date
+
+
+def _se_observers_builder():
+    """Bakgrundstråd: bygger/underhåller hela-Sverige-observatörscachen i R2 (observers_se_YYYY.json).
+
+    Arbetar inkrementellt – ett datum i taget – och sparar till R2 efter varje datum
+    så att Railway-omstarter inte tappar framsteg.
+    """
+    # Vänta på autentisering (max 10 min)
+    for _ in range(120):
+        if _session['access_token'] or _session['subscription_key']:
+            break
+        _time.sleep(5)
+
+    if not _session['access_token'] and not _session['subscription_key']:
+        print('  SE obs: ingen autentisering – avbryter tråd')
+        return
+
+    if not _r2():
+        print('  SE obs: R2 ej konfigurerat – avbryter tråd')
+        return
+
+    while True:
+        today     = _date_type.today()
+        year      = today.year
+        yesterday = (today - _timedelta(days=1)).isoformat()
+
+        # Ladda befintlig cache från R2
+        data      = _load_se_obs_r2(year)
+        last      = data.get('last_date')
+        reporters = data.get('reporters', {})
+        data['reporters'] = reporters
+
+        # Bestäm nästa datum att bearbeta
+        if last:
+            nxt = (_dt.strptime(last, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
+        else:
+            nxt = f'{year}-01-01'
+
+        if nxt > yesterday:
+            with _se_obs_lock:
+                _se_obs_cache[year] = data
+            print(f'  SE obs {year}: à jour (last={last}), sover 6h')
+            _time.sleep(6 * 3600)
+            continue
+
+        # Bearbeta datum för datum tills vi kommit ikapp
+        current = nxt
+        while current <= yesterday:
+            print(f'  SE obs: hämtar {current} ({len(SE_COUNTY_IDS)} län)…')
+            total_recs = 0
+            for cid in SE_COUNTY_IDS:
+                recs = _fetch_county_obs_day(cid, current)
+                if recs:
+                    _merge_se_records(reporters, recs, current)
+                    total_recs += len(recs)
+                _time.sleep(0.25)  # mild rate-limiting mot API
+
+            data['last_date'] = current
+            data['year']      = year
+            _save_se_obs_r2(year, data)
+
+            with _se_obs_lock:
+                _se_obs_cache[year] = data
+
+            print(f'  SE obs {current}: {total_recs} records, {len(reporters)} observatörer totalt')
+            current = (_dt.strptime(current, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
+
+        print(f'  SE obs {year}: ikapp! sover 6h')
+        _time.sleep(6 * 3600)
 
 
 @app.route('/api/statistics')
@@ -2039,9 +2272,12 @@ def bird_lokaler():
     return jsonify(result)
 
 
-# ── Starta statistik-bakgrundstråd ──────────────────────────────────────────
+# ── Starta statistik-bakgrundstrådar ────────────────────────────────────────
 _stats_thread = _threading.Thread(target=_stats_builder, daemon=True, name='stats-builder')
 _stats_thread.start()
+
+_se_obs_thread = _threading.Thread(target=_se_observers_builder, daemon=True, name='se-obs-builder')
+_se_obs_thread.start()
 
 # ── Startup (endast vid direktkörning lokalt) ────────────────────────────────
 if __name__ == "__main__":
