@@ -313,11 +313,25 @@ def static_files(filename):
 
 @app.route("/api/status")
 def status():
+    # R2-diagnostik
+    r2_configured = bool(_R2_ACCOUNT_ID and _R2_ACCESS_KEY and _R2_SECRET_KEY)
+    r2_ok = False
+    r2_files = []
+    if r2_configured:
+        try:
+            r2_files = _r2_list('stats_cache_')
+            r2_ok = True
+        except Exception:
+            pass
     return jsonify({
-        "running":   True,
-        "logged_in": bool(_session["access_token"] or _session["subscription_key"]),
-        "username":  _session["username"],
-        "auth_mode": _session["auth_mode"],
+        "running":        True,
+        "logged_in":      bool(_session["access_token"] or _session["subscription_key"]),
+        "username":       _session["username"],
+        "auth_mode":      _session["auth_mode"],
+        "r2_configured":  r2_configured,
+        "r2_ok":          r2_ok,
+        "r2_files":       r2_files,
+        "cache_keys":     list(_stats_cache.keys()),
     })
 
 
