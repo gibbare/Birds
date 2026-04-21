@@ -331,7 +331,7 @@
 /* ══════════════════════════════════════════════════════
    Config
 ══════════════════════════════════════════════════════ */
-const PROXY         = location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://birds.up.railway.app';
+const PROXY         = location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://birds-api.gibbare.workers.dev';
 const THIS_YEAR     = new Date().getFullYear();
 function abortAfter(ms) { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
 const DEFAULT_COUNTY = '24';   // Västerbottens län

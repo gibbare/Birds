@@ -827,7 +827,7 @@
 /* ═══════════════════════════════════════════════════════════════════
    Konfiguration
 ═══════════════════════════════════════════════════════════════════ */
-const PROXY = 'https://birds.up.railway.app';
+const PROXY = location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://birds-api.gibbare.workers.dev';
 const GBIF    = 'https://api.gbif.org/v1';
 function abortAfter(ms) { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
 const CLASS_AVES = 212;
