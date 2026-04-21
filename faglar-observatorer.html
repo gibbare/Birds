@@ -182,6 +182,11 @@
     .fav-toggle.active .fav-star { color: #ed8936; }
 
     footer { text-align: center; font-size: .75rem; color: #a0aec0; margin-top: 2rem; }
+
+    /* ── Dölj Topplokal på smala skärmar ── */
+    @media (max-width: 520px) {
+      .col-lokal { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -224,8 +229,8 @@
         <tr>
           <th style="width:2.8rem">#</th>
           <th>Observatör</th>
-          <th class="num">Unika arter</th>
-          <th>Topplokal</th>
+          <th class="num">Arter</th>
+          <th class="col-lokal">Topplokal</th>
           <th class="star-cell" style="cursor:default">★</th>
         </tr>
       </thead>
@@ -347,7 +352,7 @@ function renderAll() {
         <td><span class="reporter-name">${esc(r.name)}</span>
             <span class="expand-icon">▼</span></td>
         <td class="num"><span class="art-val">${r.art}</span></td>
-        <td><span class="lokal-name">${esc(topLokal)}</span></td>
+        <td class="col-lokal"><span class="lokal-name">${esc(topLokal)}</span></td>
         <td class="star-cell">
           <button class="star-btn${isFav?' starred':''}"
                   onclick="toggleFav('${esc(r.name)}',event)"

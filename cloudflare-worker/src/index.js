@@ -108,21 +108,20 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
-    // ── /api/observer_stats – alltid från R2 ──────────────────────────────
+    // ── /api/observer_stats – R2 om cachad, annars Railway ───────────────
     if (url.pathname === '/api/observer_stats') {
       const year = url.searchParams.get('year') || String(new Date().getFullYear());
       try {
         const obj = await env.BUCKET.get(`observers_se_${year}.json`);
         if (!obj) {
-          return jsonResp(
-            { error: 'cache_missing', hint: 'SE-cachen byggs fortfarande i bakgrunden' },
-            404,
-          );
+          // Inte i R2 ännu → Railway som fallback
+          return proxyToRailway(request, env);
         }
         const data = await obj.json();
         return jsonResp(buildObserverResult(data));
       } catch (e) {
-        return jsonResp({ error: e.message }, 500);
+        // Något gick fel med R2 → Railway som fallback
+        return proxyToRailway(request, env);
       }
     }
 
