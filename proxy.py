@@ -1952,7 +1952,14 @@ def _se_observers_builder():
 
     Arbetar inkrementellt – ett datum i taget – och sparar till R2 efter varje datum
     så att Railway-omstarter inte tappar framsteg.
+
+    Startar med 5 minuters fördröjning så att appen hinner stabilisera sig och
+    svara på användavanrop innan bakgrundsbygget börjar.
     """
+    # ── Ge appen 5 min att starta och hantera användaranrop först ───────────
+    print('  SE obs: väntar 5 min innan start av bakgrundsbygge…')
+    _time.sleep(300)
+
     # Vänta på autentisering (max 10 min)
     for _ in range(120):
         if _session['access_token'] or _session['subscription_key']:
@@ -2001,7 +2008,7 @@ def _se_observers_builder():
                 if recs:
                     _merge_se_records(reporters, recs, current)
                     total_recs += len(recs)
-                _time.sleep(0.25)  # mild rate-limiting mot API
+                _time.sleep(1.5)  # 1.5s per county – skonsamt mot SOS API
 
             data['last_date'] = current
             data['year']      = year
@@ -2012,6 +2019,9 @@ def _se_observers_builder():
 
             print(f'  SE obs {current}: {total_recs} records, {len(reporters)} observatörer totalt')
             current = (_dt.strptime(current, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
+
+            # Paus mellan dagar under uppbyggnad – ger plats för användaranrop
+            _time.sleep(30)
 
         print(f'  SE obs {year}: ikapp! sover 6h')
         _time.sleep(6 * 3600)
