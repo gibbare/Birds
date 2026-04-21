@@ -117,7 +117,7 @@ _se_obs_lock  = _threading.Lock()
 _se_obs_cache = {}   # { year(int): {last_date, reporters: {…}} }
 
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "4.0"          # Uppdatera vid varje deploy
+APP_VERSION   = "4.1"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
 
 # ── Fellogg (cirkulär buffer, max 500 poster) ────────────────────────────────
@@ -920,10 +920,10 @@ def observer_stats():
     with _se_obs_lock:
         se_data = _se_obs_cache.get(yr)
 
-    # Inte i minnet? Försök läsa direkt från R2
+    # Inte i minnet? Ladda från R2 och konvertera till arbetsformat
     if not se_data:
-        se_data = _r2_get(_se_obs_r2_key(yr))
-        if se_data:
+        se_data = _load_se_obs_r2(yr)
+        if se_data and se_data.get('reporters'):
             with _se_obs_lock:
                 _se_obs_cache[yr] = se_data
 
@@ -931,19 +931,21 @@ def observer_stats():
         try:
             result = []
             for name, d in se_data['reporters'].items():
-                species = d.get('species', {})
-                places  = d.get('places', {})
-                top_loc = max(places, key=places.get) if places else ''
+                # In-memory format: sp_obs/pl_obs dicts + art counter
+                sp_obs  = d.get('sp_obs', {})
+                pl_obs  = d.get('pl_obs', {})
+                art     = d.get('art', len(sp_obs))
+                top_loc = max(pl_obs, key=pl_obs.get) if pl_obs else ''
                 top_3_lok = sorted(
-                    [{'name': k, 'obs': v} for k, v in places.items()],
+                    [{'name': k, 'obs': v} for k, v in pl_obs.items()],
                     key=lambda x: -x['obs'])[:3]
                 top_3_sp = sorted(
-                    [{'sv': v['sv'], 'obs': v['obs']} for v in species.values() if v.get('sv')],
+                    [{'sv': v['sv'], 'obs': v['obs']} for v in sp_obs.values() if v.get('sv')],
                     key=lambda x: -x['obs'])[:3]
                 result.append({
                     'name':     name,
                     'obs':      d.get('obs', 0),
-                    'art':      len(species),
+                    'art':      art,
                     'dagar':    d.get('dagar', 0),
                     'lastObs':  d.get('lastObs', ''),
                     'topLokal': top_loc,
@@ -1853,16 +1855,87 @@ def _se_obs_r2_key(year):
     return f"observers_se_{year}.json"
 
 def _load_se_obs_r2(year):
-    """Läs SE-observatörscachen från R2. Returnerar data-dict eller tomt skelett."""
-    data = _r2_get(_se_obs_r2_key(year))
-    return data if data else {'year': year, 'last_date': None, 'built_at': None, 'reporters': {}}
+    """Läs SE-observatörscachen från R2 och konvertera till in-memory arbetsformat.
+    Hanterar både gammalt format (species/places dicts) och nytt kompakt format (art/sp_ids/sp/pl).
+    Returnerar data-dict eller tomt skelett."""
+    saved = _r2_get(_se_obs_r2_key(year))
+    if not saved:
+        return {'year': year, 'last_date': None, 'built_at': None, 'reporters': {}}
+
+    reporters = {}
+    for name, d in saved.get('reporters', {}).items():
+        if 'species' in d:
+            # ── Gammalt format (pre-v4.1) – species/places dicts ──────────────
+            sp_ids = set(d['species'].keys())
+            sp_obs = {k: {'sv': v.get('sv', k), 'obs': v.get('obs', 0)}
+                      for k, v in d['species'].items()}
+            pl_obs = dict(d.get('places', {}))
+            art    = len(sp_ids)
+        else:
+            # ── Nytt kompakt format – sp_ids lista + top-30 listor ─────────────
+            sp_ids = set(str(x) for x in d.get('sp_ids', []))
+            sp_obs = {item['id']: {'sv': item['sv'], 'obs': item['obs']}
+                      for item in d.get('sp', []) if 'id' in item}
+            pl_obs = {item['name']: item['obs'] for item in d.get('pl', [])}
+            art    = d.get('art', len(sp_ids))
+
+        reporters[name] = {
+            'obs':     d.get('obs', 0),
+            'monthly': d.get('monthly', [0]*12),
+            'art':     art,
+            'sp_ids':  sp_ids,
+            'sp_obs':  sp_obs,
+            'pl_obs':  pl_obs,
+            'dagar':   d.get('dagar', 0),
+            'lastObs': d.get('lastObs', ''),
+        }
+
+    return {
+        'year':      saved.get('year', year),
+        'last_date': saved.get('last_date'),
+        'built_at':  saved.get('built_at'),
+        'reporters': reporters,
+    }
 
 def _save_se_obs_r2(year, data):
-    """Spara SE-observatörscachen till R2."""
-    data['built_at'] = _dt.now().isoformat()[:19]
-    ok = _r2_put(_se_obs_r2_key(year), data)
+    """Spara SE-observatörscachen till R2 i kompakt format.
+    In-memory-set (sp_ids) och fullständiga dicts (sp_obs/pl_obs) komprimeras
+    till art-räknare + top-30-listor för att hålla filstorleken nere."""
+    reporters = data.get('reporters', {})
+    compact = {}
+    for name, rep in reporters.items():
+        sp_ids = rep.get('sp_ids', set())
+        sp_obs = rep.get('sp_obs', {})
+        pl_obs = rep.get('pl_obs', {})
+        # Top-30 arter efter obs-antal
+        top_sp = sorted(
+            [{'id': k, 'sv': v['sv'], 'obs': v['obs']} for k, v in sp_obs.items() if v.get('sv')],
+            key=lambda x: -x['obs']
+        )[:30]
+        # Top-30 lokaler efter obs-antal
+        top_pl = sorted(
+            [{'name': k, 'obs': v} for k, v in pl_obs.items()],
+            key=lambda x: -x['obs']
+        )[:30]
+        compact[name] = {
+            'obs':     rep.get('obs', 0),
+            'monthly': rep.get('monthly', [0]*12),
+            'art':     rep.get('art', len(sp_ids)),
+            'sp_ids':  sorted(sp_ids),          # lista för R2-lagring
+            'sp':      top_sp,                  # top-30 arter (id+sv+obs)
+            'pl':      top_pl,                  # top-30 lokaler
+            'dagar':   rep.get('dagar', 0),
+            'lastObs': rep.get('lastObs', ''),
+        }
+    save_data = {
+        'year':      data.get('year', year),
+        'last_date': data.get('last_date'),
+        'built_at':  _dt.now().isoformat()[:19],
+        'reporters': compact,
+    }
+    ok = _r2_put(_se_obs_r2_key(year), save_data)
     if ok:
-        print(f'  SE obs: sparad {_se_obs_r2_key(year)} ({len(data["reporters"])} observatörer, last={data["last_date"]})')
+        print(f'  SE obs: sparad {_se_obs_r2_key(year)} ({len(compact)} observatörer, last={data["last_date"]})')
     return ok
 
 def _fetch_county_obs_day(county_id, date_str):
@@ -1896,8 +1969,20 @@ def _fetch_county_obs_day(county_id, date_str):
             break
     return results
 
+def _se_rep_empty():
+    """Skapar ett tomt in-memory reporter-objekt."""
+    return {
+        'obs': 0, 'monthly': [0]*12,
+        'art': 0,        # antal unika arter (räknas upp vid ny taxon_id)
+        'sp_ids': set(), # set av taxon-ID-strängar (för deduplicering)
+        'sp_obs': {},    # {taxon_id: {'sv': str, 'obs': int}} – trimmas vid sparning
+        'pl_obs': {},    # {lokal: int} – trimmas vid sparning
+        'dagar': 0, 'lastObs': '',
+    }
+
 def _merge_se_records(reporters, records, date_str):
-    """Mergar SOS API-records in i reporters-dicten (in-place)."""
+    """Mergar SOS API-records in i reporters-dicten (in-place).
+    Använder kompakt in-memory-format med sp_ids/sp_obs/pl_obs."""
     seen_rd = set()  # (reporter, date) – för korrekt dagar-räkning
     for rec in records:
         taxon    = rec.get('taxon')      or {}
@@ -1924,21 +2009,27 @@ def _merge_se_records(reporters, records, date_str):
             month_0 = int(date_str[5:7]) - 1
 
         if reporter not in reporters:
-            reporters[reporter] = {
-                'obs': 0, 'monthly': [0]*12,
-                'species': {}, 'places': {},
-                'dagar': 0, 'lastObs': '',
-            }
+            reporters[reporter] = _se_rep_empty()
         rep = reporters[reporter]
         rep['obs'] += 1
         if 0 <= month_0 < 12:
             rep['monthly'][month_0] += 1
-        if taxon_id and sv_name:
-            if taxon_id not in rep['species']:
-                rep['species'][taxon_id] = {'sv': sv_name, 'obs': 0}
-            rep['species'][taxon_id]['obs'] += 1
+
+        # Artspårning – räkna unika taxon-ID och ackumulera obs
+        if taxon_id:
+            if taxon_id not in rep['sp_ids']:
+                rep['sp_ids'].add(taxon_id)
+                rep['art'] += 1
+            if taxon_id not in rep['sp_obs']:
+                rep['sp_obs'][taxon_id] = {'sv': sv_name or taxon_id, 'obs': 0}
+            elif sv_name and not rep['sp_obs'][taxon_id].get('sv'):
+                rep['sp_obs'][taxon_id]['sv'] = sv_name
+            rep['sp_obs'][taxon_id]['obs'] += 1
+
+        # Lokalspårning
         if locality:
-            rep['places'][locality] = rep['places'].get(locality, 0) + 1
+            rep['pl_obs'][locality] = rep['pl_obs'].get(locality, 0) + 1
+
         rd_key = (reporter, obs_date)
         if rd_key not in seen_rd:
             seen_rd.add(rd_key)
