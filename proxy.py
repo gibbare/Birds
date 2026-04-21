@@ -34,8 +34,78 @@ import xml.etree.ElementTree as _ET
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+# ── Cloudflare R2 (persistent cache) ───────────────────────────────────────
+_R2_ACCOUNT_ID = _os.environ.get('R2_ACCOUNT_ID', '')
+_R2_ACCESS_KEY = _os.environ.get('R2_ACCESS_KEY_ID', '')
+_R2_SECRET_KEY = _os.environ.get('R2_SECRET_ACCESS_KEY', '')
+_R2_BUCKET     = _os.environ.get('R2_BUCKET', 'birds-cache')
+_r2_client_obj = None
+_r2_client_lock = _threading.Lock()
+
+def _r2():
+    """Returnerar en boto3 S3-klient mot R2, eller None om ej konfigurerat."""
+    global _r2_client_obj
+    if not (_R2_ACCOUNT_ID and _R2_ACCESS_KEY and _R2_SECRET_KEY):
+        return None
+    with _r2_client_lock:
+        if _r2_client_obj is None:
+            try:
+                import boto3
+                _r2_client_obj = boto3.client(
+                    's3',
+                    endpoint_url=f'https://{_R2_ACCOUNT_ID}.r2.cloudflarestorage.com',
+                    aws_access_key_id=_R2_ACCESS_KEY,
+                    aws_secret_access_key=_R2_SECRET_KEY,
+                    region_name='auto',
+                )
+                print('  R2: klient skapad')
+            except Exception as _e:
+                print(f'  R2: kunde inte skapa klient – {_e}')
+        return _r2_client_obj
+
+def _r2_get(key):
+    """Läs ett JSON-objekt från R2. Returnerar dict/list eller None."""
+    client = _r2()
+    if not client:
+        return None
+    try:
+        resp = client.get_object(Bucket=_R2_BUCKET, Key=key)
+        return _json.loads(resp['Body'].read().decode('utf-8'))
+    except client.exceptions.NoSuchKey:
+        return None
+    except Exception as _e:
+        print(f'  R2 get {key}: {_e}')
+        return None
+
+def _r2_put(key, data):
+    """Skriv ett JSON-objekt till R2. Returnerar True vid lyckat."""
+    client = _r2()
+    if not client:
+        return False
+    try:
+        body = _json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8')
+        client.put_object(Bucket=_R2_BUCKET, Key=key, Body=body,
+                          ContentType='application/json')
+        return True
+    except Exception as _e:
+        print(f'  R2 put {key}: {_e}')
+        _log_error(f'R2 put {key}: {_e}')
+        return False
+
+def _r2_list(prefix='stats_cache_'):
+    """Lista R2-objekt med givet prefix. Returnerar lista av key-strängar."""
+    client = _r2()
+    if not client:
+        return []
+    try:
+        resp = client.list_objects_v2(Bucket=_R2_BUCKET, Prefix=prefix)
+        return [o['Key'] for o in resp.get('Contents', [])]
+    except Exception as _e:
+        print(f'  R2 list {prefix}: {_e}')
+        return []
+
 # ── Konstanter ─────────────────────────────────────────────────────────────
-APP_VERSION   = "3.4"          # Uppdatera vid varje deploy
+APP_VERSION   = "3.5"          # Uppdatera vid varje deploy
 _SERVER_START = _dt.now()      # Tidpunkt då servern startades
 
 # ── Fellogg (cirkulär buffer, max 500 poster) ────────────────────────────────
@@ -544,20 +614,25 @@ def get_breeding():
         pass
 
     # ── Cache-kontroll ──────────────────────────────────────────────────────
-    cache_path   = f"breeding_cache_{feature_id}_{year}_{min_act}.json"
+    cache_key_r2 = f"breeding_cache_{feature_id}_{year}_{min_act}.json"
     today        = str(_date_type.today())
     current_year = str(_date_type.today().year)
 
-    if _os.path.exists(cache_path):
-        try:
-            with open(cache_path, 'r', encoding='utf-8') as _cf:
-                _cached = _json.load(_cf)
-            # Innevarande år: cacha en dag; äldre år: cachas permanent
-            if year != current_year or _cached.get('cached_date') == today:
-                print(f"  breeding: cache-träff {cache_path}")
-                return jsonify(_cached['payload'])
-        except Exception as _ce:
-            _log_error(f"breeding cache read: {_ce}")
+    _cached = _r2_get(cache_key_r2)
+    if _cached is None:
+        # Fallback: lokalt filsystem (för lokal utveckling)
+        local_path = _os.path.join(_BASE_DIR, cache_key_r2)
+        if _os.path.exists(local_path):
+            try:
+                with open(local_path, 'r', encoding='utf-8') as _cf:
+                    _cached = _json.load(_cf)
+            except Exception as _ce:
+                _log_error(f"breeding cache read local: {_ce}")
+    if _cached is not None:
+        # Innevarande år: cacha en dag; äldre år: cachas permanent
+        if year != current_year or _cached.get('cached_date') == today:
+            print(f"  breeding: cache-träff {cache_key_r2}")
+            return jsonify(_cached['payload'])
 
     # SOS returnerar inte häckningsnivå i svaret – bestäm kategori via tre anrop:
     #   Tier A+B+C : birdNestActivityLimit >= 1
@@ -672,12 +747,15 @@ def get_breeding():
     }
 
     # ── Spara till cache ────────────────────────────────────────────────────
-    try:
-        with open(cache_path, 'w', encoding='utf-8') as _cf:
-            _json.dump({"cached_date": today, "payload": payload}, _cf,
-                       ensure_ascii=False)
-    except Exception as _ce:
-        _log_error(f"breeding cache write: {_ce}")
+    cache_data = {"cached_date": today, "payload": payload}
+    if not _r2_put(cache_key_r2, cache_data):
+        # Fallback: lokalt filsystem
+        try:
+            local_path = _os.path.join(_BASE_DIR, cache_key_r2)
+            with open(local_path, 'w', encoding='utf-8') as _cf:
+                _json.dump(cache_data, _cf, ensure_ascii=False)
+        except Exception as _ce:
+            _log_error(f"breeding cache write local: {_ce}")
 
     return jsonify(payload)
 
@@ -1471,19 +1549,21 @@ def _fetch_year_stats(year, county_id=None, max_month=12):
 
 
 def _save_cache(cache_key=None):
-    """Sparar cachefil(er).  Om cache_key anges sparas bara den posten (snabbt).
-    Annars sparas alla poster (används vid start/migrering).
-    Varje county+år sparas i en egen fil: stats_cache_24_2026.json"""
+    """Sparar cache till R2 (primärt) och lokalt filsystem (fallback).
+    Om cache_key anges sparas bara den posten."""
     with _stats_lock:
         snapshot = {cache_key: _stats_cache[cache_key]} if cache_key and cache_key in _stats_cache \
                    else dict(_stats_cache)
     for ck, data in snapshot.items():
+        r2_key = f"stats_cache_{ck}.json"
+        # ── R2 (primärt) ──
+        if _r2_put(r2_key, {ck: data}):
+            print(f'  Stats: sparad till R2: {r2_key}')
+            continue
+        # ── Lokalt filsystem (fallback för lokal utveckling) ──
         try:
             parts = ck.split('_', 1)
-            if len(parts) == 2:
-                filepath = _cache_file_for(parts[0], parts[1])
-            else:
-                filepath = _CACHE_FILE  # fallback
+            filepath = _cache_file_for(parts[0], parts[1]) if len(parts) == 2 else _CACHE_FILE
             with open(filepath, 'w', encoding='utf-8') as f:
                 _json.dump({ck: data}, f, ensure_ascii=False, indent=2)
         except Exception as e:
@@ -1529,31 +1609,47 @@ def _stats_builder():
     uppdaterar innevarande år var 6:e timme."""
     global _stats_cache
 
-    # ── Ladda per-år-filer (stats_cache_24_2026.json etc.) ──────────────────
+    # ── Ladda cache från R2 (primärt) ───────────────────────────────────────
     import glob as _glob
     loaded = {}
-    per_year_files = sorted(_glob.glob(_os.path.join(_BASE_DIR, 'stats_cache_*_*.json')))
-    for filepath in per_year_files:
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                data = _json.load(f)
-            loaded.update(data)
-        except Exception as e:
-            print(f'  Stats: kunde inte läsa {filepath} – {e}')
+    r2_keys = _r2_list('stats_cache_')
+    if r2_keys:
+        print(f'  Stats: laddar {len(r2_keys)} filer från R2…')
+        for key in r2_keys:
+            data = _r2_get(key)
+            if data:
+                loaded.update(data)
+        print(f'  Stats: {len(loaded)} poster laddade från R2')
+    else:
+        # ── Fallback: lokala filer (lokal utveckling eller första körning) ──
+        per_year_files = sorted(_glob.glob(_os.path.join(_BASE_DIR, 'stats_cache_*_*.json')))
+        for filepath in per_year_files:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    data = _json.load(f)
+                loaded.update(data)
+            except Exception as e:
+                print(f'  Stats: kunde inte läsa {filepath} – {e}')
 
-    # Fallback: gammal samlad fil (migrering)
-    if not loaded and _os.path.exists(_CACHE_FILE):
-        try:
-            with open(_CACHE_FILE, 'r', encoding='utf-8') as f:
-                old = _json.load(f)
-            for k, v in old.items():
-                if k.isdigit():
-                    loaded[f"{DEFAULT_COUNTY_ID}_{k}"] = v
-                else:
-                    loaded[k] = v
-            print(f'  Stats: migrerade gammal cache ({len(loaded)} poster)')
-        except Exception as e:
-            print(f'  Stats: kunde inte läsa gammal cache – {e}')
+        # Fallback: gammal samlad fil (migrering)
+        if not loaded and _os.path.exists(_CACHE_FILE):
+            try:
+                with open(_CACHE_FILE, 'r', encoding='utf-8') as f:
+                    old = _json.load(f)
+                for k, v in old.items():
+                    if k.isdigit():
+                        loaded[f"{DEFAULT_COUNTY_ID}_{k}"] = v
+                    else:
+                        loaded[k] = v
+                print(f'  Stats: migrerade gammal cache ({len(loaded)} poster)')
+            except Exception as e:
+                print(f'  Stats: kunde inte läsa gammal cache – {e}')
+
+        # Spara lokala filer upp till R2 om R2 är konfigurerat
+        if loaded and _r2():
+            print('  Stats: laddar upp lokal cache till R2…')
+            for ck, data in loaded.items():
+                _r2_put(f'stats_cache_{ck}.json', {ck: data})
 
     if loaded:
         with _stats_lock:
