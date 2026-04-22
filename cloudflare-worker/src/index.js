@@ -125,6 +125,22 @@ export default {
       }
     }
 
+    // ── /api/observer_species – alla artnamn för en observatör från R2 ─────
+    if (url.pathname === '/api/observer_species') {
+      const year = url.searchParams.get('year') || String(new Date().getFullYear());
+      const name = url.searchParams.get('name') || '';
+      if (!name) return jsonResp({ error: 'name_required' }, 400);
+      try {
+        const obj = await env.BUCKET.get(`observers_se_sp_${year}.json`);
+        if (!obj) return jsonResp({ species: [] });
+        const data = await obj.json();
+        const species = data.reporters?.[name] || [];
+        return jsonResp({ species });
+      } catch (e) {
+        return jsonResp({ error: e.message }, 500);
+      }
+    }
+
     // ── /api/statistics – R2 om cachad, annars Railway ────────────────────
     if (url.pathname === '/api/statistics') {
       const year     = url.searchParams.get('year')   || String(new Date().getFullYear());

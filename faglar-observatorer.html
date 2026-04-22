@@ -170,6 +170,29 @@
       .detail-box { padding: .9rem 1rem; }
     }
 
+    /* ── Alla arter – expanderbar lista ── */
+    .all-sp-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none; padding: .3rem 0;
+    }
+    .all-sp-toggle:hover h4 { color: #2b6cb0; }
+    .all-sp-arrow { font-size: .7rem; color: #a0aec0; transition: transform .2s; }
+    .all-sp-arrow.open { transform: rotate(90deg); }
+    .all-sp-list {
+      display: none; max-height: 260px; overflow-y: auto;
+      margin-top: .4rem; border: 1px solid #e2e8f0; border-radius: 6px;
+    }
+    .all-sp-list.visible { display: block; }
+    .all-sp-item {
+      display: flex; align-items: center; gap: .5rem;
+      padding: .22rem .6rem; font-size: .78rem;
+      border-bottom: 1px solid #f0f4f8;
+    }
+    .all-sp-item:last-child { border-bottom: none; }
+    .all-sp-rank { color: #a0aec0; width: 2rem; text-align: right; flex-shrink: 0; font-size:.72rem; }
+    .all-sp-name { flex: 1; color: #2d3748; }
+    .all-sp-obs  { color: #718096; font-size: .72rem; white-space: nowrap; }
+
     /* ── Månadsdiagram ── */
     .month-chart { display: flex; align-items: flex-end; gap: 3px; height: 60px; margin-top: .4rem; }
     .month-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
@@ -453,6 +476,15 @@ function buildDetail(r) {
       <h4>Månadsfördelning</h4>
       <div class="month-chart">${monHtml}</div>
     </div>
+    <div class="detail-section" style="margin-top:.75rem">
+      <div class="all-sp-toggle" onclick="toggleAllSpecies('${esc(r.name)}',this)">
+        <h4 style="margin:0">Alla ${r.art} arter</h4>
+        <span class="all-sp-arrow">▶</span>
+      </div>
+      <div class="all-sp-list" id="all-sp-${esc(r.name).replace(/\s+/g,'_')}">
+        <div class="all-sp-item" style="color:#a0aec0">Hämtar…</div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -496,6 +528,57 @@ function esc(s) {
 }
 
 fetchData();
+
+/* ── Alla arter – lazy fetch med cache ── */
+const _spCache = new Map();  // name → [{sv,obs}]
+
+async function toggleAllSpecies(name, toggleEl) {
+  const safeId = name.replace(/\s+/g, '_');
+  const listEl = document.getElementById(`all-sp-${safeId}`);
+  const arrow  = toggleEl.querySelector('.all-sp-arrow');
+  if (!listEl) return;
+
+  const isOpen = listEl.classList.contains('visible');
+  if (isOpen) {
+    listEl.classList.remove('visible');
+    arrow.classList.remove('open');
+    return;
+  }
+
+  listEl.classList.add('visible');
+  arrow.classList.add('open');
+
+  // Redan cachad?
+  if (_spCache.has(name)) {
+    renderSpList(listEl, _spCache.get(name));
+    return;
+  }
+
+  // Hämta från Worker
+  listEl.innerHTML = '<div class="all-sp-item" style="color:#a0aec0">Hämtar…</div>';
+  try {
+    const res  = await fetch(`${PROXY}/api/observer_species?name=${encodeURIComponent(name)}&year=2026`);
+    const data = await res.json();
+    const sp   = data.species || [];
+    _spCache.set(name, sp);
+    renderSpList(listEl, sp);
+  } catch (e) {
+    listEl.innerHTML = `<div class="all-sp-item" style="color:#e53e3e">Kunde inte hämta: ${e.message}</div>`;
+  }
+}
+
+function renderSpList(listEl, species) {
+  if (!species.length) {
+    listEl.innerHTML = '<div class="all-sp-item" style="color:#a0aec0">Inga artdata tillgängliga ännu.</div>';
+    return;
+  }
+  listEl.innerHTML = species.map((s, i) => `
+    <div class="all-sp-item">
+      <span class="all-sp-rank">${i + 1}</span>
+      <span class="all-sp-name">${esc(s.sv)}</span>
+      <span class="all-sp-obs">${s.obs} obs</span>
+    </div>`).join('');
+}
 
 /* ── Hamburgermeny ── */
 function toggleMenu() {

@@ -1972,8 +1972,30 @@ def _api_cache_from_compact(compact_data):
         'reporters': api_reps,
     }
 
+def _build_species_se(year, data):
+    """Bygg artfil för R2 – bara {sv, obs} per art per rapportör.
+    Ingen sp_ids, inget monthly – enbart det som artliste-endpointen behöver.
+    Estimerad storlek: ~15–25 MB för 8 000+ observatörer."""
+    reporters = {}
+    for name, rep in data.get('reporters', {}).items():
+        sp_obs = rep.get('sp_obs', {})
+        species = sorted(
+            [{'sv': v['sv'], 'obs': v['obs']} for v in sp_obs.values() if v.get('sv')],
+            key=lambda x: -x['obs'],
+        )
+        if species:
+            reporters[name] = species
+    return {
+        'year':     year,
+        'built_at': _dt.now().isoformat()[:19],
+        'reporters': reporters,
+    }
+
 def _save_se_obs_r2(year, data):
     """Komprimera och spara SE-observatörscachen till R2.
+    Sparar två filer:
+      observers_se_YYYY.json    – kompakt format för listvy (top-30 sp/pl + sp_ids)
+      observers_se_sp_YYYY.json – alla artnamn per observatör för detaljvy
     Returnerar (ok: bool, api_cache: dict) – api_cache är ett minimalt format
     lämpligt för _se_obs_cache (inga sp_ids, bara top-3 sp/pl)."""
     save_data = _build_compact_se(year, data)   # full compact → R2
@@ -1981,6 +2003,14 @@ def _save_se_obs_r2(year, data):
     if ok:
         print(f'  SE obs: sparad {_se_obs_r2_key(year)} '
               f'({len(save_data["reporters"])} observatörer, last={data["last_date"]})')
+
+    # Spara artfilen – alla artnamn per rapportör (lazy-laddas från webbappen)
+    sp_data = _build_species_se(year, data)
+    sp_key  = f'observers_se_sp_{year}.json'
+    sp_ok   = _r2_put(sp_key, sp_data)
+    if sp_ok:
+        print(f'  SE obs: sparad {sp_key} ({len(sp_data["reporters"])} rapportörer med artdata)')
+
     api_cache = _api_cache_from_compact(save_data)   # minimal → RAM
     return ok, api_cache
 
