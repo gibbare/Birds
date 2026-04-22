@@ -12,17 +12,39 @@
 
     header {
       background: linear-gradient(135deg, #1a4a7a, #2b6cb0);
-      color: white; padding: .5rem 1.5rem; text-align: center;
-      box-shadow: 0 2px 10px rgba(0,0,0,.25);
+      color: white; padding: .35rem 1rem;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25); position: relative;
     }
-    header h1 { font-size: 1.25rem; font-weight: 700; }
-
-    .page-tabs { display: flex; justify-content: center; background: #163d6a; }
-    .page-tab  { padding: .45rem 1.2rem; font-size: .78rem; font-weight: 700;
-                 color: rgba(255,255,255,.65); text-decoration: none;
-                 border-bottom: 3px solid transparent; letter-spacing: .02em; }
-    .page-tab:hover  { color: white; }
-    .page-tab.active { color: white; border-bottom-color: #63b3ed; }
+    .header-inner { display: flex; align-items: center; justify-content: space-between; }
+    .app-title { font-size: .95rem; font-weight: 700; }
+    .burger-btn {
+      background: none; border: none; color: white; font-size: 1.4rem;
+      cursor: pointer; padding: .15rem .4rem; line-height: 1;
+      border-radius: 4px; transition: background .15s;
+    }
+    .burger-btn:hover { background: rgba(255,255,255,.15); }
+    .burger-menu {
+      display: none; position: absolute; top: 100%; right: 0;
+      background: #1a3a5c; min-width: 170px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.35);
+      z-index: 100; border-radius: 0 0 8px 8px; overflow: hidden;
+    }
+    .burger-menu.open { display: block; }
+    .burger-item {
+      display: block; padding: .65rem 1.2rem;
+      color: rgba(255,255,255,.8); text-decoration: none;
+      font-size: .85rem; font-weight: 600;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      transition: background .12s, color .12s;
+    }
+    .burger-item:last-child { border-bottom: none; }
+    .burger-item:hover { background: rgba(255,255,255,.1); color: white; }
+    .burger-item.active { color: #63b3ed; }
+    .page-title-bar {
+      background: #163d6a; color: rgba(255,255,255,.7);
+      padding: .22rem 1rem; font-size: .7rem; font-weight: 700;
+      letter-spacing: .06em; text-transform: uppercase;
+    }
 
     .container { max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem 3rem; }
 
@@ -198,13 +220,19 @@
 </head>
 <body>
 
-<header><h1>🐦 Fågelobservationer Sverige</h1></header>
-<nav class="page-tabs">
-  <a href="faglar-vasterbotten.html" class="page-tab">📋 Dagslista</a>
-  <a href="faglar-statistik.html"    class="page-tab">📊 Statistik</a>
-  <a href="faglar-hackning.html"     class="page-tab">🥚 Häckning</a>
-  <a href="faglar-observatorer.html" class="page-tab active">🏆 Observatörer</a>
-</nav>
+<header>
+  <div class="header-inner">
+    <span class="app-title">Fågelobservationer</span>
+    <button class="burger-btn" onclick="toggleMenu()" aria-label="Öppna meny">&#9776;</button>
+  </div>
+  <nav class="burger-menu" id="burgerMenu">
+    <a href="faglar-vasterbotten.html" class="burger-item">Dagslista</a>
+    <a href="faglar-statistik.html"    class="burger-item">Statistik</a>
+    <a href="faglar-hackning.html"     class="burger-item">Häckning</a>
+    <a href="faglar-observatorer.html" class="burger-item active">Observatörer</a>
+  </nav>
+</header>
+<div class="page-title-bar">Observatörer</div>
 
 <div class="container">
 
@@ -456,6 +484,16 @@ function esc(s) {
 }
 
 fetchData();
+
+/* ── Hamburgermeny ── */
+function toggleMenu() {
+  document.getElementById('burgerMenu').classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('header')) {
+    document.getElementById('burgerMenu').classList.remove('open');
+  }
+});
 
 /* ── Versionsinfo i footer ── */
 fetch(`${PROXY}/api/version`)
