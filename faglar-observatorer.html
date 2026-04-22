@@ -141,23 +141,34 @@
                          color: #718096; margin-bottom: .5rem; border-bottom: 1px solid #e2e8f0;
                          padding-bottom: .3rem; }
 
-    .lokal-list-detail { display: flex; flex-direction: column; gap: .3rem; }
+    .lokal-list-detail { display: flex; flex-direction: column; gap: .35rem; }
     .lokal-item {
-      display: flex; align-items: center; gap: .5rem;
-      font-size: .83rem; color: #2d3748;
+      display: flex; align-items: center; gap: .4rem;
+      font-size: .8rem; color: #2d3748;
     }
-    .lokal-item .lokal-bar-wrap { flex: 1; background: #e2e8f0; border-radius: 99px; height: 6px; }
-    .lokal-item .lokal-bar { background: #2b6cb0; border-radius: 99px; height: 6px; }
-    .lokal-item .lokal-count { font-size: .75rem; color: #718096; width: 2.5rem; text-align: right; }
+    .lokal-item .lokal-name-text {
+      flex: 0 1 auto; min-width: 0; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 110px;
+    }
+    .lokal-item .lokal-bar-wrap { flex: 1; background: #e2e8f0; border-radius: 99px; height: 5px; min-width: 20px; }
+    .lokal-item .lokal-bar { background: #2b6cb0; border-radius: 99px; height: 5px; }
+    .lokal-item .lokal-count { font-size: .72rem; color: #718096; white-space: nowrap; }
 
-    .species-list { display: flex; flex-direction: column; gap: .3rem; }
-    .species-item {
-      display: flex; align-items: center; gap: .5rem; font-size: .83rem;
+    .species-list { display: flex; flex-direction: column; gap: .35rem; }
+    .species-item { display: flex; align-items: center; gap: .4rem; font-size: .8rem; }
+    .species-name { flex: 1; min-width: 0; color: #2d3748; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .species-bar-wrap { flex: 0 0 50px; background: #e2e8f0; border-radius: 99px; height: 5px; }
+    .species-bar { background: #276749; border-radius: 99px; height: 5px; }
+    .species-count { font-size: .72rem; color: #718096; white-space: nowrap; }
+
+    .detail-two-col {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;
     }
-    .species-name { flex: 1; color: #2d3748; }
-    .species-bar-wrap { width: 80px; background: #e2e8f0; border-radius: 99px; height: 6px; }
-    .species-bar { background: #276749; border-radius: 99px; height: 6px; }
-    .species-count { font-size: .75rem; color: #718096; width: 2.5rem; text-align: right; }
+    @media (max-width: 480px) {
+      .detail-two-col { grid-template-columns: 1fr; }
+      .detail-box { padding: .9rem 1rem; }
+    }
 
     /* ── Månadsdiagram ── */
     .month-chart { display: flex; align-items: flex-end; gap: 3px; height: 60px; margin-top: .4rem; }
@@ -409,9 +420,9 @@ function buildDetail(r) {
 
   const lokalHtml = r.lokaler.slice(0,3).map(l => `
     <div class="lokal-item">
-      <span style="flex:0 0 140px;font-weight:600">${esc(l.name)}</span>
+      <span class="lokal-name-text" title="${esc(l.name)}">${esc(l.name)}</span>
       <div class="lokal-bar-wrap"><div class="lokal-bar" style="width:${Math.round(l.obs/maxLok*100)}%"></div></div>
-      <span class="lokal-count">${l.obs} obs</span>
+      <span class="lokal-count">${l.obs}</span>
     </div>`).join('');
 
   const spHtml = r.species.slice(0,3).map(s => `
@@ -434,7 +445,7 @@ function buildDetail(r) {
       <div class="detail-card"><div class="dc-label">Unika arter</div><div class="dc-val" style="color:#276749">${r.art}</div></div>
       <div class="detail-card"><div class="dc-label">Aktiva dagar</div><div class="dc-val" style="color:#744210">${r.dagar}</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+    <div class="detail-two-col">
       <div class="detail-section"><h4>Topp 3 lokaler</h4><div class="lokal-list-detail">${lokalHtml}</div></div>
       <div class="detail-section"><h4>Topp 3 arter</h4><div class="species-list">${spHtml}</div></div>
     </div>
