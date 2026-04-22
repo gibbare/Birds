@@ -194,7 +194,7 @@
     .all-sp-obs  { color: #718096; font-size: .72rem; white-space: nowrap; }
 
     /* ── Månadsdiagram ── */
-    .month-chart { display: flex; align-items: flex-end; gap: 3px; height: 60px; margin-top: .4rem; }
+    .month-chart { display: flex; align-items: flex-end; gap: 3px; height: 56px; margin-top: 1rem; }
     .month-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
     .month-bar { width: 100%; background: #bee3f8; border-radius: 3px 3px 0 0;
                  transition: background .15s; min-height: 2px; }
@@ -461,7 +461,7 @@ function buildDetail(r) {
   const monHtml = r.monthly.map((v,i) => `
     <div class="month-bar-wrap">
       <div class="month-val">${v||''}</div>
-      <div class="month-bar" style="height:${v?Math.round(v/maxMon*52)+8:2}px" title="${MONTHS[i]}: ${v} obs"></div>
+      <div class="month-bar" style="height:${v?Math.round(v/maxMon*44)+6:2}px" title="${MONTHS[i]}: ${v} obs"></div>
       <div class="month-label">${MONTHS[i]}</div>
     </div>`).join('');
 
