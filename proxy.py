@@ -1890,7 +1890,8 @@ def _load_se_obs_r2(year):
         else:
             # ── Nytt kompakt format – sp_ids lista + top-30 listor ─────────────
             sp_ids = set(str(x) for x in d.get('sp_ids', []))
-            sp_obs = {item['id']: {'sv': item['sv'], 'obs': item['obs']}
+            sp_obs = {item['id']: {'sv': item['sv'], 'obs': item['obs'],
+                                   'ind': item.get('ind', item['obs'])}
                       for item in d.get('sp', []) if 'id' in item}
             pl_obs = {item['name']: item['obs'] for item in d.get('pl', [])}
             art    = d.get('art', len(sp_ids))
@@ -1923,8 +1924,9 @@ def _build_compact_se(year, data):
         sp_obs = rep.get('sp_obs', {})
         pl_obs = rep.get('pl_obs', {})
         top_sp = sorted(
-            [{'id': k, 'sv': v['sv'], 'obs': v['obs']} for k, v in sp_obs.items() if v.get('sv')],
-            key=lambda x: -x['obs']
+            [{'id': k, 'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
+             for k, v in sp_obs.items() if v.get('sv')],
+            key=lambda x: -x['ind']   # sortera på individer, inte rapporter
         )[:30]
         top_pl = sorted(
             [{'name': k, 'obs': v} for k, v in pl_obs.items()],
@@ -1980,8 +1982,9 @@ def _build_species_se(year, data):
     for name, rep in data.get('reporters', {}).items():
         sp_obs = rep.get('sp_obs', {})
         species = sorted(
-            [{'sv': v['sv'], 'obs': v['obs']} for v in sp_obs.values() if v.get('sv')],
-            key=lambda x: -x['obs'],
+            [{'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
+             for v in sp_obs.values() if v.get('sv')],
+            key=lambda x: -x['ind'],   # sortera på individer
         )
         if species:
             reporters[name] = species
@@ -2091,16 +2094,18 @@ def _merge_se_records(reporters, records, date_str):
         if 0 <= month_0 < 12:
             rep['monthly'][month_0] += 1
 
-        # Artspårning – räkna unika taxon-ID och ackumulera obs
+        # Artspårning – räkna unika taxon-ID, ackumulera obs (rapporter) och ind (individer)
         if taxon_id:
+            ind = int(occ.get('individualCount') or occ.get('quantity') or 1)
             if taxon_id not in rep['sp_ids']:
                 rep['sp_ids'].add(taxon_id)
                 rep['art'] += 1
             if taxon_id not in rep['sp_obs']:
-                rep['sp_obs'][taxon_id] = {'sv': sv_name or taxon_id, 'obs': 0}
+                rep['sp_obs'][taxon_id] = {'sv': sv_name or taxon_id, 'obs': 0, 'ind': 0}
             elif sv_name and not rep['sp_obs'][taxon_id].get('sv'):
                 rep['sp_obs'][taxon_id]['sv'] = sv_name
             rep['sp_obs'][taxon_id]['obs'] += 1
+            rep['sp_obs'][taxon_id]['ind'] = rep['sp_obs'][taxon_id].get('ind', 0) + ind
 
         # Lokalspårning
         if locality:

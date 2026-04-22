@@ -438,7 +438,6 @@ function renderAll() {
 
 function buildDetail(r) {
   const maxLok = r.lokaler[0]?.obs || 1;
-  const maxSp  = r.species[0]?.obs || 1;
   const maxMon = Math.max(...r.monthly, 1);
 
   const lokalHtml = r.lokaler.slice(0,3).map(l => `
@@ -448,12 +447,16 @@ function buildDetail(r) {
       <span class="lokal-count">${l.obs}</span>
     </div>`).join('');
 
-  const spHtml = r.species.slice(0,3).map(s => `
+  const maxSpInd = r.species[0]?.ind ?? r.species[0]?.obs ?? 1;
+  const spHtml = r.species.slice(0,3).map(s => {
+    const ind = s.ind ?? s.obs;
+    return `
     <div class="species-item">
       <span class="species-name">${esc(s.sv)}</span>
-      <div class="species-bar-wrap"><div class="species-bar" style="width:${Math.round(s.obs/maxSp*100)}%"></div></div>
-      <span class="species-count">${s.obs} obs</span>
-    </div>`).join('');
+      <div class="species-bar-wrap"><div class="species-bar" style="width:${Math.round(ind/maxSpInd*100)}%"></div></div>
+      <span class="species-count">${ind.toLocaleString('sv')} ind</span>
+    </div>`;
+  }).join('');
 
   const monHtml = r.monthly.map((v,i) => `
     <div class="month-bar-wrap">

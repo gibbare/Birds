@@ -44,7 +44,7 @@ function buildObserverResult(data) {
       art      = d.art || 0;
       topLokal = plList[0]?.name || '';
       lokaler  = plList.slice(0, 3).map(x => ({ name: x.name, obs: x.obs }));
-      species  = spList.slice(0, 3).map(x => ({ sv: x.sv,   obs: x.obs }));
+      species  = spList.slice(0, 3).map(x => ({ sv: x.sv, obs: x.obs, ind: x.ind ?? x.obs }));
     } else {
       // Gammalt format (species/places dicts) – bakåtkompatibilitet
       const sp = d.species || {};
