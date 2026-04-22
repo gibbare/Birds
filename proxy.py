@@ -1927,7 +1927,7 @@ def _build_compact_se(year, data):
             [{'id': k, 'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
              for k, v in sp_obs.items() if v.get('sv')],
             key=lambda x: -x['ind']   # sortera på individer, inte rapporter
-        )[:30]
+        )  # Ingen [:30]-gräns – alla artnamn sparas för att artlistan ska visa alla unika arter
         top_pl = sorted(
             [{'name': k, 'obs': v} for k, v in pl_obs.items()],
             key=lambda x: -x['obs']
