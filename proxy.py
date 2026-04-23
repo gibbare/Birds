@@ -2014,6 +2014,12 @@ def _save_se_obs_r2(year, data):
     if sp_ok:
         print(f'  SE obs: sparad {sp_key} ({len(sp_data["reporters"])} rapportörer med artdata)')
 
+    # Spara liten meta-fil (koordinatorn läser bara denna – inte den stora R2-filen)
+    _r2_put(f'observers_se_meta_{year}.json', {
+        'last_date': data.get('last_date', ''),
+        'built_at':  _dt.now().isoformat()[:19],
+    })
+
     api_cache = _api_cache_from_compact(save_data)   # minimal → RAM
     return ok, api_cache
 
@@ -2119,16 +2125,70 @@ def _merge_se_records(reporters, records, date_str):
             rep['lastObs'] = obs_date
 
 
-def _se_observers_builder():
-    """Bakgrundstråd: bygger/underhåller hela-Sverige-observatörscachen i R2 (observers_se_YYYY.json).
+def _se_build_one_pass(year):
+    """Bygger alla utestående dagar för year och avslutar.
 
-    Arbetar inkrementellt – ett datum i taget – och sparar till R2 efter varje datum
-    så att Railway-omstarter inte tappar framsteg.
-
-    Startar med 5 minuters fördröjning så att appen hinner stabilisera sig och
-    svara på användavanrop innan bakgrundsbygget börjar.
+    Körs ALLTID i en separat OS-process (via multiprocessing).
+    När funktionen returnerar avslutar processen och OS återtar
+    omedelbart all RAM – ingen Python-heap kvarhålls.
     """
-    # ── Ge appen 5 min att starta och hantera användaranrop först ───────────
+    today     = _date_type.today()
+    yesterday = (today - _timedelta(days=1)).isoformat()
+
+    data      = _load_se_obs_r2(year)
+    last      = data.get('last_date')
+    reporters = data.get('reporters', {})
+    data['reporters'] = reporters
+
+    if last:
+        nxt = (_dt.strptime(last, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
+    else:
+        nxt = f'{year}-01-01'
+
+    if nxt > yesterday:
+        # Redan à jour – säkerställ rätt R2-format och avsluta
+        _save_se_obs_r2(year, data)
+        print(f'  SE obs {year}: subprocess – à jour (last={last})')
+        return   # → process exit → OS frigör all RAM
+
+    # ── Bygg dag för dag ────────────────────────────────────────────────────
+    current = nxt
+    while current <= yesterday:
+        print(f'  SE obs: hämtar {current} ({len(SE_COUNTY_IDS)} län)…')
+        total_recs = 0
+        for cid in SE_COUNTY_IDS:
+            recs = _fetch_county_obs_day(cid, current)
+            if recs:
+                _merge_se_records(reporters, recs, current)
+                total_recs += len(recs)
+            _time.sleep(1.5)
+
+        data['last_date'] = current
+        data['year']      = year
+        _save_se_obs_r2(year, data)
+        # Uppdaterar INTE _se_obs_cache – koordinatorn ogiltigförklarar den efter exit
+
+        print(f'  SE obs {current}: {total_recs} records, {len(reporters)} observatörer totalt')
+        current = (_dt.strptime(current, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
+        _time.sleep(30)
+
+    print(f'  SE obs {year}: subprocess ikapp!')
+    # → process exit → OS återtar ALL RAM omedelbart
+
+
+def _se_observers_builder():
+    """Koordinatortråd – extremt lätt, håller bara ett datumvärde i minnet.
+
+    All tung beräkning (laddning av R2, summering, sparning) sker i
+    _se_build_one_pass() som körs i en separat process. När den processen
+    avslutar returnerar OS all dess RAM – Flask-processen förblir liten.
+
+    Minnesprofil:
+      Under bygge (~1,5 h):  ~500 MB i subprocess, Flask oförändrad (~150 MB)
+      Steady-state:          ~150 MB totalt – subprocess finns inte
+    """
+    import multiprocessing as _mp
+
     print('  SE obs: väntar 5 min innan start av bakgrundsbygge…')
     _time.sleep(300)
 
@@ -2146,10 +2206,7 @@ def _se_observers_builder():
         print('  SE obs: R2 ej konfigurerat – avbryter tråd')
         return
 
-    import gc as _gc
-
-    # Spårar sista byggda datum i minnet – undviker R2-laddning i onödan varje 6:e timme
-    last_built_date = None
+    last_built_date = None  # hålls i minnet mellan sov-cykler – enda data koordinatorn behöver
 
     while True:
         today     = _date_type.today()
@@ -2157,69 +2214,37 @@ def _se_observers_builder():
         yesterday = (today - _timedelta(days=1)).isoformat()
 
         # ── Snabbkontroll utan R2-laddning ────────────────────────────────────
-        # Om vi vet sedan senaste körning att vi är à jour, sov utan att ladda något.
         if last_built_date and last_built_date >= yesterday:
             print(f'  SE obs {year}: à jour (last={last_built_date}), sover 6h')
             _time.sleep(6 * 3600)
             continue
 
-        # ── Ladda från R2 (första körning eller ny dag tillgänglig) ───────────
-        data      = _load_se_obs_r2(year)
-        last      = data.get('last_date')
-        reporters = data.get('reporters', {})
-        data['reporters'] = reporters
-
-        # Bestäm nästa datum att bearbeta
-        if last:
-            nxt = (_dt.strptime(last, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
-        else:
-            nxt = f'{year}-01-01'
-
-        if nxt > yesterday:
-            # À jour efter laddning (kan hända vid nyårsskifte eller snabb omstart).
-            # Spara för att säkerställa att R2-filen är i rätt format.
-            ok, compact_data = _save_se_obs_r2(year, data)
-            with _se_obs_lock:
-                _se_obs_cache[year] = compact_data
-            last_built_date = last   # ← kom ihåg utan att hålla R2-data i minnet
-            data = None
-            reporters = None
-            _gc.collect()            # ← tipsa Python att frigöra minnet till OS
-            print(f'  SE obs {year}: à jour (last={last}), sover 6h')
-            _time.sleep(6 * 3600)
+        # ── Spawna subprocess för bygget ──────────────────────────────────────
+        print(f'  SE obs: startar subprocess för {year}…')
+        try:
+            p = _mp.get_context('fork').Process(
+                target=_se_build_one_pass, args=(year,), daemon=False)
+            p.start()
+            p.join()   # koordinatortråden väntar – Flask hanterar requests som vanligt
+        except Exception as exc:
+            print(f'  SE obs: kunde inte starta subprocess: {exc}, väntar 30 min')
+            _time.sleep(1800)
             continue
 
-        # ── Bearbeta datum för datum tills vi kommit ikapp ────────────────────
-        current = nxt
-        while current <= yesterday:
-            print(f'  SE obs: hämtar {current} ({len(SE_COUNTY_IDS)} län)…')
-            total_recs = 0
-            for cid in SE_COUNTY_IDS:
-                recs = _fetch_county_obs_day(cid, current)
-                if recs:
-                    _merge_se_records(reporters, recs, current)
-                    total_recs += len(recs)
-                _time.sleep(1.5)  # 1.5s per county – skonsamt mot SOS API
+        if p.exitcode != 0:
+            print(f'  SE obs: subprocess misslyckades (exit={p.exitcode}), väntar 30 min')
+            _time.sleep(1800)
+            continue
 
-            data['last_date'] = current
-            data['year']      = year
-            ok, compact = _save_se_obs_r2(year, data)
+        # ── Subprocess klart – läs last_date från liten meta-fil ─────────────
+        meta = _r2_get(f'observers_se_meta_{year}.json') or {}
+        last_built_date = meta.get('last_date') or yesterday
 
-            with _se_obs_lock:
-                _se_obs_cache[year] = compact
+        # Invalidera gammal API-cache – nästa request laddar ny data från R2
+        with _se_obs_lock:
+            _se_obs_cache.pop(year, None)
 
-            last_built_date = current   # ← uppdatera utan att hålla arbetsdata
-            print(f'  SE obs {current}: {total_recs} records, {len(reporters)} observatörer totalt')
-            current = (_dt.strptime(current, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
-
-            # Paus mellan dagar – ger plats för användaranrop
-            _time.sleep(30)
-
-        # ── Ikapp – frigör arbetsdata och sov ─────────────────────────────────
-        data = None
-        reporters = None
-        _gc.collect()                # ← tipsa Python att frigöra minnet till OS
-        print(f'  SE obs {year}: ikapp! sover 6h')
+        print(f'  SE obs {year}: subprocess klar (last={last_built_date}), sover 6h')
         _time.sleep(6 * 3600)
 
 
