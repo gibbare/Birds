@@ -2110,9 +2110,12 @@ def _se_rep_empty():
         'dagar': 0, 'lastObs': '',
     }
 
+_taxon_debug_logged = False   # logga råa taxon-objekt en gång per byggcykel
+
 def _merge_se_records(reporters, records, date_str):
     """Mergar SOS API-records in i reporters-dicten (in-place).
     Använder kompakt in-memory-format med sp_ids/sp_obs/pl_obs."""
+    global _taxon_debug_logged
     seen_rd = set()  # (reporter, date) – för korrekt dagar-räkning
     for rec in records:
         taxon    = rec.get('taxon')      or {}
@@ -2129,6 +2132,12 @@ def _merge_se_records(reporters, records, date_str):
         sci_name = (taxon.get('scientificName') or '').strip()
         infra    = (taxon.get('infraspecificEpithet') or '').strip()
         t_rank   = (taxon.get('taxonRank') or '').lower().strip()
+
+        # ── DEBUG: logga råa taxon-objekt en gång per byggcykel ─────────────
+        if not _taxon_debug_logged and taxon_id:
+            import json as _json
+            print(f'  [TAXON-DEBUG] Råt taxon-objekt: {_json.dumps(taxon, ensure_ascii=False, default=str)[:2000]}')
+            _taxon_debug_logged = True
         locality = (location.get('locality') or location.get('name') or '').strip()
         if not locality:
             muni = location.get('municipality') or {}
@@ -2148,14 +2157,13 @@ def _merge_se_records(reporters, records, date_str):
             t_rank in ('hybrid', 'nothospecies', 'nothosubspecies', 'nothovarietas',
                        'nothomorph', 'nothogenus')
         )
-        # Underart: infraspecifikt epitet finns ELLER rank är infraspecifik nivå
-        # FALLBACK: trinomialt vetenskapligt namn (3 ord = "Genus species subsp")
+        # Underart: infraspecifikt epitet ELLER rank-fält (om API returnerar det)
+        # OBS: 3-ords-namnregeln är borttagen – den är opålitlig pga taxonomiändringar
         is_sub = (not is_hybrid) and (
             bool(infra) or
             t_rank in ('subspecies', 'variety', 'varietas', 'form', 'forma',
                        'infraspecies', 'subvariety', 'subforma',
-                       'subspecific aggregate') or
-            (sci_name and len(sci_name.split()) >= 3)
+                       'subspecific aggregate')
         )
 
         if reporter not in reporters:
