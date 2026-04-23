@@ -39,8 +39,10 @@ function buildObserverResult(data) {
 
     if (Array.isArray(d.sp)) {
       // Nytt kompakt format
-      const spList = d.sp || [];
-      const plList = d.pl || [];
+      const spList  = d.sp    || [];
+      const subList = d.subsp || [];
+      const hybList = d.hybsp || [];
+      const plList  = d.pl   || [];
       art      = d.art || 0;
       topLokal = plList[0]?.name || '';
       lokaler  = plList.slice(0, 3).map(x => ({ name: x.name, obs: x.obs }));
@@ -64,11 +66,15 @@ function buildObserverResult(data) {
       name,
       obs:     d.obs     || 0,
       art,
+      sub:     d.sub     || 0,
+      hyb:     d.hyb     || 0,
       dagar:   d.dagar   || 0,
       lastObs: d.lastObs || '',
       topLokal,
       lokaler,
       species,
+      subsp:   Array.isArray(d.subsp) ? d.subsp.slice(0, 3).map(x => ({ sv: x.sv, obs: x.obs, ind: x.ind ?? x.obs })) : [],
+      hybsp:   Array.isArray(d.hybsp) ? d.hybsp.slice(0, 3).map(x => ({ sv: x.sv, obs: x.obs, ind: x.ind ?? x.obs })) : [],
       monthly: d.monthly || Array(12).fill(0),
     });
   }
@@ -125,17 +131,25 @@ export default {
       }
     }
 
-    // ── /api/observer_species – alla artnamn för en observatör från R2 ─────
+    // ── /api/observer_species – arter/underarter/hybrider för en observatör ──
     if (url.pathname === '/api/observer_species') {
       const year = url.searchParams.get('year') || String(new Date().getFullYear());
       const name = url.searchParams.get('name') || '';
       if (!name) return jsonResp({ error: 'name_required' }, 400);
       try {
         const obj = await env.BUCKET.get(`observers_se_sp_${year}.json`);
-        if (!obj) return jsonResp({ species: [] });
+        if (!obj) return jsonResp({ sp: [], sub: [], hyb: [] });
         const data = await obj.json();
-        const species = data.reporters?.[name] || [];
-        return jsonResp({ species });
+        const rep = data.reporters?.[name] || {};
+        // Stöd både nytt format {sp, sub, hyb} och gammalt format (platt array)
+        if (Array.isArray(rep)) {
+          return jsonResp({ sp: rep, sub: [], hyb: [] });
+        }
+        return jsonResp({
+          sp:  rep.sp  || [],
+          sub: rep.sub || [],
+          hyb: rep.hyb || [],
+        });
       } catch (e) {
         return jsonResp({ error: e.message }, 500);
       }

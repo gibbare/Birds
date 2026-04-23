@@ -1896,12 +1896,27 @@ def _load_se_obs_r2(year):
             pl_obs = {item['name']: item['obs'] for item in d.get('pl', [])}
             art    = d.get('art', len(sp_ids))
 
+        # ── Underarter ────────────────────────────────────────────────────────
+        sub_ids = set(str(x) for x in d.get('sub_ids', []))
+        sub_obs = {item['id']: {'sv': item['sv'], 'obs': item['obs'],
+                                'ind': item.get('ind', item['obs'])}
+                   for item in d.get('subsp', []) if 'id' in item}
+        # ── Hybrider ──────────────────────────────────────────────────────────
+        hyb_ids = set(str(x) for x in d.get('hyb_ids', []))
+        hyb_obs = {item['id']: {'sv': item['sv'], 'obs': item['obs'],
+                                'ind': item.get('ind', item['obs'])}
+                   for item in d.get('hybsp', []) if 'id' in item}
+
         reporters[name] = {
             'obs':     d.get('obs', 0),
             'monthly': d.get('monthly', [0]*12),
             'art':     art,
             'sp_ids':  sp_ids,
             'sp_obs':  sp_obs,
+            'sub_ids': sub_ids,
+            'sub_obs': sub_obs,
+            'hyb_ids': hyb_ids,
+            'hyb_obs': hyb_obs,
             'pl_obs':  pl_obs,
             'dagar':   d.get('dagar', 0),
             'lastObs': d.get('lastObs', ''),
@@ -1920,14 +1935,21 @@ def _build_compact_se(year, data):
     reporters = data.get('reporters', {})
     compact = {}
     for name, rep in reporters.items():
-        sp_ids = rep.get('sp_ids', set())
-        sp_obs = rep.get('sp_obs', {})
-        pl_obs = rep.get('pl_obs', {})
-        top_sp = sorted(
-            [{'id': k, 'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
-             for k, v in sp_obs.items() if v.get('sv')],
-            key=lambda x: -x['ind']   # sortera på individer, inte rapporter
-        )  # Ingen [:30]-gräns – alla artnamn sparas för att artlistan ska visa alla unika arter
+        sp_ids  = rep.get('sp_ids',  set())
+        sp_obs  = rep.get('sp_obs',  {})
+        sub_ids = rep.get('sub_ids', set())
+        sub_obs = rep.get('sub_obs', {})
+        hyb_ids = rep.get('hyb_ids', set())
+        hyb_obs = rep.get('hyb_obs', {})
+        pl_obs  = rep.get('pl_obs',  {})
+
+        def _sorted_sp(obs_dict):
+            return sorted(
+                [{'id': k, 'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
+                 for k, v in obs_dict.items() if v.get('sv')],
+                key=lambda x: -x['ind']
+            )
+
         top_pl = sorted(
             [{'name': k, 'obs': v} for k, v in pl_obs.items()],
             key=lambda x: -x['obs']
@@ -1936,8 +1958,14 @@ def _build_compact_se(year, data):
             'obs':     rep.get('obs', 0),
             'monthly': rep.get('monthly', [0]*12),
             'art':     rep.get('art', len(sp_ids)),
+            'sub':     len(sub_ids),
+            'hyb':     len(hyb_ids),
             'sp_ids':  sorted(sp_ids),
-            'sp':      top_sp,
+            'sub_ids': sorted(sub_ids),
+            'hyb_ids': sorted(hyb_ids),
+            'sp':      _sorted_sp(sp_obs),    # alla arter (ingen gräns)
+            'subsp':   _sorted_sp(sub_obs),   # alla underarter
+            'hybsp':   _sorted_sp(hyb_obs),   # alla hybrider
             'pl':      top_pl,
             'dagar':   rep.get('dagar', 0),
             'lastObs': rep.get('lastObs', ''),
@@ -1957,16 +1985,22 @@ def _api_cache_from_compact(compact_data):
     15 000 observatörer × ~500 B = ~7 MB istället för ~450 MB."""
     api_reps = {}
     for name, d in compact_data.get('reporters', {}).items():
-        sp_list = d.get('sp', [])
-        pl_list = d.get('pl', [])
+        sp_list  = d.get('sp',    [])
+        pl_list  = d.get('pl',    [])
+        sub_list = d.get('subsp', [])
+        hyb_list = d.get('hybsp', [])
         api_reps[name] = {
-            'obs':     d.get('obs', 0),
-            'art':     d.get('art', 0),
+            'obs':     d.get('obs',  0),
+            'art':     d.get('art',  0),
+            'sub':     d.get('sub',  0),
+            'hyb':     d.get('hyb',  0),
             'dagar':   d.get('dagar', 0),
             'lastObs': d.get('lastObs', ''),
             'monthly': d.get('monthly', [0]*12),
-            'sp':      sp_list[:3],   # top-3 räcker – API visar aldrig mer
-            'pl':      pl_list[:3],   # top-3 räcker
+            'sp':      sp_list[:3],    # top-3 räcker – API visar aldrig mer
+            'pl':      pl_list[:3],
+            'subsp':   sub_list[:3],   # top-3 för preview i detalj
+            'hybsp':   hyb_list[:3],
         }
     return {
         'year':      compact_data.get('year'),
@@ -1975,22 +2009,29 @@ def _api_cache_from_compact(compact_data):
     }
 
 def _build_species_se(year, data):
-    """Bygg artfil för R2 – bara {sv, obs} per art per rapportör.
-    Ingen sp_ids, inget monthly – enbart det som artliste-endpointen behöver.
-    Estimerad storlek: ~15–25 MB för 8 000+ observatörer."""
+    """Bygg artfil för R2 – {sv, obs, ind} per art/underart/hybrid per rapportör.
+    Returnerar separata listor 'sp', 'sub', 'hyb' per observatör.
+    Ingen sp_ids, inget monthly – enbart det som artliste-endpointen behöver."""
+    def _sp_list(obs_dict):
+        return sorted(
+            [{'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
+             for v in obs_dict.values() if v.get('sv')],
+            key=lambda x: -x['ind'],
+        )
     reporters = {}
     for name, rep in data.get('reporters', {}).items():
-        sp_obs = rep.get('sp_obs', {})
-        species = sorted(
-            [{'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
-             for v in sp_obs.values() if v.get('sv')],
-            key=lambda x: -x['ind'],   # sortera på individer
-        )
-        if species:
-            reporters[name] = species
+        entry = {}
+        sp  = _sp_list(rep.get('sp_obs',  {}))
+        sub = _sp_list(rep.get('sub_obs', {}))
+        hyb = _sp_list(rep.get('hyb_obs', {}))
+        if sp:   entry['sp']  = sp
+        if sub:  entry['sub'] = sub
+        if hyb:  entry['hyb'] = hyb
+        if entry:
+            reporters[name] = entry
     return {
-        'year':     year,
-        'built_at': _dt.now().isoformat()[:19],
+        'year':      year,
+        'built_at':  _dt.now().isoformat()[:19],
         'reporters': reporters,
     }
 
@@ -2058,10 +2099,14 @@ def _se_rep_empty():
     """Skapar ett tomt in-memory reporter-objekt."""
     return {
         'obs': 0, 'monthly': [0]*12,
-        'art': 0,        # antal unika arter (räknas upp vid ny taxon_id)
-        'sp_ids': set(), # set av taxon-ID-strängar (för deduplicering)
-        'sp_obs': {},    # {taxon_id: {'sv': str, 'obs': int}} – trimmas vid sparning
-        'pl_obs': {},    # {lokal: int} – trimmas vid sparning
+        'art': 0,         # antal unika ARTER (underarter/hybrider ej inräknade)
+        'sp_ids': set(),  # taxon-IDs för riktiga arter
+        'sp_obs': {},     # {taxon_id: {'sv', 'obs', 'ind'}} – riktiga arter
+        'sub_ids': set(), # taxon-IDs för underarter
+        'sub_obs': {},    # {taxon_id: {'sv', 'obs', 'ind'}} – underarter
+        'hyb_ids': set(), # taxon-IDs för hybrider
+        'hyb_obs': {},    # {taxon_id: {'sv', 'obs', 'ind'}} – hybrider
+        'pl_obs': {},     # {lokal: int} – trimmas vid sparning
         'dagar': 0, 'lastObs': '',
     }
 
@@ -2081,6 +2126,9 @@ def _merge_se_records(reporters, records, date_str):
 
         taxon_id = str(taxon.get('id') or taxon.get('taxonId') or taxon.get('dyntaxaId') or '')
         sv_name  = (taxon.get('vernacularName') or taxon.get('commonName') or '').strip()
+        sci_name = (taxon.get('scientificName') or '').strip()
+        infra    = (taxon.get('infraspecificEpithet') or '').strip()
+        t_rank   = (taxon.get('taxonRank') or '').lower().strip()
         locality = (location.get('locality') or location.get('name') or '').strip()
         if not locality:
             muni = location.get('municipality') or {}
@@ -2093,6 +2141,21 @@ def _merge_se_records(reporters, records, date_str):
         except (ValueError, IndexError):
             month_0 = int(date_str[5:7]) - 1
 
+        # ── Klassificera taxon: art / underart / hybrid ─────────────────────────
+        # Hybrid: × i vetenskapligt namn ELLER rank indikerar hybrid
+        is_hybrid = (
+            '×' in sci_name or
+            t_rank in ('hybrid', 'nothospecies', 'nothosubspecies', 'nothovarietas',
+                       'nothomorph', 'nothogenus')
+        )
+        # Underart: infraspecifikt epitet finns ELLER rank är infraspecifik nivå
+        is_sub = (not is_hybrid) and (
+            bool(infra) or
+            t_rank in ('subspecies', 'variety', 'varietas', 'form', 'forma',
+                       'infraspecies', 'subvariety', 'subforma',
+                       'subspecific aggregate')
+        )
+
         if reporter not in reporters:
             reporters[reporter] = _se_rep_empty()
         rep = reporters[reporter]
@@ -2100,18 +2163,32 @@ def _merge_se_records(reporters, records, date_str):
         if 0 <= month_0 < 12:
             rep['monthly'][month_0] += 1
 
-        # Artspårning – räkna unika taxon-ID, ackumulera obs (rapporter) och ind (individer)
+        # Artspårning – routa till rätt bucket och räkna individer
         if taxon_id:
             ind = int(occ.get('individualCount') or occ.get('quantity') or 1)
-            if taxon_id not in rep['sp_ids']:
-                rep['sp_ids'].add(taxon_id)
-                rep['art'] += 1
-            if taxon_id not in rep['sp_obs']:
-                rep['sp_obs'][taxon_id] = {'sv': sv_name or taxon_id, 'obs': 0, 'ind': 0}
-            elif sv_name and not rep['sp_obs'][taxon_id].get('sv'):
-                rep['sp_obs'][taxon_id]['sv'] = sv_name
-            rep['sp_obs'][taxon_id]['obs'] += 1
-            rep['sp_obs'][taxon_id]['ind'] = rep['sp_obs'][taxon_id].get('ind', 0) + ind
+            if is_hybrid:
+                bucket_ids = rep['hyb_ids']
+                bucket_obs = rep['hyb_obs']
+                count_art  = False
+            elif is_sub:
+                bucket_ids = rep['sub_ids']
+                bucket_obs = rep['sub_obs']
+                count_art  = False
+            else:
+                bucket_ids = rep['sp_ids']
+                bucket_obs = rep['sp_obs']
+                count_art  = True
+
+            if taxon_id not in bucket_ids:
+                bucket_ids.add(taxon_id)
+                if count_art:
+                    rep['art'] += 1
+            if taxon_id not in bucket_obs:
+                bucket_obs[taxon_id] = {'sv': sv_name or taxon_id, 'obs': 0, 'ind': 0}
+            elif sv_name and not bucket_obs[taxon_id].get('sv'):
+                bucket_obs[taxon_id]['sv'] = sv_name
+            bucket_obs[taxon_id]['obs'] += 1
+            bucket_obs[taxon_id]['ind'] = bucket_obs[taxon_id].get('ind', 0) + ind
 
         # Lokalspårning
         if locality:

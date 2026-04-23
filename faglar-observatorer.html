@@ -170,12 +170,16 @@
       .detail-box { padding: .9rem 1rem; }
     }
 
-    /* ── Alla arter – expanderbar lista ── */
+    /* ── Expanderbara listor: arter / underarter / hybrider ── */
     .all-sp-toggle {
       display: flex; align-items: center; justify-content: space-between;
       cursor: pointer; user-select: none; padding: .3rem 0;
     }
     .all-sp-toggle:hover h4 { color: #2b6cb0; }
+    .all-sub-toggle:hover h4 { color: #92400e; }
+    .all-hyb-toggle:hover h4 { color: #553c9a; }
+    .all-sub-toggle h4 { color: #b45309; }
+    .all-hyb-toggle h4 { color: #6b46c1; }
     .all-sp-arrow { font-size: .7rem; color: #a0aec0; transition: transform .2s; }
     .all-sp-arrow.open { transform: rotate(90deg); }
     .all-sp-list {
@@ -465,6 +469,28 @@ function buildDetail(r) {
       <div class="month-label">${MONTHS[i]}</div>
     </div>`).join('');
 
+  const safeId = esc(r.name).replace(/\s+/g,'_');
+  const subSect = (r.sub > 0) ? `
+    <div class="detail-section" style="margin-top:.4rem">
+      <div class="all-sp-toggle all-sub-toggle" onclick="toggleSpList('${esc(r.name)}','sub',this)">
+        <h4 style="margin:0">${r.sub} underarter</h4>
+        <span class="all-sp-arrow">▶</span>
+      </div>
+      <div class="all-sp-list" id="sub-list-${safeId}">
+        <div class="all-sp-item" style="color:#a0aec0">Hämtar…</div>
+      </div>
+    </div>` : '';
+  const hybSect = (r.hyb > 0) ? `
+    <div class="detail-section" style="margin-top:.4rem">
+      <div class="all-sp-toggle all-hyb-toggle" onclick="toggleSpList('${esc(r.name)}','hyb',this)">
+        <h4 style="margin:0">${r.hyb} hybrider</h4>
+        <span class="all-sp-arrow">▶</span>
+      </div>
+      <div class="all-sp-list" id="hyb-list-${safeId}">
+        <div class="all-sp-item" style="color:#a0aec0">Hämtar…</div>
+      </div>
+    </div>` : '';
+
   return `<div class="detail-box">
     <div class="detail-grid">
       <div class="detail-card"><div class="dc-label">Observationer</div><div class="dc-val">${r.obs.toLocaleString('sv')}</div></div>
@@ -480,14 +506,15 @@ function buildDetail(r) {
       <div class="month-chart">${monHtml}</div>
     </div>
     <div class="detail-section" style="margin-top:.75rem">
-      <div class="all-sp-toggle" onclick="toggleAllSpecies('${esc(r.name)}',this)">
+      <div class="all-sp-toggle" onclick="toggleSpList('${esc(r.name)}','sp',this)">
         <h4 style="margin:0">Alla ${r.art} arter</h4>
         <span class="all-sp-arrow">▶</span>
       </div>
-      <div class="all-sp-list" id="all-sp-${esc(r.name).replace(/\s+/g,'_')}">
+      <div class="all-sp-list" id="sp-list-${safeId}">
         <div class="all-sp-item" style="color:#a0aec0">Hämtar…</div>
       </div>
     </div>
+    ${subSect}${hybSect}
   </div>`;
 }
 
@@ -532,12 +559,26 @@ function esc(s) {
 
 fetchData();
 
-/* ── Alla arter – lazy fetch med cache ── */
-const _spCache = new Map();  // name → [{sv,obs}]
+/* ── Arter / underarter / hybrider – lazy fetch med cache ── */
+const _spCache = new Map();  // name → {sp:[], sub:[], hyb:[]}
 
-async function toggleAllSpecies(name, toggleEl) {
+async function _fetchSpData(name) {
+  if (_spCache.has(name)) return _spCache.get(name);
+  const res  = await fetch(`${PROXY}/api/observer_species?name=${encodeURIComponent(name)}&year=2026`);
+  const data = await res.json();
+  // Bakåtkompatibilitet: om API returnerar gammalt platt format
+  const result = Array.isArray(data)
+    ? { sp: data, sub: [], hyb: [] }
+    : { sp: data.sp || [], sub: data.sub || [], hyb: data.hyb || [] };
+  _spCache.set(name, result);
+  return result;
+}
+
+// type = 'sp' | 'sub' | 'hyb'
+async function toggleSpList(name, type, toggleEl) {
   const safeId = name.replace(/\s+/g, '_');
-  const listEl = document.getElementById(`all-sp-${safeId}`);
+  const listId = `${type}-list-${safeId}`;
+  const listEl = document.getElementById(listId);
   const arrow  = toggleEl.querySelector('.all-sp-arrow');
   if (!listEl) return;
 
@@ -547,24 +588,14 @@ async function toggleAllSpecies(name, toggleEl) {
     arrow.classList.remove('open');
     return;
   }
-
   listEl.classList.add('visible');
   arrow.classList.add('open');
 
-  // Redan cachad?
-  if (_spCache.has(name)) {
-    renderSpList(listEl, _spCache.get(name));
-    return;
-  }
-
-  // Hämta från Worker
+  // Hämta (eller hämta från cache) och rendera
   listEl.innerHTML = '<div class="all-sp-item" style="color:#a0aec0">Hämtar…</div>';
   try {
-    const res  = await fetch(`${PROXY}/api/observer_species?name=${encodeURIComponent(name)}&year=2026`);
-    const data = await res.json();
-    const sp   = data.species || [];
-    _spCache.set(name, sp);
-    renderSpList(listEl, sp);
+    const data = await _fetchSpData(name);
+    renderSpList(listEl, data[type] || []);
   } catch (e) {
     listEl.innerHTML = `<div class="all-sp-item" style="color:#e53e3e">Kunde inte hämta: ${e.message}</div>`;
   }
@@ -572,14 +603,14 @@ async function toggleAllSpecies(name, toggleEl) {
 
 function renderSpList(listEl, species) {
   if (!species.length) {
-    listEl.innerHTML = '<div class="all-sp-item" style="color:#a0aec0">Inga artdata tillgängliga ännu.</div>';
+    listEl.innerHTML = '<div class="all-sp-item" style="color:#a0aec0">Inga data tillgängliga ännu.</div>';
     return;
   }
   listEl.innerHTML = species.map((s, i) => `
     <div class="all-sp-item">
       <span class="all-sp-rank">${i + 1}</span>
       <span class="all-sp-name">${esc(s.sv)}</span>
-      <span class="all-sp-obs">${s.obs} obs</span>
+      <span class="all-sp-obs">${s.obs} obs · ${(s.ind ?? s.obs).toLocaleString('sv')} ind</span>
     </div>`).join('');
 }
 
