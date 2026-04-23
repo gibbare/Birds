@@ -2110,6 +2110,16 @@ def _se_rep_empty():
         'dagar': 0, 'lastObs': '',
     }
 
+# ── Svenska taxonomi-overrides (Dyntaxa vs GBIF) ────────────────────────────
+# Vetenskapliga namn där Dyntaxa och GBIF/BirdLife är oense.
+# GBIF returnerar SPECIES för dessa, men i Dyntaxa/Artportalen är de underarter.
+# Nyckel: kanoniskt vetenskapligt namn (lowercase), värde: 'sp'|'sub'|'hyb'
+_SWEDISH_TAXON_OVERRIDES = {
+    'corvus cornix':   'sub',   # gråkråka  – underart av kråka i Dyntaxa
+    'corvus corone':   'sub',   # svartkråka – underart av kråka i Dyntaxa
+}
+
+
 def _gbif_rank(sci_name):
     """Slår upp taxon-rank via GBIF species/match.
     Returnerar 'sp', 'sub' eller 'hyb'.
@@ -2118,6 +2128,10 @@ def _gbif_rank(sci_name):
         return 'sp'
     if '×' in sci_name:
         return 'hyb'
+    # Kolla svenska override-tabellen först
+    override = _SWEDISH_TAXON_OVERRIDES.get(sci_name.lower().strip())
+    if override:
+        return override
     try:
         r = requests.get(
             'https://api.gbif.org/v1/species/match',
