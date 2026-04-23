@@ -2149,11 +2149,13 @@ def _merge_se_records(reporters, records, date_str):
                        'nothomorph', 'nothogenus')
         )
         # Underart: infraspecifikt epitet finns ELLER rank är infraspecifik nivå
+        # FALLBACK: trinomialt vetenskapligt namn (3 ord = "Genus species subsp")
         is_sub = (not is_hybrid) and (
             bool(infra) or
             t_rank in ('subspecies', 'variety', 'varietas', 'form', 'forma',
                        'infraspecies', 'subvariety', 'subforma',
-                       'subspecific aggregate')
+                       'subspecific aggregate') or
+            (sci_name and len(sci_name.split()) >= 3)
         )
 
         if reporter not in reporters:
