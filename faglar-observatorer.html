@@ -606,9 +606,9 @@ function renderSpList(listEl, species) {
     listEl.innerHTML = '<div class="all-sp-item" style="color:#a0aec0">Inga data tillgängliga ännu.</div>';
     return;
   }
-  listEl.innerHTML = species.map((s, i) => `
+  const sorted = [...species].sort((a, b) => (a.sv || '').localeCompare(b.sv || '', 'sv'));
+  listEl.innerHTML = sorted.map(s => `
     <div class="all-sp-item">
-      <span class="all-sp-rank">${i + 1}</span>
       <span class="all-sp-name">${esc(s.sv)}</span>
       <span class="all-sp-obs">${s.obs} obs · ${(s.ind ?? s.obs).toLocaleString('sv')} ind</span>
     </div>`).join('');
