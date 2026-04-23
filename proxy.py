@@ -2222,23 +2222,27 @@ def _se_build_one_pass(year):
     today     = _date_type.today()
     yesterday = (today - _timedelta(days=1)).isoformat()
 
-    # ── DEBUG: hämta ett känt taxon via Taxon/Search för att se fältstrukturen ──
-    try:
-        import json as _json
-        _test_resp = requests.post(
-            f'{SOS_API_BASE}/Taxon/Search',
-            headers=_auth_headers(),
-            json={'ids': [100004, 267497], 'take': 2},   # kungsfiskare + trolig underart
-            timeout=10
-        )
-        print(f'  [TAXON-API-DEBUG] HTTP {_test_resp.status_code}')
-        if _test_resp.ok:
-            _td = _test_resp.json()
-            _taxa = _td.get('taxa') or _td.get('records') or (_td if isinstance(_td, list) else [])
-            for _t in _taxa[:3]:
-                print(f'  [TAXON-API-DEBUG] {_json.dumps(_t, ensure_ascii=False, default=str)[:2000]}')
-    except Exception as _e:
-        print(f'  [TAXON-API-DEBUG] fel: {_e}')
+    # ── DEBUG: prova olika taxon-API:er för att hitta rank-info ────────────────
+    import json as _json
+    _TEST_IDS = [100004, 102933, 267497]   # kungsfiskare, gräsand, + ett ID till
+    _endpoints = [
+        ('SOS /Taxon GET',   'GET',  f'{SOS_API_BASE}/Taxon',
+         {'params': {'ids': ','.join(str(i) for i in _TEST_IDS)}}),
+        ('SOS /Taxon/100004','GET',  f'{SOS_API_BASE}/Taxon/100004', {}),
+        ('Taxon v2 GET',     'GET',  'https://api.artdatabanken.se/taxon/v2/taxon/100004', {}),
+        ('Taxon v1 GET',     'GET',  'https://api.artdatabanken.se/taxon/v1/taxon/100004', {}),
+        ('GBIF match',       'GET',  'https://api.gbif.org/v1/species/match',
+         {'params': {'name': 'Alcedo atthis', 'kingdom': 'Animalia'}}),
+        ('GBIF sp GET',      'GET',  'https://api.gbif.org/v1/species/2476959', {}),
+    ]
+    for _label, _meth, _url, _kw in _endpoints:
+        try:
+            _r = requests.request(_meth, _url, headers=_auth_headers(), timeout=8, **_kw)
+            print(f'  [TAXON-API-DEBUG] {_label}: HTTP {_r.status_code}')
+            if _r.ok:
+                print(f'  [TAXON-API-DEBUG] svar: {_r.text[:800]}')
+        except Exception as _e:
+            print(f'  [TAXON-API-DEBUG] {_label}: {_e}')
     # ── /DEBUG ──────────────────────────────────────────────────────────────────
 
     data      = _load_se_obs_r2(year)
