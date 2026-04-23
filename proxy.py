@@ -2222,6 +2222,25 @@ def _se_build_one_pass(year):
     today     = _date_type.today()
     yesterday = (today - _timedelta(days=1)).isoformat()
 
+    # ── DEBUG: hämta ett känt taxon via Taxon/Search för att se fältstrukturen ──
+    try:
+        import json as _json
+        _test_resp = requests.post(
+            f'{SOS_API_BASE}/Taxon/Search',
+            headers=_auth_headers(),
+            json={'ids': [100004, 267497], 'take': 2},   # kungsfiskare + trolig underart
+            timeout=10
+        )
+        print(f'  [TAXON-API-DEBUG] HTTP {_test_resp.status_code}')
+        if _test_resp.ok:
+            _td = _test_resp.json()
+            _taxa = _td.get('taxa') or _td.get('records') or (_td if isinstance(_td, list) else [])
+            for _t in _taxa[:3]:
+                print(f'  [TAXON-API-DEBUG] {_json.dumps(_t, ensure_ascii=False, default=str)[:2000]}')
+    except Exception as _e:
+        print(f'  [TAXON-API-DEBUG] fel: {_e}')
+    # ── /DEBUG ──────────────────────────────────────────────────────────────────
+
     data      = _load_se_obs_r2(year)
     last      = data.get('last_date')
     reporters = data.get('reporters', {})
