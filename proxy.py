@@ -2146,12 +2146,24 @@ def _se_observers_builder():
         print('  SE obs: R2 ej konfigurerat – avbryter tråd')
         return
 
+    import gc as _gc
+
+    # Spårar sista byggda datum i minnet – undviker R2-laddning i onödan varje 6:e timme
+    last_built_date = None
+
     while True:
         today     = _date_type.today()
         year      = today.year
         yesterday = (today - _timedelta(days=1)).isoformat()
 
-        # Ladda befintlig cache från R2
+        # ── Snabbkontroll utan R2-laddning ────────────────────────────────────
+        # Om vi vet sedan senaste körning att vi är à jour, sov utan att ladda något.
+        if last_built_date and last_built_date >= yesterday:
+            print(f'  SE obs {year}: à jour (last={last_built_date}), sover 6h')
+            _time.sleep(6 * 3600)
+            continue
+
+        # ── Ladda från R2 (första körning eller ny dag tillgänglig) ───────────
         data      = _load_se_obs_r2(year)
         last      = data.get('last_date')
         reporters = data.get('reporters', {})
@@ -2164,20 +2176,20 @@ def _se_observers_builder():
             nxt = f'{year}-01-01'
 
         if nxt > yesterday:
-            # Redan à jour – kompaktera och spara R2-filen om den är i gammalt format
-            # (engångsmigration: species/places → art/sp_ids/sp/pl).
-            # Bygg compact_data direkt från arbetsformatet – hämta INTE en ny kopia
-            # från R2 (den kan vara gammal och stor och skulle bara öka RAM-användningen).
+            # À jour efter laddning (kan hända vid nyårsskifte eller snabb omstart).
+            # Spara för att säkerställa att R2-filen är i rätt format.
             ok, compact_data = _save_se_obs_r2(year, data)
             with _se_obs_lock:
-                _se_obs_cache[year] = compact_data   # ~30 MB, inte ~500 MB
-            data = None      # ← frigör ~500 MB arbetsdata
+                _se_obs_cache[year] = compact_data
+            last_built_date = last   # ← kom ihåg utan att hålla R2-data i minnet
+            data = None
             reporters = None
+            _gc.collect()            # ← tipsa Python att frigöra minnet till OS
             print(f'  SE obs {year}: à jour (last={last}), sover 6h')
             _time.sleep(6 * 3600)
             continue
 
-        # Bearbeta datum för datum tills vi kommit ikapp
+        # ── Bearbeta datum för datum tills vi kommit ikapp ────────────────────
         current = nxt
         while current <= yesterday:
             print(f'  SE obs: hämtar {current} ({len(SE_COUNTY_IDS)} län)…')
@@ -2191,21 +2203,22 @@ def _se_observers_builder():
 
             data['last_date'] = current
             data['year']      = year
-            ok, compact = _save_se_obs_r2(year, data)  # returnerar (bool, compact_dict)
+            ok, compact = _save_se_obs_r2(year, data)
 
-            # Cachen får kompakt format – sp/pl listor, inte de fulla arbets-dicts
             with _se_obs_lock:
                 _se_obs_cache[year] = compact
 
+            last_built_date = current   # ← uppdatera utan att hålla arbetsdata
             print(f'  SE obs {current}: {total_recs} records, {len(reporters)} observatörer totalt')
             current = (_dt.strptime(current, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
 
-            # Paus mellan dagar under uppbyggnad – ger plats för användaranrop
+            # Paus mellan dagar – ger plats för användaranrop
             _time.sleep(30)
 
-        # Ikapp – frigör arbetsdata och sov
+        # ── Ikapp – frigör arbetsdata och sov ─────────────────────────────────
         data = None
         reporters = None
+        _gc.collect()                # ← tipsa Python att frigöra minnet till OS
         print(f'  SE obs {year}: ikapp! sover 6h')
         _time.sleep(6 * 3600)
 
