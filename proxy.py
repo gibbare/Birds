@@ -2129,10 +2129,12 @@ def _gbif_rank(sci_name):
             if d.get('matchType', 'NONE') == 'NONE':
                 return 'sp'
             rank = d.get('rank', '').upper()
-            if rank in ('SUBSPECIES', 'VARIETY', 'FORM', 'CULTIVAR', 'RACE',
-                        'INFRASPECIES', 'SUBVARIETY', 'SUBFORMA', 'INFRASPECIFIC_NAME'):
+            # Bara SUBSPECIES räknas som underart för fåglar.
+            # FORM/VARIETY används i GBIF för domesticerade former (tamduva etc.)
+            # och färgmorfer – dessa ska stanna som vanliga "arter".
+            if rank == 'SUBSPECIES':
                 return 'sub'
-            if rank == 'HYBRID':
+            if rank in ('HYBRID', 'NOTHOSPECIES'):
                 return 'hyb'
     except Exception as _e:
         print(f'  GBIF rank-lookup fel ({sci_name}): {_e}')
