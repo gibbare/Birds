@@ -2110,13 +2110,15 @@ def _se_rep_empty():
         'dagar': 0, 'lastObs': '',
     }
 
-# ── Svenska taxonomi-overrides (Dyntaxa vs GBIF) ────────────────────────────
-# Vetenskapliga namn där Dyntaxa och GBIF/BirdLife är oense.
-# GBIF returnerar SPECIES för dessa, men i Dyntaxa/Artportalen är de underarter.
-# Nyckel: kanoniskt vetenskapligt namn (lowercase), värde: 'sp'|'sub'|'hyb'
-_SWEDISH_TAXON_OVERRIDES = {
-    'corvus cornix':   'sub',   # gråkråka  – underart av kråka i Dyntaxa
-    'corvus corone':   'sub',   # svartkråka – underart av kråka i Dyntaxa
+# ── Svenska artsammanslagningar ──────────────────────────────────────────────
+# Taxa vars svenska namn ska visas och räknas som ett annat namn.
+# Används t.ex. när Dyntaxa delar upp en art i former som ändå ska
+# presenteras som en enhet (gråkråka + svartkråka → kråka).
+# Nyckel: observerat sv-namn (lowercase), värde: visningsnamn (lowercase)
+_SV_NAME_MERGES = {
+    'gråkråka':   'kråka',
+    'svartkråka': 'kråka',
+    'kråka':      'kråka',   # direktobservationer av kråka hamnar i samma bucket
 }
 
 
@@ -2128,10 +2130,6 @@ def _gbif_rank(sci_name):
         return 'sp'
     if '×' in sci_name:
         return 'hyb'
-    # Kolla svenska override-tabellen först
-    override = _SWEDISH_TAXON_OVERRIDES.get(sci_name.lower().strip())
-    if override:
-        return override
     try:
         r = requests.get(
             'https://api.gbif.org/v1/species/match',
@@ -2208,17 +2206,27 @@ def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_nam
         except (ValueError, IndexError):
             month_0 = int(date_str[5:7]) - 1
 
-        # ── Klassificera taxon via rank_cache; okända taxa samlas i new_sci_names ──
-        if taxon_id:
-            cached_rank = (rank_cache or {}).get(taxon_id, '')
-            is_hybrid = cached_rank == 'hyb' or '×' in sci_name
-            is_sub    = cached_rank == 'sub' and not is_hybrid
-            # Om okänt taxon: spara vetenskapligt namn för GBIF-lookup efter bygget
-            if new_sci_names is not None and not cached_rank and sci_name:
-                new_sci_names[taxon_id] = sci_name
-        else:
+        # ── Namnsammanslagning (t.ex. gråkråka/svartkråka → kråka) ──────────
+        merged_target = _SV_NAME_MERGES.get(sv_name.lower()) if sv_name else None
+        if merged_target:
+            # Alla taxa i merge-gruppen delar en syntetisk nyckel och visningsnamn
+            eff_id   = f'svname:{merged_target}'
+            eff_sv   = merged_target
             is_hybrid = False
             is_sub    = False
+        else:
+            eff_id   = taxon_id
+            eff_sv   = sv_name
+            # ── Klassificera via rank_cache; okända taxa samlas för GBIF-lookup ─
+            if eff_id:
+                cached_rank = (rank_cache or {}).get(eff_id, '')
+                is_hybrid = cached_rank == 'hyb' or '×' in sci_name
+                is_sub    = cached_rank == 'sub' and not is_hybrid
+                if new_sci_names is not None and not cached_rank and sci_name:
+                    new_sci_names[eff_id] = sci_name
+            else:
+                is_hybrid = False
+                is_sub    = False
 
         if reporter not in reporters:
             reporters[reporter] = _se_rep_empty()
@@ -2227,8 +2235,8 @@ def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_nam
         if 0 <= month_0 < 12:
             rep['monthly'][month_0] += 1
 
-        # Artspårning – routa till rätt bucket och räkna individer
-        if taxon_id:
+        # Artspårning – routa till rätt bucket med effektivt ID och namn
+        if eff_id:
             ind = int(occ.get('individualCount') or occ.get('quantity') or 1)
             if is_hybrid:
                 bucket_ids = rep['hyb_ids']
@@ -2243,16 +2251,16 @@ def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_nam
                 bucket_obs = rep['sp_obs']
                 count_art  = True
 
-            if taxon_id not in bucket_ids:
-                bucket_ids.add(taxon_id)
+            if eff_id not in bucket_ids:
+                bucket_ids.add(eff_id)
                 if count_art:
                     rep['art'] += 1
-            if taxon_id not in bucket_obs:
-                bucket_obs[taxon_id] = {'sv': sv_name or taxon_id, 'obs': 0, 'ind': 0}
-            elif sv_name and not bucket_obs[taxon_id].get('sv'):
-                bucket_obs[taxon_id]['sv'] = sv_name
-            bucket_obs[taxon_id]['obs'] += 1
-            bucket_obs[taxon_id]['ind'] = bucket_obs[taxon_id].get('ind', 0) + ind
+            if eff_id not in bucket_obs:
+                bucket_obs[eff_id] = {'sv': eff_sv or eff_id, 'obs': 0, 'ind': 0}
+            elif eff_sv and not bucket_obs[eff_id].get('sv'):
+                bucket_obs[eff_id]['sv'] = eff_sv
+            bucket_obs[eff_id]['obs'] += 1
+            bucket_obs[eff_id]['ind'] = bucket_obs[eff_id].get('ind', 0) + ind
 
         # Lokalspårning
         if locality:
