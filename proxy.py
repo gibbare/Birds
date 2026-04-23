@@ -2110,12 +2110,61 @@ def _se_rep_empty():
         'dagar': 0, 'lastObs': '',
     }
 
-_taxon_debug_logged = False   # logga råa taxon-objekt en gång per byggcykel
+def _gbif_rank(sci_name):
+    """Slår upp taxon-rank via GBIF species/match.
+    Returnerar 'sp', 'sub' eller 'hyb'.
+    Anropas bara för taxa som saknas i rank-cachen."""
+    if not sci_name:
+        return 'sp'
+    if '×' in sci_name:
+        return 'hyb'
+    try:
+        r = requests.get(
+            'https://api.gbif.org/v1/species/match',
+            params={'name': sci_name, 'class': 'Aves'},
+            timeout=8
+        )
+        if r.ok:
+            d = r.json()
+            if d.get('matchType', 'NONE') == 'NONE':
+                return 'sp'
+            rank = d.get('rank', '').upper()
+            if rank in ('SUBSPECIES', 'VARIETY', 'FORM', 'CULTIVAR', 'RACE',
+                        'INFRASPECIES', 'SUBVARIETY', 'SUBFORMA', 'INFRASPECIFIC_NAME'):
+                return 'sub'
+            if rank == 'HYBRID':
+                return 'hyb'
+    except Exception as _e:
+        print(f'  GBIF rank-lookup fel ({sci_name}): {_e}')
+    return 'sp'
 
-def _merge_se_records(reporters, records, date_str):
+
+def _apply_rank_corrections(reporters, rank_cache):
+    """Flytta taxa till rätt bucket (sp/sub/hyb) baserat på rank_cache.
+    Idempotent – kan köras flera gånger utan bieffekter."""
+    for rep in reporters.values():
+        for tid in list(rep.get('sp_ids', set())):
+            r = rank_cache.get(tid)
+            if r == 'sub':
+                rep['sp_ids'].discard(tid)
+                rep['sub_ids'].add(tid)
+                obs_data = rep['sp_obs'].pop(tid, None)
+                if obs_data:
+                    rep['sub_obs'].setdefault(tid, obs_data)
+            elif r == 'hyb':
+                rep['sp_ids'].discard(tid)
+                rep['hyb_ids'].add(tid)
+                obs_data = rep['sp_obs'].pop(tid, None)
+                if obs_data:
+                    rep['hyb_obs'].setdefault(tid, obs_data)
+        # Räkna om art-antalet från den faktiska sp_ids-mängden
+        rep['art'] = len(rep.get('sp_ids', set()))
+
+
+def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_names=None):
     """Mergar SOS API-records in i reporters-dicten (in-place).
-    Använder kompakt in-memory-format med sp_ids/sp_obs/pl_obs."""
-    global _taxon_debug_logged
+    rank_cache: {taxon_id_str: 'sp'|'sub'|'hyb'} – används för klassificering.
+    new_sci_names: dict som fylls med {taxon_id: sci_name} för okända taxa."""
     seen_rd = set()  # (reporter, date) – för korrekt dagar-räkning
     for rec in records:
         taxon    = rec.get('taxon')      or {}
@@ -2130,14 +2179,7 @@ def _merge_se_records(reporters, records, date_str):
         taxon_id = str(taxon.get('id') or taxon.get('taxonId') or taxon.get('dyntaxaId') or '')
         sv_name  = (taxon.get('vernacularName') or taxon.get('commonName') or '').strip()
         sci_name = (taxon.get('scientificName') or '').strip()
-        infra    = (taxon.get('infraspecificEpithet') or '').strip()
-        t_rank   = (taxon.get('taxonRank') or '').lower().strip()
 
-        # ── DEBUG: logga råa taxon-objekt en gång per byggcykel ─────────────
-        if not _taxon_debug_logged and taxon_id:
-            import json as _json
-            print(f'  [TAXON-DEBUG] Råt taxon-objekt: {_json.dumps(taxon, ensure_ascii=False, default=str)[:2000]}')
-            _taxon_debug_logged = True
         locality = (location.get('locality') or location.get('name') or '').strip()
         if not locality:
             muni = location.get('municipality') or {}
@@ -2150,21 +2192,17 @@ def _merge_se_records(reporters, records, date_str):
         except (ValueError, IndexError):
             month_0 = int(date_str[5:7]) - 1
 
-        # ── Klassificera taxon: art / underart / hybrid ─────────────────────────
-        # Hybrid: × i vetenskapligt namn ELLER rank indikerar hybrid
-        is_hybrid = (
-            '×' in sci_name or
-            t_rank in ('hybrid', 'nothospecies', 'nothosubspecies', 'nothovarietas',
-                       'nothomorph', 'nothogenus')
-        )
-        # Underart: infraspecifikt epitet ELLER rank-fält (om API returnerar det)
-        # OBS: 3-ords-namnregeln är borttagen – den är opålitlig pga taxonomiändringar
-        is_sub = (not is_hybrid) and (
-            bool(infra) or
-            t_rank in ('subspecies', 'variety', 'varietas', 'form', 'forma',
-                       'infraspecies', 'subvariety', 'subforma',
-                       'subspecific aggregate')
-        )
+        # ── Klassificera taxon via rank_cache; okända taxa samlas i new_sci_names ──
+        if taxon_id:
+            cached_rank = (rank_cache or {}).get(taxon_id, '')
+            is_hybrid = cached_rank == 'hyb' or '×' in sci_name
+            is_sub    = cached_rank == 'sub' and not is_hybrid
+            # Om okänt taxon: spara vetenskapligt namn för GBIF-lookup efter bygget
+            if new_sci_names is not None and not cached_rank and sci_name:
+                new_sci_names[taxon_id] = sci_name
+        else:
+            is_hybrid = False
+            is_sub    = False
 
         if reporter not in reporters:
             reporters[reporter] = _se_rep_empty()
@@ -2218,32 +2256,16 @@ def _se_build_one_pass(year):
     Körs ALLTID i en separat OS-process (via multiprocessing).
     När funktionen returnerar avslutar processen och OS återtar
     omedelbart all RAM – ingen Python-heap kvarhålls.
+
+    Rank-cachen (taxon_ranks_se.json i R2) sparar GBIF-uppslagningar
+    permanent så att varje taxon bara slås upp en gång.
     """
     today     = _date_type.today()
     yesterday = (today - _timedelta(days=1)).isoformat()
 
-    # ── DEBUG: prova olika taxon-API:er för att hitta rank-info ────────────────
-    import json as _json
-    _TEST_IDS = [100004, 102933, 267497]   # kungsfiskare, gräsand, + ett ID till
-    _endpoints = [
-        ('SOS /Taxon GET',   'GET',  f'{SOS_API_BASE}/Taxon',
-         {'params': {'ids': ','.join(str(i) for i in _TEST_IDS)}}),
-        ('SOS /Taxon/100004','GET',  f'{SOS_API_BASE}/Taxon/100004', {}),
-        ('Taxon v2 GET',     'GET',  'https://api.artdatabanken.se/taxon/v2/taxon/100004', {}),
-        ('Taxon v1 GET',     'GET',  'https://api.artdatabanken.se/taxon/v1/taxon/100004', {}),
-        ('GBIF match',       'GET',  'https://api.gbif.org/v1/species/match',
-         {'params': {'name': 'Alcedo atthis', 'kingdom': 'Animalia'}}),
-        ('GBIF sp GET',      'GET',  'https://api.gbif.org/v1/species/2476959', {}),
-    ]
-    for _label, _meth, _url, _kw in _endpoints:
-        try:
-            _r = requests.request(_meth, _url, headers=_auth_headers(), timeout=8, **_kw)
-            print(f'  [TAXON-API-DEBUG] {_label}: HTTP {_r.status_code}')
-            if _r.ok:
-                print(f'  [TAXON-API-DEBUG] svar: {_r.text[:800]}')
-        except Exception as _e:
-            print(f'  [TAXON-API-DEBUG] {_label}: {_e}')
-    # ── /DEBUG ──────────────────────────────────────────────────────────────────
+    # ── Ladda rank-cache från R2 (tom dict om filen saknas) ─────────────────
+    rank_cache    = _r2_get('taxon_ranks_se.json') or {}
+    new_sci_names = {}   # {taxon_id: sci_name} – okända taxa som hittades under bygget
 
     data      = _load_se_obs_r2(year)
     last      = data.get('last_date')
@@ -2256,7 +2278,8 @@ def _se_build_one_pass(year):
         nxt = f'{year}-01-01'
 
     if nxt > yesterday:
-        # Redan à jour – säkerställ rätt R2-format och avsluta
+        # Redan à jour – uppdatera rank-klassificering och avsluta
+        _apply_rank_corrections(reporters, rank_cache)
         _save_se_obs_r2(year, data)
         print(f'  SE obs {year}: subprocess – à jour (last={last})')
         return   # → process exit → OS frigör all RAM
@@ -2269,18 +2292,37 @@ def _se_build_one_pass(year):
         for cid in SE_COUNTY_IDS:
             recs = _fetch_county_obs_day(cid, current)
             if recs:
-                _merge_se_records(reporters, recs, current)
+                _merge_se_records(reporters, recs, current, rank_cache, new_sci_names)
                 total_recs += len(recs)
             _time.sleep(1.5)
 
         data['last_date'] = current
         data['year']      = year
         _save_se_obs_r2(year, data)
-        # Uppdaterar INTE _se_obs_cache – koordinatorn ogiltigförklarar den efter exit
 
         print(f'  SE obs {current}: {total_recs} records, {len(reporters)} observatörer totalt')
         current = (_dt.strptime(current, '%Y-%m-%d') + _timedelta(days=1)).strftime('%Y-%m-%d')
         _time.sleep(30)
+
+    # ── GBIF rank-lookup för nya okända taxa ─────────────────────────────────
+    if new_sci_names:
+        print(f'  SE obs: GBIF rank-lookup för {len(new_sci_names)} nya taxa…')
+        for i, (tid, sci) in enumerate(new_sci_names.items()):
+            rank_cache[tid] = _gbif_rank(sci)
+            if (i + 1) % 50 == 0:
+                print(f'  SE obs: GBIF {i + 1}/{len(new_sci_names)}…')
+            _time.sleep(0.15)   # skonsamt mot GBIF (max ~6 req/s)
+        print(f'  SE obs: GBIF rank-lookup klar '
+              f'({sum(1 for v in rank_cache.values() if v=="sub")} underarter, '
+              f'{sum(1 for v in rank_cache.values() if v=="hyb")} hybrider i cachen)')
+
+        # Flytta felklassificerade taxa till rätt bucket och spara slutlig data
+        _apply_rank_corrections(reporters, rank_cache)
+        _save_se_obs_r2(year, data)
+
+        # Spara uppdaterad rank-cache till R2 (permanent för framtida byggen)
+        _r2_put('taxon_ranks_se.json', rank_cache)
+        print(f'  SE obs: rank-cache sparad ({len(rank_cache)} taxa)')
 
     print(f'  SE obs {year}: subprocess ikapp!')
     # → process exit → OS återtar ALL RAM omedelbart
