@@ -375,7 +375,26 @@ async function fetchData() {
     return;
   }
 
-  applyFilters();
+  // Kolla om vi kom hit via en rapportörslänk (t.ex. från daglistan)
+  const _reporterParam = new URLSearchParams(location.search).get('reporter');
+  if (_reporterParam) {
+    document.getElementById('searchInput').value = _reporterParam;
+  }
+  applyFilters();  // filtrerar + renderAll (openRow=null)
+
+  if (_reporterParam) {
+    // Öppna raden och artlistan automatiskt
+    openRow = _reporterParam;
+    renderAll();
+    requestAnimationFrame(() => {
+      const safeId = esc(_reporterParam).replace(/\s+/g, '_');
+      const spListEl = document.getElementById(`sp-list-${safeId}`);
+      if (spListEl) {
+        const toggleEl = spListEl.previousElementSibling;
+        if (toggleEl) toggleSpList(_reporterParam, 'sp', toggleEl);
+      }
+    });
+  }
 }
 
 function applyFilters() {

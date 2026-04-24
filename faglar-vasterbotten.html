@@ -2273,7 +2273,7 @@ function renderTable(content, jumpNotice) {
         </td>
         <td class="col-antal">${row.individualCount}<span class="t-unit">${escHtml(row.unit)}</span></td>
         <td class="col-huvud">${row.site   ? escHtml(row.site)     : '<span class="t-empty">–</span>'}</td>
-        <td class="col-rap">${row.reporter ? escHtml(row.reporter) : '<span class="t-empty">–</span>'}</td>
+        <td class="col-rap">${row.reporter ? `<a href="faglar-observatorer.html?reporter=${encodeURIComponent(row.reporter)}" onclick="event.stopPropagation()" style="color:#2b6cb0;text-decoration:none;font-weight:500">${escHtml(row.reporter)}</a>` : '<span class="t-empty">–</span>'}</td>
         <td class="col-tid">${fmtTidCell(row.startDT, row.endDT)}</td>
         <td class="col-map">${mapBtn}</td>
       </tr>`;
