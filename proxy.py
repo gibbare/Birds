@@ -2298,6 +2298,12 @@ def _se_build_one_pass(year):
 
     Rank-cachen (taxon_ranks_se.json i R2) sparar GBIF-uppslagningar
     permanent så att varje taxon bara slås upp en gång.
+
+    VIKTIGT – vid kodfixar som kräver omklassificering:
+      Ta BARA bort taxon_ranks_se.json från R2.
+      Lämna observers_se_*.json kvar – de skrivs över när bygget är klart.
+      Om observer-filen raderas faller appen tillbaka på Västerbotten
+      under hela byggtiden (~1,5 h), vilket ger felaktig visning.
     """
     today     = _date_type.today()
     yesterday = (today - _timedelta(days=1)).isoformat()
