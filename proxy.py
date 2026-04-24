@@ -2128,7 +2128,8 @@ def _gbif_rank(sci_name):
     Anropas bara för taxa som saknas i rank-cachen."""
     if not sci_name:
         return 'sp'
-    if '×' in sci_name:
+    # Hybridindikator i vetenskapligt namn (× eller ' x ')
+    if '×' in sci_name or ' x ' in sci_name.lower():
         return 'hyb'
     try:
         r = requests.get(
@@ -2207,20 +2208,34 @@ def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_nam
             month_0 = int(date_str[5:7]) - 1
 
         # ── Namnsammanslagning (t.ex. gråkråka/svartkråka → kråka) ──────────
+        # ── Hybriddetektering – kolla båda namnen och båda x-varianterna ──────
+        def _looks_hybrid(s):
+            s = (s or '').lower()
+            return '×' in s or ' x ' in s or s.startswith('x ')
+
         merged_target = _SV_NAME_MERGES.get(sv_name.lower()) if sv_name else None
         if merged_target:
             # Alla taxa i merge-gruppen delar en syntetisk nyckel och visningsnamn
-            eff_id   = f'svname:{merged_target}'
-            eff_sv   = merged_target
+            eff_id    = f'svname:{merged_target}'
+            eff_sv    = merged_target
             is_hybrid = False
             is_sub    = False
+        elif _looks_hybrid(sv_name) or _looks_hybrid(sci_name):
+            # Hybridnamn identifierat från svenska/vetenskapliga namnet
+            eff_id    = taxon_id or f'svname:hyb:{sv_name.lower()}'
+            eff_sv    = sv_name
+            is_hybrid = True
+            is_sub    = False
+            # Uppdatera rank_cache direkt så GBIF-lookup hoppas över
+            if rank_cache is not None and eff_id and eff_id not in rank_cache:
+                rank_cache[eff_id] = 'hyb'
         else:
             eff_id   = taxon_id
             eff_sv   = sv_name
             # ── Klassificera via rank_cache; okända taxa samlas för GBIF-lookup ─
             if eff_id:
                 cached_rank = (rank_cache or {}).get(eff_id, '')
-                is_hybrid = cached_rank == 'hyb' or '×' in sci_name
+                is_hybrid = cached_rank == 'hyb'
                 is_sub    = cached_rank == 'sub' and not is_hybrid
                 if new_sci_names is not None and not cached_rank and sci_name:
                     new_sci_names[eff_id] = sci_name
