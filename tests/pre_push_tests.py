@@ -132,7 +132,7 @@ CW = "cloudflare-worker/src/index.js"
 for fn in ["buildObserverResult", "proxyToRailway"]:
     file_check(CW, f"Funktion {fn}() definierad", rf"function {fn}\s*\(")
 
-for route in ["/api/observer_stats", "/api/observer_species", "/api/statistics"]:
+for route in ["/api/observer_stats", "/api/observer_species", "/api/statistics", "/api/meta"]:
     file_check(CW, f"Route {route} hanteras", re.escape(route))
 
 file_check(CW, "sub-räknare returneras",  r"sub\s*:\s*d\.sub\b")
@@ -191,6 +191,22 @@ file_check(OBS, "buildDetail: hyb-sektion visas om r.hyb > 0",
 # Favoritfunktion
 file_check(OBS, "Favoritfunktion bevarad", r"favorites")
 
+# Default favoriter
+file_check(OBS, "onlyFavs är true som default",
+           r"let\s+onlyFavs\s*=\s*true",
+           "onlyFavs ska vara true som standard")
+file_check(OBS, "favToggle har active-klass som default",
+           r'class="fav-toggle active"',
+           "favToggle-knappen saknar active-klass i HTML")
+file_check(OBS, "Tom favoritlista ger hjälpmeddelande",
+           r"Inga favoriter",
+           "Meddelande för tom favoritlista saknas")
+
+# Footer
+file_check(OBS, "Footer: Version 4.2", r"Version 4\.2")
+file_check(OBS, "Footer: Datahämtning-span", r'id="footerDatahamtning"')
+file_check(OBS, "Footer: hämtar /api/meta", r"/api/meta")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # faglar-vasterbotten.html
 # ══════════════════════════════════════════════════════════════════════════════
@@ -218,6 +234,21 @@ file_check(VB, "Kartknapp finns", r"col-map|mapBtn")
 # Dagslistans kolumner
 for col in ["col-art", "col-antal", "col-huvud", "col-rap", "col-tid"]:
     file_check(VB, f"Kolumn {col} finns", col)
+
+# Footer
+file_check(VB, "Footer: Version 4.2",       r"Version 4\.2")
+file_check(VB, "Footer: Datahämtning-span", r'id="footerDatahamtning"')
+file_check(VB, "Footer: hämtar /api/meta",  r"/api/meta")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# faglar-statistik.html + faglar-hackning.html – footer
+# ══════════════════════════════════════════════════════════════════════════════
+for fname, label in [("faglar-statistik.html", "Statistiksidan"),
+                     ("faglar-hackning.html",  "Häckningssidan")]:
+    print(f"\n{HEAD}{fname}{RST}")
+    file_check(fname, f"{label}: Version 4.2",       r"Version 4\.2")
+    file_check(fname, f"{label}: Datahämtning-span", r'id="footerDatahamtning"')
+    file_check(fname, f"{label}: hämtar /api/meta",  r"/api/meta")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Sammanfattning

@@ -345,7 +345,7 @@
 </div>
 
 <div><a href="#" class="btn-top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ Gå till toppen</a></div>
-<footer>Utvecklad av <a href="https://birds.up.railway.app/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
+<footer>Utvecklad av Jonas Karlsson 2026 &nbsp;–&nbsp; Version 4.2 &nbsp;–&nbsp; Datahämtning: <span id="footerDatahamtning">–</span></footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -610,10 +610,11 @@ function initPage() {
   if (_savedYear) selY.value = _savedYear;
   populateMuni();
 
-  // Footer version
-  fetch(`${PROXY}/api/status`).then(r => r.json()).then(v => {
-    const started = (v.started_at || '').replace('T',' ').slice(0,16);
-    document.getElementById('footerVersion').textContent = `v${v.version} · Startad ${started}`;
+  // Footer datahämtning
+  fetch(`${PROXY}/api/meta`).then(r => r.ok ? r.json() : null).then(d => {
+    if (!d) return;
+    const dt = d.built_at ? d.built_at.replace('T', ' ').slice(0, 16) : (d.last_date || '–');
+    document.getElementById('footerDatahamtning').textContent = dt;
   }).catch(() => {});
 }
 

@@ -848,7 +848,7 @@
 
 <div><a href="#" class="btn-top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ Gå till toppen</a></div>
 <footer>
-  Utvecklad av <a href="https://birds.up.railway.app/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span>
+  Utvecklad av Jonas Karlsson 2026 &nbsp;–&nbsp; Version 4.2 &nbsp;–&nbsp; Datahämtning: <span id="footerDatahamtning">–</span>
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -2392,14 +2392,13 @@ updateRegionTitle();
 syncDateUI();
 checkProxy().then(() => fetchAll());
 
-/* ── Versionsinfo i footer ── */
-fetch(`${PROXY}/api/version`, { signal: abortAfter(5000) })
-  .then(r => r.json())
-  .then(v => {
-    const started = v.started_at
-      ? new Date(v.started_at).toLocaleString('sv', { dateStyle: 'short', timeStyle: 'short' })
-      : '–';
-    document.getElementById('footerVersion').textContent = `v${v.version} · Startad ${started}`;
+/* ── Datahämtning i footer ── */
+fetch(`${PROXY}/api/meta`, { signal: abortAfter(5000) })
+  .then(r => r.ok ? r.json() : null)
+  .then(d => {
+    if (!d) return;
+    const dt = d.built_at ? d.built_at.replace('T', ' ').slice(0, 16) : (d.last_date || '–');
+    document.getElementById('footerDatahamtning').textContent = dt;
   })
   .catch(() => {});
 

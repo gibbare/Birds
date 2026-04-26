@@ -635,7 +635,7 @@
 </div>
 
 <div><a href="#" class="btn-top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ Gå till toppen</a></div>
-<footer>Utvecklad av <a href="https://birds.up.railway.app/logs" style="color:inherit;text-decoration:none;">Jonas Karlsson</a> 2026 &nbsp;·&nbsp; <span id="footerVersion">–</span></footer>
+<footer>Utvecklad av Jonas Karlsson 2026 &nbsp;–&nbsp; Version 4.2 &nbsp;–&nbsp; Datahämtning: <span id="footerDatahamtning">–</span></footer>
 
 <script>
 /* ══════════════════════════════════════════════════════════════════
@@ -1314,11 +1314,11 @@ async function initPage() {
 
   setSourceBar('demo', 'Ansluter till proxy…');
 
-  /* Hämta versioninfo och cacheöversikt parallellt */
-  const [yearsResp, verResp] = await Promise.allSettled([
+  /* Hämta årsöversikt och cache-meta parallellt */
+  const [yearsResp, metaResp] = await Promise.allSettled([
     fetch(`${PROXY}/api/statistics/years?county=${selectedCountyId}`,
           { signal: abortAfter(5000) }).then(r => r.json()),
-    fetch(`${PROXY}/api/version`,
+    fetch(`${PROXY}/api/meta`,
           { signal: abortAfter(5000) }).then(r => r.json()),
   ]);
 
@@ -1333,14 +1333,11 @@ async function initPage() {
     }
   }
 
-  /* Visa version i footer */
-  if (verResp.status === 'fulfilled') {
-    const v  = verResp.value;
-    const started = v.started_at
-      ? new Date(v.started_at).toLocaleString('sv', {dateStyle:'short', timeStyle:'short'})
-      : '–';
-    document.getElementById('footerVersion').textContent =
-      `v${v.version} · Startad ${started}`;
+  /* Datahämtning i footer */
+  if (metaResp.status === 'fulfilled') {
+    const d  = metaResp.value;
+    const dt = d.built_at ? d.built_at.replace('T', ' ').slice(0, 16) : (d.last_date || '–');
+    document.getElementById('footerDatahamtning').textContent = dt;
   }
 
   fetchStats(selectedYear, selectedCountyId);

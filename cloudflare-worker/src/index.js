@@ -155,6 +155,22 @@ export default {
       }
     }
 
+    // ── /api/meta – cache-metadata för footer (built_at, last_date) ─────────
+    if (url.pathname === '/api/meta') {
+      const year = url.searchParams.get('year') || String(new Date().getFullYear());
+      try {
+        const obj = await env.BUCKET.get(`observers_se_${year}.json`);
+        if (obj) {
+          const data = await obj.json();
+          return jsonResp({
+            last_date: data.last_date || '',
+            built_at:  data.built_at  || '',
+          });
+        }
+      } catch (_) {}
+      return jsonResp({ last_date: '', built_at: '' });
+    }
+
     // ── /api/statistics – R2 om cachad, annars Railway ────────────────────
     if (url.pathname === '/api/statistics') {
       const year     = url.searchParams.get('year')   || String(new Date().getFullYear());
