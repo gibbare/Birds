@@ -1850,10 +1850,20 @@ def _stats_builder():
 
             result = _fetch_year_stats(year, DEFAULT_COUNTY_ID, max_month=max_month)
             if result:
-                with _stats_lock:
-                    _stats_cache[cache_key] = result
-                    _build_progress[cache_key] = {'status': 'ready'}
-                _save_cache(cache_key)   # spara bara detta år direkt
+                _save_cache(cache_key)   # spara till R2 (Worker serverar därifrån)
+                if year == current_year:
+                    # Innevarande år hålls i RAM för snabb on-demand-åtkomst
+                    with _stats_lock:
+                        _stats_cache[cache_key] = result
+                        _build_progress[cache_key] = {'status': 'ready'}
+                else:
+                    # Historiska år: sparas till R2 men lagras INTE i RAM.
+                    # Cloudflare Worker serverar dem direkt från R2 utan att
+                    # träffa Flask, så in-memory-cache är onödig och kostar
+                    # ~60 MB/år i Python-objekt.
+                    with _stats_lock:
+                        _stats_cache.pop(cache_key, None)
+                        _build_progress[cache_key] = {'status': 'ready'}
                 print(f'  Stats: {cache_key} klar – '
                       f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
             else:
