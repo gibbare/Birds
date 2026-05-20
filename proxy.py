@@ -2383,6 +2383,12 @@ def _se_observers_builder():
     Minnesprofil:
       Under bygge (~1,5 h):  ~500 MB i subprocess, Flask oförändrad (~150 MB)
       Steady-state:          ~150 MB totalt – subprocess finns inte
+
+    Viktiga inställningar för subprocess:
+      daemon=True    – subprocess dödas om Flask-processen startas om (Railway-redeploy).
+                       Förhindrar ackumulering av orphan-processer som orsakar GB-läckor.
+      join(timeout)  – subprocess som hänger (nät/R2-fel) avbryts efter 4h och
+                       koordinatorn försöker igen. Utan timeout hänger processen evigt.
     """
     import multiprocessing as _mp
 
@@ -2417,14 +2423,27 @@ def _se_observers_builder():
             continue
 
         # ── Spawna subprocess för bygget ──────────────────────────────────────
+        # daemon=True: subprocess dödas automatiskt om Flask-processen startas om
+        # (förhindrar att orphan-processer ackumuleras vid Railway-redeployer).
+        # Timeout 4h: om subprocess hänger (nät/R2-problem) avbryts det och
+        # koordinatortråden försöker igen om 30 min.
+        _SUBPROCESS_TIMEOUT = 4 * 3600  # sekunder
         print(f'  SE obs: startar subprocess för {year}…')
         try:
             p = _mp.get_context('fork').Process(
-                target=_se_build_one_pass, args=(year,), daemon=False)
+                target=_se_build_one_pass, args=(year,), daemon=True)
             p.start()
-            p.join()   # koordinatortråden väntar – Flask hanterar requests som vanligt
+            p.join(timeout=_SUBPROCESS_TIMEOUT)
         except Exception as exc:
             print(f'  SE obs: kunde inte starta subprocess: {exc}, väntar 30 min')
+            _time.sleep(1800)
+            continue
+
+        if p.is_alive():
+            # Timeout – subprocess hänger, döda det och försök igen senare
+            print(f'  SE obs: subprocess timeout efter {_SUBPROCESS_TIMEOUT//3600}h, avslutar forcerat')
+            p.kill()
+            p.join()
             _time.sleep(1800)
             continue
 
