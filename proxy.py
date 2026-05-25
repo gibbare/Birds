@@ -308,10 +308,11 @@ def _cache_file_for(county_id, year):
     """Returnerar sökväg till per-år cachefil: stats_cache_24_2026.json"""
     return _os.path.join(_BASE_DIR, f'stats_cache_{county_id}_{year}.json')
 
-_stats_cache    = {}   # { "24_2025": { aggregerat } }
-_build_progress = {}   # { "24_2025": { status, fetched, total } }
-_building       = set()  # cache-nycklar under pågående bygge
-_stats_lock     = _threading.Lock()
+_stats_cache      = {}    # { "24_2025": { aggregerat } }
+_build_progress   = {}    # { "24_2025": { status, fetched, total } }
+_building         = set() # cache-nycklar under pågående bygge
+_stats_lock       = _threading.Lock()
+_stats_r2_complete = set() # cache-nycklar för historiska år bekräftade i R2
 
 @app.route("/")
 def index():
@@ -480,33 +481,61 @@ def get_observations():
         },
     }
 
-    try:
-        resp = requests.post(
-            f"{SOS_API_BASE}/Observations/Search",
-            headers=_auth_headers(),
-            json=body,
-            params={"skip": 0, "take": 1000},
-            timeout=30,
-        )
-    except requests.RequestException as e:
-        return jsonify({"error": f"Nätverksfel: {e}"}), 503
+    # Paginera upp till 5 000 obs – räcker för alla län inkl. Stockholm/Skåne
+    # (undviker Railway-timeout: ~5 sid × 3 s = 15 s, gott marginal mot 35 s klienttimeout).
+    MAX_OBS = 5000
+    take    = 1000
+    skip    = 0
+    all_records  = []
+    total_count  = 0
 
-    print(f"  Observations/Search {date}: HTTP {resp.status_code}")
-    if not resp.ok:
-        print(f"  Feldetaljer: {resp.text[:800]}")
-
-    if resp.status_code == 401:
-        _session["access_token"] = None
-        return jsonify({"error": "Sessionen har gått ut – logga in igen."}), 401
-
-    if not resp.ok:
+    while skip < MAX_OBS:
         try:
-            detail = resp.json()
-        except Exception:
-            detail = resp.text[:600]
-        return jsonify({"error": f"SOS API svarade {resp.status_code}", "detail": detail}), resp.status_code
+            resp = requests.post(
+                f"{SOS_API_BASE}/Observations/Search",
+                headers=_auth_headers(),
+                json=body,
+                params={"skip": skip, "take": take},
+                timeout=30,
+            )
+        except requests.RequestException as e:
+            if not all_records:
+                return jsonify({"error": f"Nätverksfel: {e}"}), 503
+            break  # har redan data – returnera vad vi har
 
-    return jsonify(resp.json())
+        print(f"  Observations/Search {date} skip={skip}: HTTP {resp.status_code}")
+        if not resp.ok:
+            print(f"  Feldetaljer: {resp.text[:400]}")
+
+        if resp.status_code == 401:
+            _session["access_token"] = None
+            return jsonify({"error": "Sessionen har gått ut – logga in igen."}), 401
+
+        if not resp.ok:
+            if not all_records:
+                try:
+                    detail = resp.json()
+                except Exception:
+                    detail = resp.text[:600]
+                return jsonify({"error": f"SOS API svarade {resp.status_code}", "detail": detail}), resp.status_code
+            break
+
+        data        = resp.json()
+        page_recs   = data.get('records', [])
+        total_count = int(data.get('totalCount') or 0)
+        all_records.extend(page_recs)
+        skip += len(page_recs)
+
+        if not page_recs or skip >= total_count:
+            break
+
+    # Bygg svar i samma format som SOS API + extra fält för frontend-info
+    return jsonify({
+        'records':     all_records,
+        'totalCount':  total_count,
+        'returned':    len(all_records),
+        'truncated':   len(all_records) < total_count,
+    })
 
 
 @app.route("/api/obs_map")
@@ -1746,6 +1775,23 @@ def _stats_builder():
             if data:
                 loaded.update(data)
         print(f'  Stats: {len(loaded)} poster laddade från R2')
+
+        # Markera historiska år (< innevarande) som klara i R2 –
+        # _stats_builder behöver inte re-fetcha dem från SOS API.
+        # De serveras direkt av Cloudflare Worker.
+        _cur_yr_int = int(current_year_str)
+        for _r2k in r2_keys:
+            if _r2k.startswith('stats_cache_') and _r2k.endswith('.json'):
+                _ck = _r2k[len('stats_cache_'):-len('.json')]  # t.ex. "24_2024"
+                _parts = _ck.rsplit('_', 1)
+                if len(_parts) == 2:
+                    try:
+                        if int(_parts[1]) < _cur_yr_int:
+                            _stats_r2_complete.add(_ck)
+                    except ValueError:
+                        pass
+        if _stats_r2_complete:
+            print(f'  Stats: {len(_stats_r2_complete)} historiska år redan klara i R2 – hoppas över')
     else:
         # ── Fallback: lokala filer (lokal utveckling eller första körning) ──
         per_year_files = sorted(_glob.glob(_os.path.join(_BASE_DIR, 'stats_cache_*_*.json')))
@@ -1826,13 +1872,16 @@ def _stats_builder():
             if building:
                 continue
 
-            # Historiska år: hämta bara en gång – men kontrollera att cachen är komplett
-            if cached and year < current_year:
-                monthly = cached.get('monthly', [])
-                months_with_data = sum(1 for m in (monthly or []) if m > 0)
-                if months_with_data >= 6:
-                    continue  # Ser komplett ut, hoppa över
-                print(f'  Stats: {cache_key} verkar ofullständig ({months_with_data}/12 månader) – hämtar om')
+            # Historiska år: hämta bara en gång – hoppa om de finns i R2 eller RAM
+            if year < current_year:
+                if cache_key in _stats_r2_complete:
+                    continue  # Bekräftat i R2 – Worker serverar, ingen RAM-kopia behövs
+                if cached:
+                    monthly = cached.get('monthly', [])
+                    months_with_data = sum(1 for m in (monthly or []) if m > 0)
+                    if months_with_data >= 6:
+                        continue  # Komplett i RAM – hoppa över
+                    print(f'  Stats: {cache_key} verkar ofullständig ({months_with_data}/12 månader) – hämtar om')
 
             # Innevarande år: uppdatera om cachen är > 6 h gammal
             if cached and year == current_year:
@@ -1850,20 +1899,28 @@ def _stats_builder():
 
             result = _fetch_year_stats(year, DEFAULT_COUNTY_ID, max_month=max_month)
             if result:
-                _save_cache(cache_key)   # spara till R2 (Worker serverar därifrån)
                 if year == current_year:
-                    # Innevarande år hålls i RAM för snabb on-demand-åtkomst
+                    # Innevarande år: spara via _stats_cache → R2
                     with _stats_lock:
                         _stats_cache[cache_key] = result
                         _build_progress[cache_key] = {'status': 'ready'}
+                    _save_cache(cache_key)
                 else:
-                    # Historiska år: sparas till R2 men lagras INTE i RAM.
-                    # Cloudflare Worker serverar dem direkt från R2 utan att
-                    # träffa Flask, så in-memory-cache är onödig och kostar
-                    # ~60 MB/år i Python-objekt.
+                    # Historiska år: spara direkt till R2 via _r2_put – inte via
+                    # _stats_cache (undviker tidigare bugg där _save_cache läste
+                    # från cachen innan result lades in → inget sparades).
+                    # Cloudflare Worker serverar historiska år direkt från R2;
+                    # inga Python-objekt behöver hållas i RAM (~60 MB/år sparas).
+                    import gc as _gc
+                    r2_ok = _r2_put(f'stats_cache_{cache_key}.json', {cache_key: result})
+                    del result   # explicit frigör: hjälper GC att samla upp snabbt
+                    _gc.collect()
+                    if r2_ok:
+                        _stats_r2_complete.add(cache_key)
+                        print(f'  Stats: {cache_key} sparad till R2 (Worker serverar härifrån)')
                     with _stats_lock:
-                        _stats_cache.pop(cache_key, None)
                         _build_progress[cache_key] = {'status': 'ready'}
+                    continue   # hoppa print nedan – result är borta
                 print(f'  Stats: {cache_key} klar – '
                       f'{result["kpi"]["obs"]} obs, {result["kpi"]["arter"]} arter')
             else:

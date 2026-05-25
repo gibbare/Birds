@@ -481,6 +481,11 @@
       border-radius: 10px; padding: 1.5rem;
       text-align: center; color: #c53030;
     }
+    .truncation-warning {
+      background: #fffbeb; border: 1px solid #f6c142;
+      border-radius: 8px; padding: .6rem 1rem;
+      color: #7c5700; font-size: .82rem; margin-bottom: .75rem;
+    }
 
     .delay-notice {
       background: #fffbeb; border: 1.5px solid #f6d860;
@@ -1395,6 +1400,13 @@ async function fetchAll() {
       const sosData = await fetchFromProxy(dateStr);
       allResults = normalizeSosResults(sosData);
       dataSource = 'proxy';
+      // Visa varning om obs trunkerades (>5 000 obs den dagen)
+      if (sosData.truncated && sosData.totalCount > sosData.returned) {
+        const warn = document.createElement('div');
+        warn.className = 'truncation-warning';
+        warn.textContent = `Visar ${sosData.returned.toLocaleString('sv')} av ${sosData.totalCount.toLocaleString('sv')} observationer (max 5 000 per dag).`;
+        content.prepend(warn);
+      }
       render(allResults.length);
       return;
     } catch (err) {

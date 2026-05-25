@@ -122,6 +122,25 @@ file_check("proxy.py", "Observer-R2-filer raderas inte (kommentar finns)",
            r"observers_se.*kvar|Lämna observers_se|radera.*inte.*observers_se",
            "Saknar kommentar om att observers_se_*.json inte ska raderas")
 
+# Minnesoptimering: historiska stats-år lagras inte i RAM
+file_check("proxy.py", "_stats_r2_complete definierad",
+           r"_stats_r2_complete\s*=\s*set\(\)",
+           "_stats_r2_complete-set saknas – historiska år hålls i RAM")
+file_check("proxy.py", "Historiska år hoppar över om de finns i R2",
+           r"_stats_r2_complete",
+           "Ingen kontroll av _stats_r2_complete i stats-loopen")
+file_check("proxy.py", "Historiska år sparas direkt via _r2_put (ej _save_cache)",
+           r"_r2_put\(.*stats_cache_.*cache_key",
+           "Direktsparning till R2 för historiska år saknas")
+
+# Paginering i /api/observations
+file_check("proxy.py", "/api/observations paginerar (MAX_OBS definieras)",
+           r"MAX_OBS\s*=\s*\d+",
+           "MAX_OBS-konstant saknas – /api/observations paginerar inte")
+file_check("proxy.py", "/api/observations returnerar 'truncated'-fält",
+           r"'truncated'",
+           "truncated-fält saknas i /api/observations-svar")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # cloudflare-worker/src/index.js
 # ══════════════════════════════════════════════════════════════════════════════
