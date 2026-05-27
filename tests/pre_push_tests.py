@@ -270,6 +270,36 @@ for fname, label in [("faglar-statistik.html", "Statistiksidan"),
     file_check(fname, f"{label}: hämtar /api/meta",  r"/api/meta")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Testfiler – existerar och har rätt struktur
+# ══════════════════════════════════════════════════════════════════════════════
+print(f"\n{HEAD}Testfiler – existerar och är korrekt strukturerade{RST}")
+
+for tf in [
+    "tests/test_proxy_logic.py",
+    "tests/test_proxy_api.py",
+    "tests/test_worker_logic.mjs",
+    "tests/test_vasterbotten_logic.mjs",
+    "tests/test_observatorer_logic.mjs",
+    "tests/test_statistik_logic.mjs",
+    "tests/test_hackning_logic.mjs",
+]:
+    file_check(tf, f"{tf} finns", r".",
+               f"Testfilen {tf} saknas")
+
+file_check("tests/test_proxy_api.py",       "API-test: TestObservations-klass",   r"class TestObservations")
+file_check("tests/test_proxy_api.py",       "API-test: TestStatistics-klass",     r"class TestStatistics")
+file_check("tests/test_proxy_api.py",       "API-test: TestBreeding-klass",       r"class TestBreeding")
+file_check("tests/test_proxy_api.py",       "API-test: TestMemoryProfile-klass",  r"class TestMemoryProfile")
+file_check("tests/test_vasterbotten_logic.mjs", "VB-test: normalizeSosResults",  r"normalizeSosResults")
+file_check("tests/test_vasterbotten_logic.mjs", "VB-test: rlBadge",              r"rlBadge")
+file_check("tests/test_observatorer_logic.mjs", "Obs-test: buildDetail",         r"buildDetail")
+file_check("tests/test_observatorer_logic.mjs", "Obs-test: renderSpList",        r"renderSpList")
+file_check("tests/test_statistik_logic.mjs",    "Stat-test: updateKpi",          r"updateKpi")
+file_check("tests/test_statistik_logic.mjs",    "Stat-test: _muniMonthly",       r"_muniMonthly")
+file_check("tests/test_hackning_logic.mjs",     "Hack-test: actCat",             r"actCat")
+file_check("tests/test_hackning_logic.mjs",     "Hack-test: renderBreeding",     r"renderBreeding")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Sammanfattning
 # ══════════════════════════════════════════════════════════════════════════════
 total = len(failures)
