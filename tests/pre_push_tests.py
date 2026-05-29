@@ -52,12 +52,15 @@ def has(content, pattern, flags=0):
     """True om regex-mönster finns i content."""
     return bool(re.search(pattern, content or "", flags))
 
-def file_check(path, name, pattern, hint=""):
+def file_check(path, name, pattern, hint="", negate=False):
     c = _content(path)
     if c is None:
-        check(name, False, f"Filen saknas: {path}")
+        # Fil saknas – OK om negate=True (filen ska inte finnas), fel annars
+        check(name, negate, hint or f"Filen saknas: {path}")
     else:
-        check(name, has(c, pattern), hint or f"Mönster saknas: {pattern!r}")
+        found = has(c, pattern)
+        ok    = (not found) if negate else found
+        check(name, ok, hint or (f"Mönster får ej finnas: {pattern!r}" if negate else f"Mönster saknas: {pattern!r}"))
 
 # ══════════════════════════════════════════════════════════════════════════════
 # proxy.py
@@ -170,71 +173,6 @@ file_check(CW, "CORS-headers satta",      r"Access-Control-Allow-Origin")
 file_check(CW, "Bakåtkompatibilitet: gammalt sp/pl-format", r"Array\.isArray.*d\.sp")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# faglar-observatorer.html
-# ══════════════════════════════════════════════════════════════════════════════
-print(f"\n{HEAD}faglar-observatorer.html{RST}")
-
-OBS = "faglar-observatorer.html"
-
-for fn in ["fetchData", "applyFilters", "toggleDetail", "toggleSpList",
-           "buildDetail", "renderAll", "renderPagination", "goPage"]:
-    file_check(OBS, f"Funktion {fn}() definierad", rf"function {fn}\s*\(")
-
-for eid in ["searchInput", "tableBody", "pagination", "emptyState"]:
-    file_check(OBS, f"Element #{eid} finns", rf'id="{eid}"')
-
-# URL-param reporter
-file_check(OBS, "Hanterar ?reporter= URL-param",
-           r"get\(['\"]reporter['\"]\)",
-           "URLSearchParams .get('reporter') saknas")
-file_check(OBS, "openRow sätts från reporter-param",
-           r"openRow\s*=\s*_reporterParam",
-           "openRow = _reporterParam saknas")
-file_check(OBS, "searchInput fylls från reporter-param",
-           r"searchInput.*value\s*=\s*_reporterParam|value\s*=\s*_reporterParam.*searchInput",
-           "searchInput.value = _reporterParam saknas")
-file_check(OBS, "Artlistan öppnas automatiskt (toggleSpList kallas)",
-           r"toggleSpList\s*\(_reporterParam",
-           "toggleSpList(_reporterParam, ...) saknas i URL-param-hantering")
-
-# Listnings-ID:n
-file_check(OBS, "sp-list ID-mönster",  r"sp-list-\$\{safeId\}")
-file_check(OBS, "sub-list ID-mönster", r"sub-list-\$\{safeId\}")
-file_check(OBS, "hyb-list ID-mönster", r"hyb-list-\$\{safeId\}")
-
-# Alfabetisk sortering
-file_check(OBS, "Alfabetisk sortering med sv-locale",
-           r"localeCompare\([^)]*'sv'[^)]*\)",
-           "localeCompare(..., 'sv') saknas i sortering")
-
-# sub/hyb sektioner i buildDetail
-file_check(OBS, "buildDetail: sub-sektion visas om r.sub > 0",
-           r"r\.sub\s*>\s*0",
-           "sub-sektion saknas i buildDetail")
-file_check(OBS, "buildDetail: hyb-sektion visas om r.hyb > 0",
-           r"r\.hyb\s*>\s*0",
-           "hyb-sektion saknas i buildDetail")
-
-# Favoritfunktion
-file_check(OBS, "Favoritfunktion bevarad", r"favorites")
-
-# Default favoriter
-file_check(OBS, "onlyFavs är true som default",
-           r"let\s+onlyFavs\s*=\s*true",
-           "onlyFavs ska vara true som standard")
-file_check(OBS, "favToggle har active-klass som default",
-           r'class="fav-toggle active"',
-           "favToggle-knappen saknar active-klass i HTML")
-file_check(OBS, "Tom favoritlista ger hjälpmeddelande",
-           r"Inga favoriter",
-           "Meddelande för tom favoritlista saknas")
-
-# Footer
-file_check(OBS, "Footer: Version 4.2", r"Version 4\.2")
-file_check(OBS, "Footer: Datahämtning-span", r'id="footerDatahamtning"')
-file_check(OBS, "Footer: hämtar /api/meta", r"/api/meta")
-
-# ══════════════════════════════════════════════════════════════════════════════
 # faglar-vasterbotten.html
 # ══════════════════════════════════════════════════════════════════════════════
 print(f"\n{HEAD}faglar-vasterbotten.html{RST}")
@@ -244,16 +182,11 @@ VB = "faglar-vasterbotten.html"
 for fn in ["escHtml", "filteredRows", "rowHtml", "fmtTidCell"]:
     file_check(VB, f"Funktion {fn}() definierad", rf"function {fn}\s*\(")
 
-# Rapportörslänk
-file_check(VB, "Rapportörnamn är länk till observatörssidan",
-           r"faglar-observatorer\.html\?reporter=",
-           "Länk till faglar-observatorer.html?reporter= saknas")
-file_check(VB, "Reporter-namn URL-encodas",
-           r"encodeURIComponent\s*\(\s*row\.reporter\s*\)",
-           "encodeURIComponent(row.reporter) saknas")
-file_check(VB, "Klick-propagation stoppas på rapportörslänk",
-           r"event\.stopPropagation\s*\(\s*\)",
-           "event.stopPropagation() saknas på rapportörslänken")
+# Rapportörnamn visas som ren text (ej länk till borttagen observatörssida)
+file_check(VB, "Rapportörnamn är ej länk till observatörssidan",
+           r"(?<!href=['\"])faglar-observatorer",
+           "faglar-observatorer.html finns kvar som länk – ta bort den",
+           negate=True)
 
 # Kartknapp
 file_check(VB, "Kartknapp finns", r"col-map|mapBtn")
@@ -261,14 +194,6 @@ file_check(VB, "Kartknapp finns", r"col-map|mapBtn")
 # Dagslistans kolumner
 for col in ["col-art", "col-antal", "col-huvud", "col-rap", "col-tid"]:
     file_check(VB, f"Kolumn {col} finns", col)
-
-# Footer
-file_check(OBS, "Excel-exportknapp finns",        r"exportSpToExcel",
-           "exportSpToExcel-funktion saknas – Excel-export borttagen?")
-file_check(OBS, "SheetJS laddas lazily",          r"sheetjs\.com.*xlsx",
-           "SheetJS CDN-länk saknas – Excel-export kommer inte fungera")
-file_check(OBS, "Export skapar korrekt kolumner", r"'Art'.*'Observationer'|Observationer.*Art",
-           "Kolumnrubriker Art/Observationer saknas i Excel-exporten")
 
 file_check(VB, "Footer: Version 4.2",       r"Version 4\.2")
 file_check(VB, "Footer: Datahämtning-span", r'id="footerDatahamtning"')
@@ -294,25 +219,27 @@ for tf in [
     "tests/test_proxy_api.py",
     "tests/test_worker_logic.mjs",
     "tests/test_vasterbotten_logic.mjs",
-    "tests/test_observatorer_logic.mjs",
     "tests/test_statistik_logic.mjs",
     "tests/test_hackning_logic.mjs",
 ]:
     file_check(tf, f"{tf} finns", r".",
                f"Testfilen {tf} saknas")
 
-file_check("tests/test_proxy_api.py",       "API-test: TestObservations-klass",   r"class TestObservations")
-file_check("tests/test_proxy_api.py",       "API-test: TestStatistics-klass",     r"class TestStatistics")
-file_check("tests/test_proxy_api.py",       "API-test: TestBreeding-klass",       r"class TestBreeding")
-file_check("tests/test_proxy_api.py",       "API-test: TestMemoryProfile-klass",  r"class TestMemoryProfile")
-file_check("tests/test_vasterbotten_logic.mjs", "VB-test: normalizeSosResults",  r"normalizeSosResults")
-file_check("tests/test_vasterbotten_logic.mjs", "VB-test: rlBadge",              r"rlBadge")
-file_check("tests/test_observatorer_logic.mjs", "Obs-test: buildDetail",         r"buildDetail")
-file_check("tests/test_observatorer_logic.mjs", "Obs-test: renderSpList",        r"renderSpList")
-file_check("tests/test_statistik_logic.mjs",    "Stat-test: updateKpi",          r"updateKpi")
-file_check("tests/test_statistik_logic.mjs",    "Stat-test: _muniMonthly",       r"_muniMonthly")
-file_check("tests/test_hackning_logic.mjs",     "Hack-test: actCat",             r"actCat")
-file_check("tests/test_hackning_logic.mjs",     "Hack-test: renderBreeding",     r"renderBreeding")
+# observatörssidan är borttagen – kontrollera att testfilen INTE finns kvar
+file_check("tests/test_observatorer_logic.mjs",
+           "Obs-testfil borttagen (faglar-observatorer.html raderad)",
+           r".", negate=True)
+
+file_check("tests/test_proxy_api.py",           "API-test: TestObservations-klass",  r"class TestObservations")
+file_check("tests/test_proxy_api.py",           "API-test: TestStatistics-klass",    r"class TestStatistics")
+file_check("tests/test_proxy_api.py",           "API-test: TestBreeding-klass",      r"class TestBreeding")
+file_check("tests/test_proxy_api.py",           "API-test: TestMemoryProfile-klass", r"class TestMemoryProfile")
+file_check("tests/test_vasterbotten_logic.mjs", "VB-test: normalizeSosResults",     r"normalizeSosResults")
+file_check("tests/test_vasterbotten_logic.mjs", "VB-test: rlBadge",                 r"rlBadge")
+file_check("tests/test_statistik_logic.mjs",    "Stat-test: updateKpi",             r"updateKpi")
+file_check("tests/test_statistik_logic.mjs",    "Stat-test: _muniMonthly",          r"_muniMonthly")
+file_check("tests/test_hackning_logic.mjs",     "Hack-test: actCat",                r"actCat")
+file_check("tests/test_hackning_logic.mjs",     "Hack-test: renderBreeding",        r"renderBreeding")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Sammanfattning
