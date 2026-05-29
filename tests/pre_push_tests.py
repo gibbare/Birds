@@ -255,6 +255,13 @@ for col in ["col-art", "col-antal", "col-huvud", "col-rap", "col-tid"]:
     file_check(VB, f"Kolumn {col} finns", col)
 
 # Footer
+file_check(OBS, "Excel-exportknapp finns",        r"exportSpToExcel",
+           "exportSpToExcel-funktion saknas – Excel-export borttagen?")
+file_check(OBS, "SheetJS laddas lazily",          r"sheetjs\.com.*xlsx",
+           "SheetJS CDN-länk saknas – Excel-export kommer inte fungera")
+file_check(OBS, "Export skapar korrekt kolumner", r"'Art'.*'Observationer'|Observationer.*Art",
+           "Kolumnrubriker Art/Observationer saknas i Excel-exporten")
+
 file_check(VB, "Footer: Version 4.2",       r"Version 4\.2")
 file_check(VB, "Footer: Datahämtning-span", r'id="footerDatahamtning"')
 file_check(VB, "Footer: hämtar /api/meta",  r"/api/meta")

@@ -170,6 +170,21 @@
       .detail-box { padding: .9rem 1rem; }
     }
 
+    /* ── Excel-exportknapp ── */
+    .excel-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: none; padding: 0; cursor: pointer;
+      border-radius: 4px; transition: transform .12s, opacity .12s;
+      flex-shrink: 0; opacity: .82;
+    }
+    .excel-btn:hover  { transform: scale(1.13); opacity: 1; }
+    .excel-btn:active { transform: scale(.95); }
+    .excel-btn:disabled { opacity: .35; cursor: default; transform: none; }
+    .sp-list-header {
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .sp-list-header .all-sp-toggle { flex: 1; }
+
     /* ── Expanderbara listor: arter / underarter / hybrider ── */
     .all-sp-toggle {
       display: flex; align-items: center; justify-content: space-between;
@@ -533,9 +548,22 @@ function buildDetail(r) {
       <div class="month-chart">${monHtml}</div>
     </div>
     <div class="detail-section" style="margin-top:.75rem">
-      <div class="all-sp-toggle" onclick="toggleSpList('${esc(r.name)}','sp',this)">
-        <h4 style="margin:0">Alla ${r.art} arter</h4>
-        <span class="all-sp-arrow">▶</span>
+      <div class="sp-list-header">
+        <div class="all-sp-toggle" onclick="toggleSpList('${esc(r.name)}','sp',this)">
+          <h4 style="margin:0">Alla ${r.art} arter</h4>
+          <span class="all-sp-arrow">▶</span>
+        </div>
+        <button class="excel-btn" title="Exportera artlista till Excel"
+          onclick="event.stopPropagation(); exportSpToExcel('${esc(r.name)}', this)">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
+            <rect width="22" height="22" rx="4" fill="#217346"/>
+            <rect x="2" y="6"  width="8" height="1.4" rx=".5" fill="rgba(255,255,255,.4)"/>
+            <rect x="2" y="9"  width="8" height="1.4" rx=".5" fill="rgba(255,255,255,.4)"/>
+            <rect x="2" y="12" width="8" height="1.4" rx=".5" fill="rgba(255,255,255,.4)"/>
+            <rect x="2" y="15" width="8" height="1.4" rx=".5" fill="rgba(255,255,255,.4)"/>
+            <path d="M12 5.5l2.5 3.8 2.5-3.8H19l-3.5 5 3.7 5h-2.3l-2.7-4-2.7 4H9.5l3.7-5L9.8 5.5z" fill="white"/>
+          </svg>
+        </button>
       </div>
       <div class="all-sp-list" id="sp-list-${safeId}">
         <div class="all-sp-item" style="color:#a0aec0">Hämtar…</div>
@@ -639,6 +667,55 @@ function renderSpList(listEl, species) {
       <span class="all-sp-name">${esc(s.sv)}</span>
       <span class="all-sp-obs">${s.obs} obs · ${(s.ind ?? s.obs).toLocaleString('sv')} ind</span>
     </div>`).join('');
+}
+
+/* ── Excel-export ── */
+let _xlsxReady = false;
+async function _ensureXlsx() {
+  if (_xlsxReady || typeof XLSX !== 'undefined') { _xlsxReady = true; return; }
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    s.onload = () => { _xlsxReady = true; resolve(); };
+    s.onerror = () => reject(new Error('Kunde inte ladda xlsx-biblioteket'));
+    document.head.appendChild(s);
+  });
+}
+
+async function exportSpToExcel(name, btnEl) {
+  btnEl.disabled = true;
+  const origHTML = btnEl.innerHTML;
+  btnEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
+    <rect width="22" height="22" rx="4" fill="#276749"/>
+    <text x="11" y="16" text-anchor="middle" fill="white" font-family="sans-serif" font-size="12">⏳</text>
+  </svg>`;
+  try {
+    await _ensureXlsx();
+    const data    = await _fetchSpData(name);
+    const species = data.sp || [];
+    const sorted  = [...species].sort((a, b) => (a.sv || '').localeCompare(b.sv || '', 'sv'));
+
+    const rows = [['Art', 'Observationer', 'Individer']];
+    sorted.forEach(s => rows.push([s.sv || '', s.obs ?? 0, s.ind ?? s.obs ?? 0]));
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Kolumnbredder
+    ws['!cols'] = [{ wch: 32 }, { wch: 16 }, { wch: 12 }];
+    // Fet rubrikrad
+    ['A1','B1','C1'].forEach(ref => {
+      if (ws[ref]) ws[ref].s = { font: { bold: true } };
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Arter');
+    const safeFileName = name.replace(/[^a-zA-ZÅÄÖåäö0-9_ ]/g, '').trim().replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `${safeFileName}_arter.xlsx`);
+  } catch (e) {
+    alert('Export misslyckades: ' + e.message);
+  } finally {
+    btnEl.disabled = false;
+    btnEl.innerHTML = origHTML;
+  }
 }
 
 /* ── Hamburgermeny ── */
