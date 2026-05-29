@@ -162,6 +162,30 @@ class TestGbifRank:
         with patch('requests.get', return_value=mock_resp):
             assert _gbif_rank('Parus major') == 'sp'
 
+    def test_gbif_genus_ger_grp(self):
+        """GENUS-rank (t.ex. Phalacrocorax = 'skarvar') → grupptaxon 'grp'."""
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {'matchType': 'EXACT', 'rank': 'GENUS'}
+        with patch('requests.get', return_value=mock_resp):
+            assert _gbif_rank('Phalacrocorax') == 'grp'
+
+    def test_gbif_family_ger_grp(self):
+        """FAMILY-rank → grupptaxon 'grp'."""
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {'matchType': 'EXACT', 'rank': 'FAMILY'}
+        with patch('requests.get', return_value=mock_resp):
+            assert _gbif_rank('Anatidae') == 'grp'
+
+    def test_gbif_order_ger_grp(self):
+        """ORDER-rank → grupptaxon 'grp'."""
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {'matchType': 'EXACT', 'rank': 'ORDER'}
+        with patch('requests.get', return_value=mock_resp):
+            assert _gbif_rank('Passeriformes') == 'grp'
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # _se_rep_empty
@@ -310,6 +334,26 @@ class TestApplyRankCorrections:
         sub_after_1 = set(rep['sub_ids'])
         _apply_rank_corrections(reporters, cache)
         assert rep['sub_ids'] == sub_after_1
+
+    def test_grupp_taxon_tas_bort_fran_sp(self):
+        """'grp'-taxon ska tas bort ur sp_ids/sp_obs, inte hamna i sub/hyb."""
+        rep = self._rep(
+            sp_ids=['777'],
+            sp_obs={'777': {'sv': 'skarvar', 'obs': 1, 'ind': 5}}
+        )
+        reporters = {'Kalle': rep}
+        _apply_rank_corrections(reporters, {'777': 'grp'})
+        assert '777' not in rep['sp_ids']
+        assert '777' not in rep['sp_obs']
+        assert '777' not in rep['sub_ids']
+        assert '777' not in rep['hyb_ids']
+
+    def test_grupp_taxon_minskar_art_raknaren(self):
+        """'grp' tas bort → art-räknaren ska minska."""
+        rep = self._rep(sp_ids=['777', '888'])
+        reporters = {'Kalle': rep}
+        _apply_rank_corrections(reporters, {'777': 'grp'})
+        assert rep['art'] == 1
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -491,6 +535,36 @@ class TestMergeSeRecords:
         assert reporters['Kalle']['art'] == 1
         assert reporters['Lisa']['art'] == 1
         assert 'Lisa' not in reporters['Kalle']['sp_ids']
+
+    # ── Grupptaxa ───────────────────────────────────────────────────────────
+
+    def test_grupp_taxon_via_rank_cache_ger_ej_art(self):
+        """Taxon markerat 'grp' i rank_cache ska INTE räknas som art."""
+        r = _merge(
+            [_rec(sv_name='skarvar', sci_name='Phalacrocorax', taxon_id='8001')],
+            rank_cache={'8001': 'grp'}
+        )['Anders Andersson']
+        assert r['art'] == 0
+        assert len(r['sp_ids']) == 0
+        assert '8001' not in r['sp_obs']
+
+    def test_grupp_taxon_obs_raknas_anda(self):
+        """Grupptaxa-obs ska räknas i rep['obs'] (antal sett, ej art)."""
+        r = _merge(
+            [_rec(sv_name='svanar', sci_name='Cygnus', taxon_id='8002')],
+            rank_cache={'8002': 'grp'}
+        )['Anders Andersson']
+        assert r['obs'] == 1
+
+    def test_grupp_taxon_och_art_i_samma_lista(self):
+        """Grupptaxon + riktig art → art=1, obs=2."""
+        recs = [
+            _rec(sv_name='skarvar',    sci_name='Phalacrocorax', taxon_id='8001'),
+            _rec(sv_name='talgoxe',    sci_name='Parus major',   taxon_id='1'),
+        ]
+        r = _merge(recs, rank_cache={'8001': 'grp'})['Anders Andersson']
+        assert r['art'] == 1
+        assert r['obs'] == 2
 
 
 # ═════════════════════════════════════════════════════════════════════════════

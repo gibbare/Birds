@@ -2191,7 +2191,7 @@ _SV_NAME_MERGES = {
 
 def _gbif_rank(sci_name):
     """Slår upp taxon-rank via GBIF species/match.
-    Returnerar 'sp', 'sub' eller 'hyb'.
+    Returnerar 'sp', 'sub', 'hyb' eller 'grp' (grupptaxa – släkte/familj/ordning).
     Anropas bara för taxa som saknas i rank-cachen."""
     if not sci_name:
         return 'sp'
@@ -2209,6 +2209,14 @@ def _gbif_rank(sci_name):
             if d.get('matchType', 'NONE') == 'NONE':
                 return 'sp'
             rank = d.get('rank', '').upper()
+            # Grupptaxa (släkte och högre) ska INTE räknas som art.
+            # Observatörer som bara skriver "skarvar" eller "svanar" utan
+            # artbestämning registreras på genus-nivå i Artportalen och
+            # skall inte ingå i artlistan.
+            if rank in ('GENUS', 'FAMILY', 'ORDER', 'CLASS', 'PHYLUM', 'KINGDOM',
+                        'TRIBE', 'SUBFAMILY', 'SUPERFAMILY', 'SUBORDER',
+                        'SUBCLASS', 'SUBPHYLUM', 'SECTION', 'COHORT'):
+                return 'grp'
             # Bara SUBSPECIES räknas som underart för fåglar.
             # FORM/VARIETY används i GBIF för domesticerade former (tamduva etc.)
             # och färgmorfer – dessa ska stanna som vanliga "arter".
@@ -2223,6 +2231,7 @@ def _gbif_rank(sci_name):
 
 def _apply_rank_corrections(reporters, rank_cache):
     """Flytta taxa till rätt bucket (sp/sub/hyb) baserat på rank_cache.
+    Grupptaxa ('grp') tas bort ur sp_ids/sp_obs utan att läggas i annat bucket.
     Idempotent – kan köras flera gånger utan bieffekter."""
     for rep in reporters.values():
         for tid in list(rep.get('sp_ids', set())):
@@ -2239,6 +2248,10 @@ def _apply_rank_corrections(reporters, rank_cache):
                 obs_data = rep['sp_obs'].pop(tid, None)
                 if obs_data:
                     rep['hyb_obs'].setdefault(tid, obs_data)
+            elif r == 'grp':
+                # Grupptaxa (släkte/familj) tillhör inget artbucket
+                rep['sp_ids'].discard(tid)
+                rep['sp_obs'].pop(tid, None)
         # Räkna om art-antalet från den faktiska sp_ids-mängden
         rep['art'] = len(rep.get('sp_ids', set()))
 
@@ -2285,12 +2298,14 @@ def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_nam
             # Alla taxa i merge-gruppen delar en syntetisk nyckel och visningsnamn
             eff_id    = f'svname:{merged_target}'
             eff_sv    = merged_target
+            is_group  = False
             is_hybrid = False
             is_sub    = False
         elif _looks_hybrid(sv_name) or _looks_hybrid(sci_name):
             # Hybridnamn identifierat från svenska/vetenskapliga namnet
             eff_id    = taxon_id or f'svname:hyb:{sv_name.lower()}'
             eff_sv    = sv_name
+            is_group  = False
             is_hybrid = True
             is_sub    = False
             # Uppdatera rank_cache direkt så GBIF-lookup hoppas över
@@ -2302,11 +2317,13 @@ def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_nam
             # ── Klassificera via rank_cache; okända taxa samlas för GBIF-lookup ─
             if eff_id:
                 cached_rank = (rank_cache or {}).get(eff_id, '')
-                is_hybrid = cached_rank == 'hyb'
-                is_sub    = cached_rank == 'sub' and not is_hybrid
+                is_group  = cached_rank == 'grp'
+                is_hybrid = cached_rank == 'hyb' and not is_group
+                is_sub    = cached_rank == 'sub' and not is_hybrid and not is_group
                 if new_sci_names is not None and not cached_rank and sci_name:
                     new_sci_names[eff_id] = sci_name
             else:
+                is_group  = False
                 is_hybrid = False
                 is_sub    = False
 
@@ -2318,7 +2335,8 @@ def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_nam
             rep['monthly'][month_0] += 1
 
         # Artspårning – routa till rätt bucket med effektivt ID och namn
-        if eff_id:
+        # Grupptaxa (is_group) räknas INTE som art och hoppar över artspårningen.
+        if eff_id and not is_group:
             ind = int(occ.get('individualCount') or occ.get('quantity') or 1)
             if is_hybrid:
                 bucket_ids = rep['hyb_ids']

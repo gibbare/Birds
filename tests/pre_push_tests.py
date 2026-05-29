@@ -105,6 +105,14 @@ file_check("proxy.py", "Bara SUBSPECIES ger 'sub'",
            r"rank\s*==\s*['\"]SUBSPECIES['\"]",
            "Kontrollen 'rank == SUBSPECIES' saknas")
 
+# Grupptaxa (genus/familj) ska INTE räknas som art
+file_check("proxy.py", "Grupptaxa GENUS ger 'grp'",
+           r"['\"]GENUS['\"]",
+           "'GENUS' saknas i rank-checks – grupptaxa filtreras inte")
+file_check("proxy.py", "Grupptaxa hoppas över i artspårning",
+           r"not\s+is_group",
+           "is_group-check saknas i _merge_se_records – grupptaxa räknas som art")
+
 # sub/hyb-fält i reporter-struct
 file_check("proxy.py", "sub_ids i reporter-struct",  r"'sub_ids'\s*:\s*set\(\)")
 file_check("proxy.py", "hyb_ids i reporter-struct",  r"'hyb_ids'\s*:\s*set\(\)")
