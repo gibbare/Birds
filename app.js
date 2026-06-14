@@ -26,6 +26,19 @@ const WEATHER_EMOJI = {
   22: '🌨️', 23: '🌨️', 24: '🌨️', 25: '❄️', 26: '❄️', 27: '❄️',
 };
 
+// Snow/sleet → rain remap for when temperature is at or above 0°C
+const SNOW_TO_RAIN = {
+  12: 8,  13: 9,  14: 10,  // sleet showers → rain showers
+  15: 8,  16: 9,  17: 10,  // snow showers  → rain showers
+  22: 18, 23: 19, 24: 20,  // sleet         → rain
+  25: 18, 26: 19, 27: 20,  // snow          → rain
+};
+
+function weatherEmoji(symbol, temp) {
+  const s = (temp !== null && temp >= 0) ? (SNOW_TO_RAIN[symbol] ?? symbol) : symbol;
+  return WEATHER_EMOJI[s] || '🌡️';
+}
+
 // Parameter name map: old pmp3g names → new snow1g names
 const PARAM_MAP = {
   't':        'air_temperature',
@@ -160,7 +173,7 @@ function buildDaySummaries(timeSeries) {
     day.symbols.forEach(s => freq[s] = (freq[s] || 0) + 1);
     const dominant = Object.entries(freq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 1;
     const label = day.date.toLocaleDateString('sv-SE', { weekday: 'short' }).toUpperCase();
-    return { label, emoji: WEATHER_EMOJI[dominant] || '🌡️', tMin, tMax };
+    return { label, emoji: weatherEmoji(+dominant, tMin), tMin, tMax };
   });
 }
 
@@ -354,7 +367,7 @@ function drawForecastChart(timeSeries) {
 
     // emoji
     ctx.font = '15px serif';
-    ctx.fillText(WEATHER_EMOJI[symbols[i]] || '🌡️', pt.x, pt.y - 23);
+    ctx.fillText(weatherEmoji(symbols[i], temps[i]), pt.x, pt.y - 23);
 
     // time label
     ctx.fillStyle = 'rgba(160,176,208,0.9)';
@@ -421,7 +434,7 @@ function renderDayDetailList(dayData, lat, lon) {
       return sunrise && sunset ? (t >= sunrise && t <= sunset) : true;
     })();
     const skyEmoji   = isDay ? '☀️' : moonPhaseEmoji(t);
-    const wxEmoji    = WEATHER_EMOJI[symbol] || '🌡️';
+    const wxEmoji    = weatherEmoji(symbol, temp);
     const cloudPct   = Math.round((cloud / 8) * 100);
     const cardDir    = DIRS[Math.round(wdir / 45) % 8];
     const tColor     = tempColor(temp);

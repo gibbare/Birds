@@ -536,7 +536,6 @@ function connectBlitzortung() {
       const d = JSON.parse(raw);
       if (d.lat && d.lon) {
         addStrike(d.lat, d.lon, d);
-        updateDisplay();
       }
     } catch { /* ignore malformed */ }
   };
@@ -642,6 +641,8 @@ function buildPopup(lat, lon, now, data) {
 }
 
 function addStrike(lat, lon, data) {
+  // Ignore strikes more than 500 km away — Blitzortung streams global data
+  if (userLat !== null && distKmToUser(lat, lon) > 500) return;
   const now = Date.now();
   const s = {
     lat, lon, time: now, data,
@@ -660,6 +661,7 @@ function addStrike(lat, lon, data) {
 
 // ── DISPLAY UPDATE (every 10s – expire old strikes, refresh icon colours) ─────
 function updateDisplay() {
+  if (!map) return;
   const now = Date.now();
   strikes = strikes.filter(s => {
     if (now - s.time > STRIKE_TTL_MS) { map.removeLayer(s.marker); return false; }
@@ -672,6 +674,7 @@ function updateDisplay() {
 
 // ── PREDICTION (every 30s + on map move/zoom – based on visible strikes) ──────
 function updatePrediction() {
+  if (!predLayer) return;
   predLayer.clearLayers();
 
   const visible = getVisibleStrikes();
