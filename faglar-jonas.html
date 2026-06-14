@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Fåglar" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -77,118 +78,105 @@
 
     /* ── Summary cards ── */
     .summary-strip {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: .5rem;
-      padding: .7rem .75rem .5rem;
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: .5rem; padding: .7rem .75rem .5rem;
     }
     .summary-card {
-      background: white;
-      border-radius: 10px;
-      padding: .5rem .4rem .45rem;
-      text-align: center;
-      box-shadow: 0 1px 4px rgba(0,0,0,.09);
+      background: white; border-radius: 10px; padding: .5rem .4rem .45rem;
+      text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.09);
     }
     .summary-val {
-      font-size: 1.35rem; font-weight: 800;
-      color: #2b6cb0; line-height: 1.1;
+      font-size: 1.35rem; font-weight: 800; color: #2b6cb0; line-height: 1.1;
     }
     .summary-lbl {
-      font-size: .62rem; font-weight: 600;
-      color: #718096; text-transform: uppercase;
-      letter-spacing: .04em; margin-top: .15rem;
+      font-size: .62rem; font-weight: 600; color: #718096;
+      text-transform: uppercase; letter-spacing: .04em; margin-top: .15rem;
     }
 
     /* ── Monthly bars ── */
     .monthly-section {
-      margin: 0 .75rem .55rem;
-      background: white;
-      border-radius: 10px;
-      padding: .6rem .75rem .5rem;
+      margin: 0 .75rem .55rem; background: white;
+      border-radius: 10px; padding: .6rem .75rem .5rem;
       box-shadow: 0 1px 4px rgba(0,0,0,.09);
     }
     .monthly-title {
       font-size: .67rem; font-weight: 700; color: #718096;
-      text-transform: uppercase; letter-spacing: .05em;
-      margin-bottom: .45rem;
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: .45rem;
     }
-    .monthly-bars {
-      display: flex; align-items: flex-end;
-      gap: 3px; height: 40px;
-    }
-    .monthly-col {
-      flex: 1; display: flex; flex-direction: column;
-      align-items: center; gap: 2px;
-    }
-    .monthly-bar {
-      width: 100%; background: #bee3f8; border-radius: 3px 3px 0 0;
-      min-height: 2px; transition: background .2s;
-    }
-    .monthly-bar.has-obs { background: #2b6cb0; }
-    .monthly-bar.current { background: #276749; }
-    .monthly-name {
-      font-size: .55rem; color: #a0aec0; font-weight: 600;
-      text-transform: uppercase;
-    }
+    .monthly-bars { display: flex; align-items: flex-end; gap: 3px; height: 40px; }
+    .monthly-col  { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .monthly-bar  { width: 100%; background: #bee3f8; border-radius: 3px 3px 0 0; min-height: 2px; }
+    .monthly-bar.has-obs  { background: #2b6cb0; }
+    .monthly-bar.current  { background: #276749; }
+    .monthly-name { font-size: .55rem; color: #a0aec0; font-weight: 600; text-transform: uppercase; }
 
     /* ── Locations ── */
     .locations-section {
-      margin: 0 .75rem .55rem;
-      background: white;
-      border-radius: 10px;
-      padding: .55rem .75rem;
+      margin: 0 .75rem .55rem; background: white;
+      border-radius: 10px; padding: .55rem .75rem;
       box-shadow: 0 1px 4px rgba(0,0,0,.09);
       display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
     }
     .locations-title {
       font-size: .67rem; font-weight: 700; color: #718096;
-      text-transform: uppercase; letter-spacing: .05em;
-      margin-right: .2rem;
+      text-transform: uppercase; letter-spacing: .05em; margin-right: .2rem;
     }
     .loc-chip {
       background: #ebf8ff; border: 1px solid #bee3f8;
       border-radius: 20px; padding: .18rem .55rem;
       font-size: .72rem; font-weight: 600; color: #2b6cb0;
     }
-    .loc-chip .loc-cnt {
-      color: #4a5568; font-weight: 500; font-size: .66rem;
+    .loc-chip .loc-cnt { color: #4a5568; font-weight: 500; font-size: .66rem; }
+
+    /* ── Map ── */
+    .map-section {
+      margin: 0 .75rem .55rem;
+      display: none;
     }
+    .map-section.visible { display: block; }
+    #jonasMp {
+      width: 100%; height: 55dvh; min-height: 220px;
+      border-radius: 10px; overflow: hidden;
+      box-shadow: 0 1px 6px rgba(0,0,0,.15);
+    }
+    .map-toggle-wrap {
+      margin: 0 .75rem .55rem; text-align: center;
+    }
+    .btn-map {
+      background: white; border: 1px solid #cbd5e0; border-radius: 8px;
+      padding: .32rem 1rem; font-size: .78rem; font-weight: 700;
+      color: #2b6cb0; cursor: pointer; font-family: inherit;
+      transition: background .12s, border-color .12s;
+    }
+    .btn-map:hover  { background: #ebf8ff; border-color: #2b6cb0; }
+    .btn-map.active { background: #2b6cb0; color: white; border-color: #2b6cb0; }
 
     /* ── Species list ── */
     .list-section {
-      margin: 0 .75rem .75rem;
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.09);
-      overflow: hidden;
+      margin: 0 .75rem .75rem; background: white;
+      border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.09); overflow: hidden;
     }
     .list-toolbar {
       display: flex; align-items: center; gap: .5rem;
-      padding: .55rem .75rem;
-      border-bottom: 1px solid #e2e8f0;
+      padding: .55rem .75rem; border-bottom: 1px solid #e2e8f0;
     }
     .list-toolbar input {
-      flex: 1; border: 1px solid #cbd5e0;
-      border-radius: 6px; padding: .3rem .55rem;
-      font-size: .8rem; outline: none;
-      font-family: inherit;
+      flex: 1; border: 1px solid #cbd5e0; border-radius: 6px;
+      padding: .3rem .55rem; font-size: .8rem; outline: none; font-family: inherit;
     }
     .list-toolbar input:focus { border-color: #2b6cb0; }
     .sort-btn {
-      background: none; border: 1px solid #cbd5e0;
-      border-radius: 6px; padding: .28rem .6rem;
-      font-size: .73rem; font-weight: 600; color: #4a5568;
-      cursor: pointer; white-space: nowrap;
+      background: none; border: 1px solid #cbd5e0; border-radius: 6px;
+      padding: .28rem .6rem; font-size: .73rem; font-weight: 600;
+      color: #4a5568; cursor: pointer; white-space: nowrap;
       font-family: inherit; transition: background .12s, border-color .12s;
     }
     .sort-btn:hover { background: #ebf8ff; border-color: #bee3f8; color: #2b6cb0; }
     .sort-btn.active { background: #2b6cb0; border-color: #2b6cb0; color: white; }
 
     .list-header {
-      display: grid;
-      grid-template-columns: 2rem 1fr 3.2rem 3.2rem;
-      padding: .28rem .75rem;
-      background: #f7fafc;
+      display: grid; grid-template-columns: 2rem 1fr 3.8rem;
+      padding: .28rem .75rem; background: #f7fafc;
       border-bottom: 1px solid #e2e8f0;
       font-size: .66rem; font-weight: 700; color: #718096;
       text-transform: uppercase; letter-spacing: .05em;
@@ -196,33 +184,31 @@
     .list-header .col-r { text-align: right; }
 
     .species-row {
-      display: grid;
-      grid-template-columns: 2rem 1fr 3.2rem 3.2rem;
-      padding: .38rem .75rem;
-      border-bottom: 1px solid #edf2f7;
-      align-items: center;
-      transition: background .1s;
+      display: grid; grid-template-columns: 2rem 1fr 3.8rem;
+      padding: .4rem .75rem; border-bottom: 1px solid #edf2f7;
+      align-items: start; transition: background .1s;
     }
     .species-row:last-child { border-bottom: none; }
     .species-row:hover { background: #f0f7ff; }
 
-    .sp-num { font-size: .72rem; color: #a0aec0; font-weight: 600; }
+    .sp-num  { font-size: .72rem; color: #a0aec0; font-weight: 600; padding-top: .15rem; }
+    .sp-body { min-width: 0; }
     .sp-name { font-size: .88rem; font-weight: 600; color: #1a202c; }
-    .sp-obs  {
-      text-align: right; font-size: .78rem; font-weight: 700; color: #2b6cb0;
+    .sp-meta {
+      font-size: .68rem; color: #718096; margin-top: .1rem;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .sp-ind  {
-      text-align: right; font-size: .78rem; color: #718096;
+    .sp-meta .sp-date { color: #2b6cb0; font-weight: 600; margin-right: .3rem; }
+    .sp-obs {
+      text-align: right; font-size: .78rem; font-weight: 700; color: #2b6cb0;
+      padding-top: .15rem;
     }
 
     .list-empty {
-      padding: 2rem; text-align: center;
-      color: #a0aec0; font-size: .85rem;
+      padding: 2rem; text-align: center; color: #a0aec0; font-size: .85rem;
     }
-
     .list-footer-bar {
-      padding: .35rem .75rem;
-      background: #f7fafc;
+      padding: .35rem .75rem; background: #f7fafc;
       border-top: 1px solid #e2e8f0;
       font-size: .68rem; color: #a0aec0; text-align: right;
     }
@@ -230,9 +216,7 @@
     /* ── Loading skeleton ── */
     .skeleton {
       background: linear-gradient(90deg, #e2e8f0 25%, #f7fafc 50%, #e2e8f0 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s infinite;
-      border-radius: 5px;
+      background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 5px;
     }
     @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
@@ -301,17 +285,24 @@
   <div id="locationChips"></div>
 </div>
 
+<div class="map-toggle-wrap" id="mapToggleWrap" style="display:none">
+  <button class="btn-map" id="mapBtn" onclick="toggleMap()">Visa karta</button>
+</div>
+
+<div class="map-section" id="mapSection">
+  <div id="jonasMp"></div>
+</div>
+
 <div class="list-section">
   <div class="list-toolbar">
     <input type="search" id="filterInput" placeholder="Filtrera arter…" />
-    <button class="sort-btn active" id="sortObs" onclick="setSort('obs')">Mest sedd</button>
-    <button class="sort-btn" id="sortAlpha" onclick="setSort('alpha')">A–Ö</button>
+    <button class="sort-btn active" id="sortAlpha" onclick="setSort('alpha')">A–Ö</button>
+    <button class="sort-btn" id="sortObs" onclick="setSort('obs')">Mest sedd</button>
   </div>
   <div class="list-header">
     <span>#</span>
-    <span>Art</span>
+    <span>Art · Datum · Plats</span>
     <span class="col-r">Obs</span>
-    <span class="col-r">Ind</span>
   </div>
   <div id="speciesList"><div class="list-empty">Laddar…</div></div>
   <div class="list-footer-bar" id="listFooter"></div>
@@ -321,6 +312,7 @@
   Data via <a href="https://www.artdatabanken.se" target="_blank">Artdatabanken</a> · SOS API
 </footer>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
 const API   = 'https://birds-api.gibbare.workers.dev';
 const NAME  = 'Jonas Karlsson';
@@ -328,89 +320,163 @@ const YEAR  = new Date().getFullYear();
 const MONTHS = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 
 let _allSpecies = [];
-let _sortMode   = 'obs';
+let _allCoords  = [];
+let _sortMode   = 'alpha';
+let _leafletMap = null;
+let _markerLayer = null;
+let _mapVisible = false;
 
 document.getElementById('pageTitle').textContent = `JONAS KARLSSON · ÅRSLIST ${YEAR}`;
 
-// ── Burger menu ────────────────────────────────────────────────────────────────
+// ── Burger menu ──────────────────────────────────────────────────────────────
 document.getElementById('burgerBtn').addEventListener('click', e => {
   e.stopPropagation();
   document.getElementById('burgerMenu').classList.toggle('open');
 });
 document.addEventListener('click', () => document.getElementById('burgerMenu').classList.remove('open'));
 
-// ── Sort ──────────────────────────────────────────────────────────────────────
+// ── Sort ────────────────────────────────────────────────────────────────────
 function setSort(mode) {
   _sortMode = mode;
-  document.getElementById('sortObs').classList.toggle('active',   mode === 'obs');
   document.getElementById('sortAlpha').classList.toggle('active', mode === 'alpha');
+  document.getElementById('sortObs').classList.toggle('active',   mode === 'obs');
   renderList();
 }
 
-// ── Filter ────────────────────────────────────────────────────────────────────
+// ── Filter ──────────────────────────────────────────────────────────────────
 document.getElementById('filterInput').addEventListener('input', renderList);
 
-// ── Render species list ───────────────────────────────────────────────────────
+// ── Format helpers ──────────────────────────────────────────────────────────
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return '';
+  return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+}
+
+// ── Render species list ──────────────────────────────────────────────────────
 function renderList() {
   const q    = document.getElementById('filterInput').value.trim().toLowerCase();
   const el   = document.getElementById('speciesList');
   const foot = document.getElementById('listFooter');
 
-  let rows = q
-    ? _allSpecies.filter(s => s.sv.toLowerCase().includes(q))
-    : [..._allSpecies];
+  let rows = q ? _allSpecies.filter(s => s.sv.toLowerCase().includes(q)) : [..._allSpecies];
 
-  if (_sortMode === 'alpha') {
-    rows.sort((a, b) => a.sv.localeCompare(b.sv, 'sv'));
-  } else {
+  if (_sortMode === 'obs') {
     rows.sort((a, b) => b.obs - a.obs || a.sv.localeCompare(b.sv, 'sv'));
+  } else {
+    rows.sort((a, b) => a.sv.localeCompare(b.sv, 'sv'));
   }
 
   if (!rows.length) {
-    el.innerHTML = `<div class="list-empty">Inga arter matchar "${q}"</div>`;
+    el.innerHTML = `<div class="list-empty">Inga arter matchar "${escHtml(q)}"</div>`;
     foot.textContent = '';
     return;
   }
 
-  el.innerHTML = rows.map((s, i) => `
-    <div class="species-row">
-      <span class="sp-num">${i + 1}</span>
-      <span class="sp-name">${escHtml(s.sv)}</span>
-      <span class="sp-obs">${s.obs}</span>
-      <span class="sp-ind">${s.ind > 0 ? s.ind : '–'}</span>
-    </div>
-  `).join('');
+  el.innerHTML = rows.map((s, i) => {
+    const datePart = s.fd  ? `<span class="sp-date">${fmtDate(s.fd)}</span>` : '';
+    const locPart  = s.loc ? escHtml(s.loc) : '';
+    const meta     = (datePart || locPart)
+      ? `<div class="sp-meta">${datePart}${locPart}</div>`
+      : '';
+    return `
+      <div class="species-row">
+        <span class="sp-num">${i + 1}</span>
+        <div class="sp-body">
+          <div class="sp-name">${escHtml(s.sv)}</div>
+          ${meta}
+        </div>
+        <span class="sp-obs">${s.obs}</span>
+      </div>`;
+  }).join('');
 
   foot.textContent = q
     ? `Visar ${rows.length} av ${_allSpecies.length} arter`
     : `${_allSpecies.length} arter totalt`;
 }
 
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// ── Map ──────────────────────────────────────────────────────────────────────
+function toggleMap() {
+  _mapVisible = !_mapVisible;
+  const section = document.getElementById('mapSection');
+  const btn     = document.getElementById('mapBtn');
+  if (_mapVisible) {
+    section.classList.add('visible');
+    btn.classList.add('active');
+    btn.textContent = 'Dölj karta';
+    initMap();
+  } else {
+    section.classList.remove('visible');
+    btn.classList.remove('active');
+    btn.textContent = 'Visa karta';
+  }
 }
 
-// ── Monthly chart ─────────────────────────────────────────────────────────────
+function initMap() {
+  if (!_allCoords.length) return;
+
+  if (!_leafletMap) {
+    _leafletMap = L.map('jonasMp', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 18,
+    }).addTo(_leafletMap);
+    _markerLayer = L.layerGroup().addTo(_leafletMap);
+  } else {
+    _markerLayer.clearLayers();
+  }
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    _leafletMap.invalidateSize();
+
+    const max    = Math.max(..._allCoords.map(c => c.cnt), 1);
+    const bounds = [];
+
+    for (const c of _allCoords) {
+      const r = 5 + Math.round((c.cnt / max) * 9);
+      const marker = L.circleMarker([c.lat, c.lon], {
+        radius: r, fillColor: '#2b6cb0', color: '#fff',
+        weight: 1.5, opacity: 1, fillOpacity: 0.8,
+      });
+      marker.bindPopup(
+        `<div style="font-family:system-ui,sans-serif;font-size:.82rem">
+          <b style="color:#1a365d">${c.lat.toFixed(3)}, ${c.lon.toFixed(3)}</b>
+          <br><span style="color:#4a5568">${c.cnt} obs</span>
+        </div>`
+      );
+      _markerLayer.addLayer(marker);
+      bounds.push([c.lat, c.lon]);
+    }
+
+    if (bounds.length) {
+      _leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+    }
+  }));
+}
+
+// ── Monthly chart ────────────────────────────────────────────────────────────
 function renderMonthly(monthly) {
   const max     = Math.max(...monthly, 1);
   const current = new Date().getMonth();
   const bars    = document.getElementById('monthlyBars');
-
   bars.innerHTML = monthly.map((v, i) => {
-    const h    = Math.round((v / max) * 40);
-    const cls  = v === 0 ? '' : i === current ? 'current' : 'has-obs';
-    return `
-      <div class="monthly-col">
-        <div class="monthly-bar ${cls}" style="height:${Math.max(h,v>0?2:0)}px"
-             title="${MONTHS[i]}: ${v} obs"></div>
-        <div class="monthly-name">${MONTHS[i].slice(0,1)}</div>
-      </div>`;
+    const h   = Math.round((v / max) * 40);
+    const cls = v === 0 ? '' : i === current ? 'current' : 'has-obs';
+    return `<div class="monthly-col">
+      <div class="monthly-bar ${cls}" style="height:${Math.max(h, v > 0 ? 2 : 0)}px"
+           title="${MONTHS[i]}: ${v} obs"></div>
+      <div class="monthly-name">${MONTHS[i].slice(0, 1)}</div>
+    </div>`;
   }).join('');
-
   document.getElementById('monthlySection').style.display = '';
 }
 
-// ── Locations ─────────────────────────────────────────────────────────────────
+// ── Locations ────────────────────────────────────────────────────────────────
 function renderLocations(lokaler) {
   if (!lokaler || !lokaler.length) return;
   document.getElementById('locationChips').innerHTML = lokaler
@@ -420,14 +486,14 @@ function renderLocations(lokaler) {
   document.getElementById('locationsSection').style.display = '';
 }
 
-// ── Status bar ────────────────────────────────────────────────────────────────
+// ── Status bar ───────────────────────────────────────────────────────────────
 function setStatus(mode, text) {
   const bar = document.getElementById('statusBar');
   bar.className = `status-bar ${mode}`;
   document.getElementById('statusText').textContent = text;
 }
 
-// ── Summary cards ─────────────────────────────────────────────────────────────
+// ── Summary cards ────────────────────────────────────────────────────────────
 function setSummary(art, obs, dagar, lastObs) {
   const fmt = (id, val) => {
     const el = document.getElementById(id);
@@ -438,13 +504,12 @@ function setSummary(art, obs, dagar, lastObs) {
   fmt('valArt',    art);
   fmt('valObs',    obs);
   fmt('valDagar',  dagar);
-  fmt('valSenast', lastObs ? lastObs.slice(5) : '–');  // show MM-DD
+  fmt('valSenast', lastObs ? lastObs.slice(5) : '–');
 }
 
-// ── Main fetch ────────────────────────────────────────────────────────────────
+// ── Main fetch ───────────────────────────────────────────────────────────────
 async function load() {
   try {
-    // Fetch summary stats and full species list in parallel
     const [statsRes, spRes] = await Promise.all([
       fetch(`${API}/api/observer_stats?year=${YEAR}`),
       fetch(`${API}/api/observer_species?name=${encodeURIComponent(NAME)}&year=${YEAR}`),
@@ -455,11 +520,9 @@ async function load() {
     const statsAll = await statsRes.json();
     const spData   = await spRes.json();
 
-    // Find Jonas in the all-Sweden observer list
+    // Find Jonas in observer list
     const observers = Array.isArray(statsAll) ? statsAll : (statsAll.observers || []);
-    const jonas = observers.find(o =>
-      (o.name || '').toLowerCase() === NAME.toLowerCase()
-    );
+    const jonas = observers.find(o => (o.name || '').toLowerCase() === NAME.toLowerCase());
 
     if (jonas) {
       setSummary(jonas.art, jonas.obs, jonas.dagar, jonas.lastObs);
@@ -469,18 +532,25 @@ async function load() {
       setSummary('–', '–', '–', '–');
     }
 
-    // Full species list from observer_species
+    // Full species list
     _allSpecies = (spData.sp || []).map(s => ({
       sv:  s.sv  || '(okänd)',
       obs: s.obs || 0,
       ind: s.ind || 0,
+      fd:  s.fd  || '',
+      loc: s.loc || '',
     }));
 
-    // Update species count with actual full count
     document.getElementById('valArt').textContent = _allSpecies.length;
 
+    // Coordinates for map
+    _allCoords = (spData.coords || []).filter(c => c.lat && c.lon);
+    if (_allCoords.length) {
+      document.getElementById('mapToggleWrap').style.display = '';
+    }
+
     renderList();
-    setStatus('live', `Uppdaterad ${new Date().toLocaleTimeString('sv-SE', {hour:'2-digit',minute:'2-digit'})} · Data från Artdatabanken`);
+    setStatus('live', `Uppdaterad ${new Date().toLocaleTimeString('sv-SE', {hour:'2-digit',minute:'2-digit'})} · Artdatabanken`);
 
   } catch (err) {
     setStatus('error', `Kunde inte hämta data – ${err.message}`);

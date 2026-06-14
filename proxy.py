@@ -2076,24 +2076,37 @@ def _api_cache_from_compact(compact_data):
     }
 
 def _build_species_se(year, data):
-    """Bygg artfil för R2 – {sv, obs, ind} per art/underart/hybrid per rapportör.
-    Returnerar separata listor 'sp', 'sub', 'hyb' per observatör.
+    """Bygg artfil för R2 – {sv, obs, ind, fd, loc} per art/underart/hybrid per rapportör.
+    Returnerar separata listor 'sp', 'sub', 'hyb' + 'coords' per observatör.
     Ingen sp_ids, inget monthly – enbart det som artliste-endpointen behöver."""
-    def _sp_list(obs_dict):
-        return sorted(
-            [{'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
-             for v in obs_dict.values() if v.get('sv')],
-            key=lambda x: -x['ind'],
-        )
+    def _sp_list(obs_dict, first_dict):
+        items = []
+        for k, v in obs_dict.items():
+            if not v.get('sv'):
+                continue
+            item = {'sv': v['sv'], 'obs': v['obs'], 'ind': v.get('ind', v['obs'])}
+            fi = first_dict.get(k, {})
+            if fi.get('date'): item['fd']  = fi['date']
+            if fi.get('loc'):  item['loc'] = fi['loc']
+            items.append(item)
+        return sorted(items, key=lambda x: -x['ind'])
+
     reporters = {}
     for name, rep in data.get('reporters', {}).items():
-        entry = {}
-        sp  = _sp_list(rep.get('sp_obs',  {}))
-        sub = _sp_list(rep.get('sub_obs', {}))
-        hyb = _sp_list(rep.get('hyb_obs', {}))
-        if sp:   entry['sp']  = sp
-        if sub:  entry['sub'] = sub
-        if hyb:  entry['hyb'] = hyb
+        first  = rep.get('sp_first', {})
+        entry  = {}
+        sp  = _sp_list(rep.get('sp_obs',  {}), first)
+        sub = _sp_list(rep.get('sub_obs', {}), first)
+        hyb = _sp_list(rep.get('hyb_obs', {}), first)
+        coords = sorted(
+            [{'lat': k[0], 'lon': k[1], 'cnt': v}
+             for k, v in rep.get('sp_coords', {}).items()],
+            key=lambda x: -x['cnt'],
+        )
+        if sp:     entry['sp']     = sp
+        if sub:    entry['sub']    = sub
+        if hyb:    entry['hyb']    = hyb
+        if coords: entry['coords'] = coords
         if entry:
             reporters[name] = entry
     return {
@@ -2175,6 +2188,8 @@ def _se_rep_empty():
         'hyb_obs': {},    # {taxon_id: {'sv', 'obs', 'ind'}} – hybrider
         'pl_obs': {},     # {lokal: int} – trimmas vid sparning
         'dagar': 0, 'lastObs': '',
+        'sp_first': {},   # {taxon_id: {'date': 'YYYY-MM-DD', 'loc': 'lokal'}} – första obs per art
+        'sp_coords': {},  # {(lat3, lon3): cnt} – koordinater för kartvy
     }
 
 # ── Svenska artsammanslagningar ──────────────────────────────────────────────
@@ -2361,6 +2376,18 @@ def _merge_se_records(reporters, records, date_str, rank_cache=None, new_sci_nam
                 bucket_obs[eff_id]['sv'] = eff_sv
             bucket_obs[eff_id]['obs'] += 1
             bucket_obs[eff_id]['ind'] = bucket_obs[eff_id].get('ind', 0) + ind
+
+            # Första obs per art (datum + lokal)
+            fi = rep['sp_first'].get(eff_id)
+            if fi is None or obs_date < fi['date']:
+                rep['sp_first'][eff_id] = {'date': obs_date, 'loc': locality or ''}
+
+        # Koordinatspårning (för kartvy)
+        lat = location.get('decimalLatitude')
+        lon = location.get('decimalLongitude')
+        if lat is not None and lon is not None:
+            ck = (round(float(lat), 3), round(float(lon), 3))
+            rep['sp_coords'][ck] = rep['sp_coords'].get(ck, 0) + 1
 
         # Lokalspårning
         if locality:

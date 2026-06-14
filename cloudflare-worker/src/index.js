@@ -146,9 +146,10 @@ export default {
           return jsonResp({ sp: rep, sub: [], hyb: [] });
         }
         return jsonResp({
-          sp:  rep.sp  || [],
-          sub: rep.sub || [],
-          hyb: rep.hyb || [],
+          sp:     rep.sp     || [],
+          sub:    rep.sub    || [],
+          hyb:    rep.hyb    || [],
+          coords: rep.coords || [],
         });
       } catch (e) {
         return jsonResp({ error: e.message }, 500);
