@@ -23,10 +23,8 @@
     /* ── Header ── */
     header {
       background: linear-gradient(135deg, #1a4a7a, #2b6cb0);
-      color: white;
-      padding: .35rem 1rem;
-      box-shadow: 0 2px 10px rgba(0,0,0,.25);
-      position: relative;
+      color: white; padding: .35rem 1rem;
+      box-shadow: 0 2px 10px rgba(0,0,0,.25); position: relative;
     }
     .header-inner { display: flex; align-items: center; justify-content: center; position: relative; }
     .app-title { font-size: .95rem; font-weight: 700; }
@@ -61,7 +59,7 @@
       letter-spacing: .06em; text-transform: uppercase; text-align: center;
     }
 
-    /* ── Status bar ── */
+    /* ── Status / info bars ── */
     .status-bar {
       display: flex; align-items: center; justify-content: center; gap: .5rem;
       padding: .3rem 1rem; font-size: .74rem; font-weight: 600;
@@ -75,6 +73,12 @@
       animation: pulse 2s ease-in-out infinite;
     }
     @keyframes pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
+
+    .info-bar {
+      background: #fffbeb; border-bottom: 1px solid #f6e05e;
+      padding: .28rem .75rem; font-size: .7rem; color: #744210;
+      text-align: center;
+    }
 
     /* ── Summary cards ── */
     .summary-strip {
@@ -125,23 +129,21 @@
       background: #ebf8ff; border: 1px solid #bee3f8;
       border-radius: 20px; padding: .18rem .55rem;
       font-size: .72rem; font-weight: 600; color: #2b6cb0;
+      cursor: pointer; transition: background .12s;
     }
-    .loc-chip .loc-cnt { color: #4a5568; font-weight: 500; font-size: .66rem; }
+    .loc-chip:hover { background: #bee3f8; }
+    .loc-chip.active { background: #2b6cb0; color: white; border-color: #2b6cb0; }
+    .loc-chip .loc-cnt { font-weight: 500; font-size: .66rem; }
 
     /* ── Map ── */
-    .map-section {
-      margin: 0 .75rem .55rem;
-      display: none;
-    }
+    .map-section { margin: 0 .75rem .55rem; display: none; }
     .map-section.visible { display: block; }
     #jonasMp {
       width: 100%; height: 55dvh; min-height: 220px;
       border-radius: 10px; overflow: hidden;
       box-shadow: 0 1px 6px rgba(0,0,0,.15);
     }
-    .map-toggle-wrap {
-      margin: 0 .75rem .55rem; text-align: center;
-    }
+    .map-toggle-wrap { margin: 0 .75rem .55rem; text-align: center; }
     .btn-map {
       background: white; border: 1px solid #cbd5e0; border-radius: 8px;
       padding: .32rem 1rem; font-size: .78rem; font-weight: 700;
@@ -156,23 +158,59 @@
       margin: 0 .75rem .75rem; background: white;
       border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.09); overflow: hidden;
     }
-    .list-toolbar {
-      display: flex; align-items: center; gap: .5rem;
-      padding: .55rem .75rem; border-bottom: 1px solid #e2e8f0;
+
+    /* Toolbar – row 1: text search + sort */
+    .list-toolbar-row {
+      display: flex; align-items: center; gap: .45rem;
+      padding: .5rem .75rem .3rem;
     }
-    .list-toolbar input {
+    .list-toolbar-row + .list-toolbar-row { padding-top: 0; padding-bottom: .45rem; }
+    .list-toolbar-row:last-of-type { border-bottom: 1px solid #e2e8f0; }
+
+    .tb-input {
       flex: 1; border: 1px solid #cbd5e0; border-radius: 6px;
-      padding: .3rem .55rem; font-size: .8rem; outline: none; font-family: inherit;
+      padding: .3rem .55rem; font-size: .8rem; outline: none;
+      font-family: inherit; min-width: 0;
+      background: white;
     }
-    .list-toolbar input:focus { border-color: #2b6cb0; }
+    .tb-input:focus { border-color: #2b6cb0; }
+    .tb-input:disabled { background: #f7fafc; color: #a0aec0; }
+
+    .tb-date {
+      flex: 1; min-width: 0;
+      border: 1px solid #cbd5e0; border-radius: 6px;
+      padding: .3rem .4rem; font-size: .75rem; outline: none;
+      font-family: inherit; background: white; color: #1a202c;
+    }
+    .tb-date:focus { border-color: #2b6cb0; }
+    .tb-label {
+      font-size: .7rem; font-weight: 600; color: #718096; white-space: nowrap;
+    }
+
     .sort-btn {
       background: none; border: 1px solid #cbd5e0; border-radius: 6px;
-      padding: .28rem .6rem; font-size: .73rem; font-weight: 600;
+      padding: .28rem .55rem; font-size: .73rem; font-weight: 600;
       color: #4a5568; cursor: pointer; white-space: nowrap;
       font-family: inherit; transition: background .12s, border-color .12s;
     }
-    .sort-btn:hover { background: #ebf8ff; border-color: #bee3f8; color: #2b6cb0; }
+    .sort-btn:hover  { background: #ebf8ff; border-color: #bee3f8; color: #2b6cb0; }
     .sort-btn.active { background: #2b6cb0; border-color: #2b6cb0; color: white; }
+
+    .filter-clear {
+      background: none; border: none; font-size: .78rem; color: #a0aec0;
+      cursor: pointer; padding: .1rem .3rem; font-family: inherit;
+      border-radius: 4px; transition: color .12s;
+    }
+    .filter-clear:hover { color: #e53e3e; }
+
+    /* Active filter indicator */
+    .filter-active-bar {
+      display: none; padding: .22rem .75rem;
+      background: #ebf8ff; border-top: 1px solid #bee3f8;
+      font-size: .7rem; color: #2b6cb0; font-weight: 600;
+      align-items: center; gap: .4rem;
+    }
+    .filter-active-bar.visible { display: flex; }
 
     .list-header {
       display: grid; grid-template-columns: 2rem 1fr 3.8rem;
@@ -198,10 +236,11 @@
       font-size: .68rem; color: #718096; margin-top: .1rem;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .sp-meta .sp-date { color: #2b6cb0; font-weight: 600; margin-right: .3rem; }
+    .sp-meta .sp-date { color: #2b6cb0; font-weight: 600; margin-right: .35rem; }
+    .sp-meta .sp-loc  { color: #718096; }
     .sp-obs {
-      text-align: right; font-size: .78rem; font-weight: 700; color: #2b6cb0;
-      padding-top: .15rem;
+      text-align: right; font-size: .78rem; font-weight: 700;
+      color: #2b6cb0; padding-top: .15rem;
     }
 
     .list-empty {
@@ -256,7 +295,12 @@
   <span id="statusText">Hämtar data…</span>
 </div>
 
-<div class="summary-strip" id="summaryStrip">
+<div class="info-bar" id="infoBar" style="display:none">
+  ⚠️ Visar alla rapportörer med namnet Jonas Karlsson i Artportalen –
+  <span id="infoTopLokal"></span> är primär observationsort
+</div>
+
+<div class="summary-strip">
   <div class="summary-card">
     <div class="summary-val skeleton" id="valArt" style="height:1.5rem;width:60%;margin:0 auto .2rem"></div>
     <div class="summary-lbl">Arter</div>
@@ -282,7 +326,7 @@
 
 <div class="locations-section" id="locationsSection" style="display:none">
   <span class="locations-title">Platser</span>
-  <div id="locationChips"></div>
+  <div id="locationChips" style="display:flex;gap:.35rem;flex-wrap:wrap"></div>
 </div>
 
 <div class="map-toggle-wrap" id="mapToggleWrap" style="display:none">
@@ -294,11 +338,30 @@
 </div>
 
 <div class="list-section">
-  <div class="list-toolbar">
-    <input type="search" id="filterInput" placeholder="Filtrera arter…" />
+
+  <!-- Row 1: species search + sort buttons -->
+  <div class="list-toolbar-row">
+    <input class="tb-input" type="search" id="filterSpecies" placeholder="Sök art…" oninput="applyFilters()" />
     <button class="sort-btn active" id="sortAlpha" onclick="setSort('alpha')">A–Ö</button>
-    <button class="sort-btn" id="sortObs" onclick="setSort('obs')">Mest sedd</button>
+    <button class="sort-btn"        id="sortObs"   onclick="setSort('obs')">Mest sedd</button>
   </div>
+
+  <!-- Row 2: location + date filters -->
+  <div class="list-toolbar-row">
+    <input class="tb-input" type="search" id="filterLoc" placeholder="📍 Plats…" oninput="applyFilters()" />
+    <span class="tb-label">Från</span>
+    <input class="tb-date" type="date" id="filterFrom" onchange="applyFilters()" />
+    <span class="tb-label">Till</span>
+    <input class="tb-date" type="date" id="filterTo"   onchange="applyFilters()" />
+    <button class="filter-clear" id="clearBtn" onclick="clearFilters()" title="Rensa filter">✕</button>
+  </div>
+
+  <!-- Active filter indicator -->
+  <div class="filter-active-bar" id="filterBar">
+    <span id="filterBarText"></span>
+    <button class="filter-clear" onclick="clearFilters()">✕ Rensa</button>
+  </div>
+
   <div class="list-header">
     <span>#</span>
     <span>Art · Datum · Plats</span>
@@ -314,17 +377,18 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <script>
-const API   = 'https://birds-api.gibbare.workers.dev';
-const NAME  = 'Jonas Karlsson';
-const YEAR  = new Date().getFullYear();
+const API    = 'https://birds-api.gibbare.workers.dev';
+const NAME   = 'Jonas Karlsson';
+const YEAR   = new Date().getFullYear();
 const MONTHS = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 
-let _allSpecies = [];
-let _allCoords  = [];
-let _sortMode   = 'alpha';
-let _leafletMap = null;
+let _allSpecies  = [];
+let _allCoords   = [];
+let _sortMode    = 'alpha';
+let _leafletMap  = null;
 let _markerLayer = null;
-let _mapVisible = false;
+let _mapVisible  = false;
+let _hasDateData = false;  // true once fd fields are populated in cache
 
 document.getElementById('pageTitle').textContent = `JONAS KARLSSON · ÅRSLIST ${YEAR}`;
 
@@ -335,18 +399,7 @@ document.getElementById('burgerBtn').addEventListener('click', e => {
 });
 document.addEventListener('click', () => document.getElementById('burgerMenu').classList.remove('open'));
 
-// ── Sort ────────────────────────────────────────────────────────────────────
-function setSort(mode) {
-  _sortMode = mode;
-  document.getElementById('sortAlpha').classList.toggle('active', mode === 'alpha');
-  document.getElementById('sortObs').classList.toggle('active',   mode === 'obs');
-  renderList();
-}
-
-// ── Filter ──────────────────────────────────────────────────────────────────
-document.getElementById('filterInput').addEventListener('input', renderList);
-
-// ── Format helpers ──────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function escHtml(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -358,13 +411,27 @@ function fmtDate(iso) {
   return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
 }
 
-// ── Render species list ──────────────────────────────────────────────────────
-function renderList() {
-  const q    = document.getElementById('filterInput').value.trim().toLowerCase();
-  const el   = document.getElementById('speciesList');
-  const foot = document.getElementById('listFooter');
+// ── Sort ────────────────────────────────────────────────────────────────────
+function setSort(mode) {
+  _sortMode = mode;
+  document.getElementById('sortAlpha').classList.toggle('active', mode === 'alpha');
+  document.getElementById('sortObs').classList.toggle('active',   mode === 'obs');
+  applyFilters();
+}
 
-  let rows = q ? _allSpecies.filter(s => s.sv.toLowerCase().includes(q)) : [..._allSpecies];
+// ── Filters ──────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const qSp   = document.getElementById('filterSpecies').value.trim().toLowerCase();
+  const qLoc  = document.getElementById('filterLoc').value.trim().toLowerCase();
+  const qFrom = document.getElementById('filterFrom').value;  // 'YYYY-MM-DD' or ''
+  const qTo   = document.getElementById('filterTo').value;
+
+  let rows = [..._allSpecies];
+
+  if (qSp)   rows = rows.filter(s => s.sv.toLowerCase().includes(qSp));
+  if (qLoc)  rows = rows.filter(s => s.loc.toLowerCase().includes(qLoc));
+  if (qFrom) rows = rows.filter(s => s.fd && s.fd >= qFrom);
+  if (qTo)   rows = rows.filter(s => s.fd && s.fd <= qTo);
 
   if (_sortMode === 'obs') {
     rows.sort((a, b) => b.obs - a.obs || a.sv.localeCompare(b.sv, 'sv'));
@@ -372,32 +439,80 @@ function renderList() {
     rows.sort((a, b) => a.sv.localeCompare(b.sv, 'sv'));
   }
 
+  renderRows(rows, qSp || qLoc || qFrom || qTo);
+  updateFilterBar(qSp, qLoc, qFrom, qTo);
+}
+
+function clearFilters() {
+  document.getElementById('filterSpecies').value = '';
+  document.getElementById('filterLoc').value     = '';
+  document.getElementById('filterFrom').value    = '';
+  document.getElementById('filterTo').value      = '';
+  applyFilters();
+}
+
+function updateFilterBar(qSp, qLoc, qFrom, qTo) {
+  const bar  = document.getElementById('filterBar');
+  const text = document.getElementById('filterBarText');
+  const parts = [];
+  if (qSp)   parts.push(`Art: "${qSp}"`);
+  if (qLoc)  parts.push(`Plats: "${qLoc}"`);
+  if (qFrom) parts.push(`Från: ${qFrom}`);
+  if (qTo)   parts.push(`Till: ${qTo}`);
+  if (parts.length) {
+    text.textContent = 'Filter: ' + parts.join(' · ');
+    bar.classList.add('visible');
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+// ── Render species rows ───────────────────────────────────────────────────────
+function renderRows(rows, hasFilter) {
+  const el   = document.getElementById('speciesList');
+  const foot = document.getElementById('listFooter');
+
   if (!rows.length) {
-    el.innerHTML = `<div class="list-empty">Inga arter matchar "${escHtml(q)}"</div>`;
+    el.innerHTML = `<div class="list-empty">Inga arter matchar filtret</div>`;
     foot.textContent = '';
     return;
   }
 
   el.innerHTML = rows.map((s, i) => {
     const datePart = s.fd  ? `<span class="sp-date">${fmtDate(s.fd)}</span>` : '';
-    const locPart  = s.loc ? escHtml(s.loc) : '';
+    const locPart  = s.loc ? `<span class="sp-loc">${escHtml(s.loc)}</span>` : '';
     const meta     = (datePart || locPart)
-      ? `<div class="sp-meta">${datePart}${locPart}</div>`
-      : '';
-    return `
-      <div class="species-row">
-        <span class="sp-num">${i + 1}</span>
-        <div class="sp-body">
-          <div class="sp-name">${escHtml(s.sv)}</div>
-          ${meta}
-        </div>
-        <span class="sp-obs">${s.obs}</span>
-      </div>`;
+      ? `<div class="sp-meta">${datePart}${locPart}</div>` : '';
+    return `<div class="species-row">
+      <span class="sp-num">${i + 1}</span>
+      <div class="sp-body">
+        <div class="sp-name">${escHtml(s.sv)}</div>
+        ${meta}
+      </div>
+      <span class="sp-obs">${s.obs}</span>
+    </div>`;
   }).join('');
 
-  foot.textContent = q
-    ? `Visar ${rows.length} av ${_allSpecies.length} arter`
-    : `${_allSpecies.length} arter totalt`;
+  const total = _allSpecies.length;
+  foot.textContent = hasFilter
+    ? `Visar ${rows.length} av ${total} arter`
+    : `${total} arter totalt`;
+}
+
+// ── Location chip filter ──────────────────────────────────────────────────────
+function filterByLocation(locName) {
+  const inp = document.getElementById('filterLoc');
+  // Toggle: click active chip clears the filter
+  if (inp.value.trim().toLowerCase() === locName.toLowerCase()) {
+    inp.value = '';
+  } else {
+    inp.value = locName;
+  }
+  // Highlight active chip
+  document.querySelectorAll('.loc-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.loc && c.dataset.loc.toLowerCase() === inp.value.toLowerCase());
+  });
+  applyFilters();
 }
 
 // ── Map ──────────────────────────────────────────────────────────────────────
@@ -419,7 +534,6 @@ function toggleMap() {
 
 function initMap() {
   if (!_allCoords.length) return;
-
   if (!_leafletMap) {
     _leafletMap = L.map('jonasMp', { zoomControl: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -433,10 +547,8 @@ function initMap() {
 
   requestAnimationFrame(() => requestAnimationFrame(() => {
     _leafletMap.invalidateSize();
-
     const max    = Math.max(..._allCoords.map(c => c.cnt), 1);
     const bounds = [];
-
     for (const c of _allCoords) {
       const r = 5 + Math.round((c.cnt / max) * 9);
       const marker = L.circleMarker([c.lat, c.lon], {
@@ -452,14 +564,11 @@ function initMap() {
       _markerLayer.addLayer(marker);
       bounds.push([c.lat, c.lon]);
     }
-
-    if (bounds.length) {
-      _leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
-    }
+    if (bounds.length) _leafletMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
   }));
 }
 
-// ── Monthly chart ────────────────────────────────────────────────────────────
+// ── Monthly chart ─────────────────────────────────────────────────────────────
 function renderMonthly(monthly) {
   const max     = Math.max(...monthly, 1);
   const current = new Date().getMonth();
@@ -476,25 +585,28 @@ function renderMonthly(monthly) {
   document.getElementById('monthlySection').style.display = '';
 }
 
-// ── Locations ────────────────────────────────────────────────────────────────
+// ── Locations ─────────────────────────────────────────────────────────────────
 function renderLocations(lokaler) {
   if (!lokaler || !lokaler.length) return;
   document.getElementById('locationChips').innerHTML = lokaler
-    .slice(0, 5)
-    .map(l => `<span class="loc-chip">${escHtml(l.name)} <span class="loc-cnt">${l.obs}</span></span>`)
-    .join(' ');
+    .slice(0, 7)
+    .map(l => `<span class="loc-chip" data-loc="${escHtml(l.name)}"
+                     onclick="filterByLocation('${escHtml(l.name).replace(/'/g,"\\'")}')">
+                 ${escHtml(l.name)} <span class="loc-cnt">${l.obs}</span>
+               </span>`)
+    .join('');
   document.getElementById('locationsSection').style.display = '';
 }
 
-// ── Status bar ───────────────────────────────────────────────────────────────
+// ── Status ────────────────────────────────────────────────────────────────────
 function setStatus(mode, text) {
   const bar = document.getElementById('statusBar');
   bar.className = `status-bar ${mode}`;
   document.getElementById('statusText').textContent = text;
 }
 
-// ── Summary cards ────────────────────────────────────────────────────────────
-function setSummary(art, obs, dagar, lastObs) {
+// ── Summary cards ─────────────────────────────────────────────────────────────
+function setSummary(art, obs, dagar, lastObs, topLokal) {
   const fmt = (id, val) => {
     const el = document.getElementById(id);
     el.className = 'summary-val';
@@ -505,9 +617,15 @@ function setSummary(art, obs, dagar, lastObs) {
   fmt('valObs',    obs);
   fmt('valDagar',  dagar);
   fmt('valSenast', lastObs ? lastObs.slice(5) : '–');
+
+  // Info bar: show top location
+  if (topLokal) {
+    document.getElementById('infoTopLokal').textContent = topLokal;
+    document.getElementById('infoBar').style.display = '';
+  }
 }
 
-// ── Main fetch ───────────────────────────────────────────────────────────────
+// ── Main fetch ────────────────────────────────────────────────────────────────
 async function load() {
   try {
     const [statsRes, spRes] = await Promise.all([
@@ -520,19 +638,18 @@ async function load() {
     const statsAll = await statsRes.json();
     const spData   = await spRes.json();
 
-    // Find Jonas in observer list
-    const observers = Array.isArray(statsAll) ? statsAll : (statsAll.observers || []);
-    const jonas = observers.find(o => (o.name || '').toLowerCase() === NAME.toLowerCase());
+    const statsArr = Array.isArray(statsAll) ? statsAll : [];
+    const jonas = statsArr.find(o => (o.name || '').toLowerCase() === NAME.toLowerCase())
+               || statsArr[0];
 
     if (jonas) {
-      setSummary(jonas.art, jonas.obs, jonas.dagar, jonas.lastObs);
+      setSummary(jonas.art, jonas.obs, jonas.dagar, jonas.lastObs, jonas.topLokal);
       renderMonthly(jonas.monthly || []);
       renderLocations(jonas.lokaler || []);
     } else {
-      setSummary('–', '–', '–', '–');
+      setSummary('–', '–', '–', '–', '');
     }
 
-    // Full species list
     _allSpecies = (spData.sp || []).map(s => ({
       sv:  s.sv  || '(okänd)',
       obs: s.obs || 0,
@@ -541,16 +658,29 @@ async function load() {
       loc: s.loc || '',
     }));
 
+    // Check if we have date/location data (populated after cache rebuild)
+    _hasDateData = _allSpecies.some(s => s.fd);
+    if (!_hasDateData) {
+      // Grey out the date/location filter inputs with a hint
+      document.getElementById('filterFrom').disabled = true;
+      document.getElementById('filterTo').disabled   = true;
+      document.getElementById('filterFrom').placeholder = 'Saknas (cache ej uppdaterad)';
+      document.getElementById('filterTo').placeholder   = '';
+      document.getElementById('filterLoc').placeholder  = '📍 Plats (saknas ännu)';
+      document.getElementById('filterLoc').disabled     = true;
+    }
+
     document.getElementById('valArt').textContent = _allSpecies.length;
 
-    // Coordinates for map
     _allCoords = (spData.coords || []).filter(c => c.lat && c.lon);
     if (_allCoords.length) {
       document.getElementById('mapToggleWrap').style.display = '';
     }
 
-    renderList();
-    setStatus('live', `Uppdaterad ${new Date().toLocaleTimeString('sv-SE', {hour:'2-digit',minute:'2-digit'})} · Artdatabanken`);
+    applyFilters();
+    setStatus('live',
+      `Uppdaterad ${new Date().toLocaleTimeString('sv-SE', {hour:'2-digit',minute:'2-digit'})}` +
+      (_hasDateData ? '' : ' · Datum/plats per art tillgänglig efter cache-bygge'));
 
   } catch (err) {
     setStatus('error', `Kunde inte hämta data – ${err.message}`);
