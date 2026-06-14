@@ -171,6 +171,8 @@ file_check(CW, "subsp-lista returneras",  r"subsp\s*:")
 file_check(CW, "hybsp-lista returneras",  r"hybsp\s*:")
 file_check(CW, "CORS-headers satta",      r"Access-Control-Allow-Origin")
 file_check(CW, "Bakåtkompatibilitet: gammalt sp/pl-format", r"Array\.isArray.*d\.sp")
+file_check(CW, "observer_stats stöder namnfilter", r"nameFilter|filterLc",
+           "nameFilter/filterLc saknas – observer_stats returnerar alltid alla reporters")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # faglar-vasterbotten.html

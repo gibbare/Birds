@@ -29,12 +29,15 @@ function jsonResp(data, status = 200) {
 /**
  * Konverterar kompakt R2-format till API-svarsformat för observer_stats.
  * Hanterar både nytt format (sp/pl listor) och gammalt format (species/places dicts).
+ * nameFilter: om angivet returneras bara matchande reporter (case-insensitive).
  */
-function buildObserverResult(data) {
+function buildObserverResult(data, nameFilter = null) {
   if (!data?.reporters) return [];
 
   const result = [];
+  const filterLc = nameFilter ? nameFilter.toLowerCase() : null;
   for (const [name, d] of Object.entries(data.reporters)) {
+    if (filterLc && name.toLowerCase() !== filterLc) continue;
     let art, topLokal, lokaler, species;
 
     if (Array.isArray(d.sp)) {
@@ -117,6 +120,7 @@ export default {
     // ── /api/observer_stats – R2 om cachad, annars Railway ───────────────
     if (url.pathname === '/api/observer_stats') {
       const year = url.searchParams.get('year') || String(new Date().getFullYear());
+      const name = url.searchParams.get('name') || '';  // Valfritt namnfilter
       try {
         const obj = await env.BUCKET.get(`observers_se_${year}.json`);
         if (!obj) {
@@ -124,7 +128,7 @@ export default {
           return proxyToRailway(request, env);
         }
         const data = await obj.json();
-        return jsonResp(buildObserverResult(data));
+        return jsonResp(buildObserverResult(data, name || null));
       } catch (e) {
         // Något gick fel med R2 → Railway som fallback
         return proxyToRailway(request, env);

@@ -243,6 +243,31 @@ test('monthly defaultar till 12 nollor om det saknas', () => {
   assert(r.monthly.every(v => v === 0), 'monthly ska vara nollor');
 });
 
+test('nameFilter returnerar bara matchande reporter', () => {
+  const data = makeR2Data({
+    'Jonas Karlsson': makeReporter({ art: 10 }),
+    'Anna Andersson': makeReporter({ art: 5 }),
+    'Jonas Nilsson':  makeReporter({ art: 8 }),
+  });
+  const res = buildObserverResult(data, 'Jonas Karlsson');
+  assertEqual(res.length, 1);
+  assertEqual(res[0].name, 'Jonas Karlsson');
+});
+
+test('nameFilter är case-insensitive', () => {
+  const data = makeR2Data({ 'Jonas Karlsson': makeReporter({ art: 10 }) });
+  const res = buildObserverResult(data, 'jonas karlsson');
+  assertEqual(res.length, 1);
+});
+
+test('nameFilter null ger alla reporters', () => {
+  const data = makeR2Data({
+    'Kalle': makeReporter({ art: 3 }),
+    'Lisa':  makeReporter({ art: 7 }),
+  });
+  assertEqual(buildObserverResult(data, null).length, 2);
+});
+
 // ── Sammanfattning ────────────────────────────────────────────────────────────
 
 console.log(`\n${'═'.repeat(52)}`);

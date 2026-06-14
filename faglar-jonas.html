@@ -511,7 +511,7 @@ function setSummary(art, obs, dagar, lastObs) {
 async function load() {
   try {
     const [statsRes, spRes] = await Promise.all([
-      fetch(`${API}/api/observer_stats?year=${YEAR}`),
+      fetch(`${API}/api/observer_stats?name=${encodeURIComponent(NAME)}&year=${YEAR}`),
       fetch(`${API}/api/observer_species?name=${encodeURIComponent(NAME)}&year=${YEAR}`),
     ]);
 
